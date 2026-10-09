@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: rank-studio
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      - key: STUDIO_PUBLIC
+        value: "1"
+      - key: STUDIO_USERNAME
+        value: owner
+      - key: STUDIO_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

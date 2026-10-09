@@ -1,0 +1,100 @@
+# Rank Studio
+
+A personal AI director, editor and MP4 renderer for ranking Shorts: exactly five clips, #5 → #1, portrait 9:16, sound effects and a short English neural voiceover per clip (1–7 words).
+
+## Run
+
+Requires Node 20.19+ (Node 24 tested), Python 3.12, FFmpeg with libx264/drawtext, ffprobe and DejaVu Sans Bold. Python and Node dependencies are locked in `requirements.txt` and `package-lock.json`.
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+npm ci
+npm run build
+# Optional local alternative: .venv/bin/python scripts/download_models.py --language en
+cp .env.example .env # local machines only; fill keys securely
+bash scripts/start.sh
+```
+
+For Codex cloud use secure environment settings, rather than storing keys in a file. If no `.env` file is used, start directly:
+
+```bash
+.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+Development: run the API on port 8000 and `npm run dev` in another terminal. Vite proxies `/api` and `/media` to the backend. Production serves the built frontend and API from the same process.
+
+## Automatic workflow
+
+1. Enter a topic. The primary sources are **TikTok and Instagram**; optionally include relevant YouTube videos. No stock-video library is used.
+2. With `OPENAI_API_KEY`, web search discovers 8, 12 or 20 candidate URLs. The server validates provider domains and individual video URLs, and yt-dlp attempts to download publicly available videos, at most 120 seconds / 300 MB each.
+3. FFmpeg detects hard scene changes. AI evaluates two sampled frames per candidate scene, selects five different source videos, ranks them, explains why they fit, and writes a grounded sentence of 1–7 words per clip. Selected segments are 2–5 seconds by default and do not cross detected scene cuts.
+4. Edit the selected moments, order and voiceover. Manual trims allow 2–8 seconds, for a final 10–40-second Short. Background sound, effects and voice levels are adjustable.
+5. Render an actual MP4 (1080×1920 or 720×1280, H.264/AAC, 30 fps). It includes ranking numbers, the heading, optional captions and per-clip sound effects. Speech is fitted without truncating the final words or speeding it up beyond 1.25×. In assistant mode, an overly long sentence is automatically shortened once, and the updated captions/comments are returned to the editor. If it still does not fit, the renderer reports the problem.
+
+Uploads and a clearly labelled synthetic test-pattern demo also work without external APIs. Save project stores the editor state in this browser; original media and exports remain in `.runtime/` on the server. Browser previews show the clip montage and text; generated voice and effects are heard in the rendered output or the individual voice-preview button.
+
+## AI and network configuration
+
+`OPENAI_API_KEY` is required for automatic discovery, visual scene selection, automatic scripts and research. It stays on the server. Calls go only to `api.openai.com`. Discovery/research use the Responses API `gpt-4.1` with web search; image analysis uses `OPENAI_TEXT_MODEL` (default `gpt-4o-mini`). Public video pages and CDN domains for TikTok, Instagram and YouTube must be allowed in the cloud network settings.
+
+The default quality English male voice is **OpenAI Onyx** with `gpt-4o-mini-tts`; **Echo** is a second male option. The same `OPENAI_API_KEY` powers the assistant, search/analysis and speech. Delivery instructions and speed (0.85–1.2×) are adjustable, with a preview button before export. Live audio quality was not evaluated because no provider key was present.
+
+**Piper / en_US-lessac-medium** is an explicitly selected local alternative. `scripts/download_models.py` downloads the official model from Hugging Face using TLS and validates the publisher's lengths and checksums; the model card is retained beside the model. A Czech model is optional (`--language cs`). No voice model is bundled into Git. Piper and each model have their own upstream licenses.
+
+Alternatively set `ELEVENLABS_API_KEY` and explicitly select **Adam**, **Josh** or **Antoni** in the male voice selector. To use a particular voice ID, select **Vlastní / ElevenLabs** and set `ELEVENLABS_VOICE_ID`. Providers never silently fall back to a different voice. A named voice is not proof it matches the reference video. Do not put keys in chat or client-side code. The OpenAI and ElevenLabs operations may incur provider charges.
+
+TikTok/Instagram/YouTube can refuse downloads, require login or present a bot challenge. The application reports and skips unavailable candidates; it does not promise access or bypass login requirements. Only reuse videos you have permission to publish; the editor retains each original source link. Web search cannot find every video or guarantee the requested candidate count. If fewer than five relevant, downloadable videos remain, the workflow fails rather than fabricating clips.
+
+## Research and reference style
+
+The research action queries public YouTube search evidence for **Aura Shorts and other ranking channels**, and returns linked observations, suggestions and limits. It does not claim to have watched or heard videos it cannot access. It does not fabricate channel statistics or identify a narrator from metadata.
+
+The current video design uses a bold uppercase title, lime ranking numbers and white short captions. **The exact design and voice from `IujvEGCadfU` have not been verified:** YouTube was blocked during implementation. An accessible reference video is needed to match them accurately. The editor preview uses the same font and colors, but export is the definitive placement reference.
+
+Scene detection is heuristic: it detects hard cuts, not every transition or semantic action boundary. AI selection is based on sampled images rather than full video/audio understanding. Final editor review is still useful, especially for compilations with subtle cuts.
+
+## Validation
+
+```bash
+npm run build
+.venv/bin/python -m pytest -q
+# Start server on 8000 before the browser checks:
+npm run test:browser
+```
+
+The backend checks exercise actual FFmpeg rendering and scene detection, validation, provider URL restrictions and missing-integration responses. Browser checks exercise the chat’s missing-key handling, male voice selection, editor, demo, ordering, word limit, saved project and real export. Live AI/search/voice calls require the credentials, model and network destinations above; mocked provider responses do not establish that those integrations work live.
+
+This is a single-user application with optional owner password protection and no automatic publishing. Uploaded media/exports are retained until `.runtime/` is removed. It is not designed as a public multi-user service.
+
+## Deploy the web app on Render
+
+The repository includes a multi-stage Dockerfile and `render.yaml` Blueprint for one **free** web service. Deploy this repository through Render's Blueprint flow, connecting your GitHub account if needed. Enter these values securely in Render, never in chat or Git:
+
+- `STUDIO_PASSWORD`: a strong password you choose for your personal studio. The username is `owner` (`STUDIO_USERNAME`). The browser requests this login before opening the editor.
+- `OPENAI_API_KEY`: your own OpenAI API key for automatic discovery, the AI director and premium male speech. Provider usage is billed by OpenAI independently of Render. Demo clips, manual uploads and exports with narration disabled work without this key.
+
+Render sets `PORT` automatically; the container serves the frontend, API and media together. `STUDIO_PUBLIC=1` makes a missing studio password block the app rather than expose your videos or let strangers use your AI key. `/api/health` remains accessible for Render's health check. Optional ElevenLabs credentials can be added in Render's environment settings.
+
+The free service has limited memory/CPU, sleeps when idle, and uses ephemeral storage. Restarts/deploys lose uploaded clips and rendered files; save/download your work before leaving. Browser-saved projects cannot recover source files lost on the server. Rendering 720p is the lighter starting option. No paid plan or persistent disk is provisioned automatically. After Render reports a successful deploy, use the **actual service URL** shown in its dashboard; a Blueprint deploy link is not the running app.
+
+For API-driven deployment, configure `RENDER_API_KEY` securely in the Codex environment. This key is only for deployment and does not belong in the application's container or frontend. Secrets configured in Codex are not automatically copied into Render; configure the application password/provider key there separately.
+
+## Original commentary
+
+The editor includes an explicit editorial angle (ranking criteria). AI comments explain the visible reason for each ranked position instead of copying dialogue or supplying generic filler. The output adds its own heading, editorial labels, ranking, short analytical captions, neural narration and original synthesized effects. These features support an original commentary format; effects, voiceover and rearrangement alone do **not** establish fair use, legal transformativeness, monetization eligibility or permission to reuse someone else’s videos.
+
+## Personal AI director and custom templates
+
+Use the chat instead of filling out every control. For example:
+
+- “Udělej top 5 fotbalových momentů z TikToku a Instagramu. Použij hlubší mužský hlas.”
+- “Použij tuto šablonu, nech červená čísla a bílé titulky.”
+- “Otoč pořadí, zkrať každý klip na tři sekundy a exportuj.”
+- “Zkoumej Aura Shorts a další ranking kanály.”
+
+The assistant interprets a natural command plus the current project and the last twelve messages, then runs a validated sequence of actual tools. Available actions are template analysis, discovery, comment writing, YouTube research and MP4 rendering; edits/order/settings are validated too. It cannot execute arbitrary shell commands or publish. Missing topics/references prompt a clarification. A plan is never shown as successful until the underlying work finishes; partial work is retained if a later step fails. The chat retains up to thirty messages in this browser. A browser refresh does not reattach an in-progress assistant job; its last result is marked unverified.
+
+“Ukaž šablonu” accepts PNG/JPEG/WebP or a short video, up to 40 MB / 120 seconds. An actual frame is extracted locally. With an AI key, style recognition estimates title/rank/caption positions, font sizes, colors, header darkness and the closest of three supported fonts. These validated settings drive both preview and FFmpeg export. Exact font, animation and narrator matching is not promised from a still frame. Save project retains the reference, template settings and selected male voice.
+
+This is a personal application using configured AI providers, rather than a newly trained model. Your prompts, sampled clip images, reference frame and voiceover text are sent to the chosen providers only for the requested AI operations. There is no model training pipeline or automatic publication.
