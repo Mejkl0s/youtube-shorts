@@ -26,6 +26,14 @@ Development: run the API on port 8000 and `npm run dev` in another terminal. Vit
 
 ## Automatic workflow
 
+**Free is the default discovery mode.** Enter a topic and click **Najít klipy** without any provider key. Public Bing RSS / DuckDuckGo HTML results are searched for individual TikTok videos and Instagram Reels, with optional YouTube Shorts supplementation. URLs must be real returned links on supported domains; profiles, unrelated text matches and duplicate canonical video URLs are rejected. Only public search is used; login, challenges and rate limits are not bypassed.
+
+yt-dlp attempts actual downloads. Deterministic rules select exactly five 2–4-second continuous scenes using topical title/snippet matches, sampled grayscale motion, edges and exposure. TikTok/Instagram remain primary; YouTube fills missing positions. This is **not AI understanding or a judgement of the best moments**. Review relevance, order and trims yourself. No generated commentary is fabricated, and free discovery switches narration off in the editor. Add your own short comments if desired. Effects, ranking overlays and MP4 export work without paid APIs. The free flow never calls OpenAI, even if an API key is configured.
+
+Search/downloads can be blocked or return too few usable videos. The job fails clearly when five real usable clips are unavailable, and retains discovered source links for inspection. It never substitutes a synthetic demo or announces a successful five-clip selection when the real operation failed. The health `free_search` flag denotes implementation availability, not verified access to the external engines. Cloud networking must allow `www.bing.com` and `html.duckduckgo.com` in addition to the social video/CDN hosts.
+
+The optional **AI výběr · placené API** mode and **Osobní AI režisér** use the paid OpenAI workflow below. Premium male speech is independently optional and requires its provider's key. There is no bypass of provider billing.
+
 1. Enter a topic. The primary sources are **TikTok and Instagram**; optionally include relevant YouTube videos. No stock-video library is used.
 2. With `OPENAI_API_KEY`, web search discovers 8, 12 or 20 candidate URLs. The server validates provider domains and individual video URLs, and yt-dlp attempts to download publicly available videos, at most 120 seconds / 300 MB each.
 3. FFmpeg detects hard scene changes. AI evaluates two sampled frames per candidate scene, selects five different source videos, ranks them, explains why they fit, and writes a grounded sentence of 1–7 words per clip. Selected segments are 2–5 seconds by default and do not cross detected scene cuts.
@@ -36,7 +44,7 @@ Uploads and a clearly labelled synthetic test-pattern demo also work without ext
 
 ## AI and network configuration
 
-`OPENAI_API_KEY` is required for automatic discovery, visual scene selection, automatic scripts and research. It stays on the server. Calls go only to `api.openai.com`. Discovery/research use the Responses API `gpt-4.1` with web search; image analysis uses `OPENAI_TEXT_MODEL` (default `gpt-4o-mini`). Public video pages and CDN domains for TikTok, Instagram and YouTube must be allowed in the cloud network settings.
+`OPENAI_API_KEY` is required only for optional AI discovery, visual scene selection, automatic scripts and research. It stays on the server. Calls go only to `api.openai.com`. Discovery/research use the Responses API `gpt-4.1` with web search; image analysis uses `OPENAI_TEXT_MODEL` (default `gpt-4o-mini`). Public video pages and CDN domains for TikTok, Instagram and YouTube must be allowed in the cloud network settings.
 
 The default quality English male voice is **OpenAI Onyx** with `gpt-4o-mini-tts`; **Echo** is a second male option. The same `OPENAI_API_KEY` powers the assistant, search/analysis and speech. Delivery instructions and speed (0.85–1.2×) are adjustable, with a preview button before export. Live audio quality was not evaluated because no provider key was present.
 
@@ -72,7 +80,7 @@ This is a single-user application with optional owner password protection and no
 The repository includes a multi-stage Dockerfile and `render.yaml` Blueprint for one **free** web service. Deploy this repository through Render's Blueprint flow, connecting your GitHub account if needed. Enter these values securely in Render, never in chat or Git:
 
 - `STUDIO_PASSWORD`: a strong password you choose for your personal studio. The username is `owner` (`STUDIO_USERNAME`). The browser requests this login before opening the editor.
-- `OPENAI_API_KEY`: your own OpenAI API key for automatic discovery, the AI director and premium male speech. Provider usage is billed by OpenAI independently of Render. Demo clips, manual uploads and exports with narration disabled work without this key.
+- Optional `OPENAI_API_KEY`: add your own OpenAI API key for AI discovery, the AI director and premium male speech only if desired. Provider usage is billed by OpenAI independently of Render. Free public discovery, demo clips, manual uploads and exports with narration disabled work without this key. The free Blueprint does not require it.
 
 Render sets `PORT` automatically; the container serves the frontend, API and media together. `STUDIO_PUBLIC=1` makes a missing studio password block the app rather than expose your videos or let strangers use your AI key. `/api/health` remains accessible for Render's health check. Optional ElevenLabs credentials can be added in Render's environment settings.
 

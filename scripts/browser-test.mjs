@@ -11,23 +11,39 @@ page.on('dialog', d => d.accept());
 await mkdir('.runtime/screenshots', { recursive: true });
 try {
   await page.goto(base);
-  await page.getByRole('heading', { name: 'Řekni nápad. AI zařídí zbytek.' }).waitFor();
+  await page.getByRole('heading', { name: 'Najdi momenty. Vytvoř svůj Short.' }).waitFor();
+  assert.equal(await page.getByLabel('REŽIM HLEDÁNÍ', {exact:true}).inputValue(), 'free');
+  assert.equal(await page.getByRole('switch', {name:'AI voiceover',exact:true}).getAttribute('aria-checked'), 'false');
   assert.equal(await page.locator('.clip-card').count(), 5);
   assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'openai:onyx');
   await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).selectOption('openai:echo');
   assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'openai:echo');
+  await page.locator('.paid-assistant > summary').click();
   await page.route('**/api/assistant', route => route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({detail:'Osobní AI asistent potřebuje OPENAI_API_KEY v nastavení prostředí.'})}));
   await page.getByRole('textbox', {name:'Příkaz pro AI režiséra'}).fill('Najdi pět fotbalových momentů.');
   await page.getByRole('button', {name:'Odeslat příkaz'}).click();
   await page.locator('.chat-message.assistant').filter({hasText:'OPENAI_API_KEY'}).waitFor();
   await page.unroute('**/api/assistant');
   await page.getByRole('button', {name:'Zavřít chybu'}).click();
-  await page.locator('.manual-controls > summary').click();
   assert.match(await page.locator('.social-sources').innerText(), /TikTok \+ Instagram/);
   await page.screenshot({ path: '.runtime/screenshots/editor-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Exportovat Short' }).click();
   await page.getByRole('alert').filter({ hasText: 'Zatím máte 0/5' }).waitFor();
   await page.getByRole('button', { name: 'Zavřít chybu' }).click();
+  // Search providers are mocked here; real search/download/scene/export orchestration is covered by pytest.
+  const searchDemo = await (await page.request.post(base+'/api/demo', {data:{}})).json();
+  const searchComplete = {id:'ui-free-search',kind:'discover',mode:'free',status:'done',progress:100,message:'Pět momentů je připravených.',candidate_count:8,clips:searchDemo.clips.map(c=>({...c,voiceover:'',sourceDuration:c.duration,start:0,duration:3})),search_results:[{url:'https://www.tiktok.com/@example/video/123456',title:'Funny cats source'}]};
+  await page.route('**/api/discover', route=>{assert.equal(route.request().postDataJSON().mode,'free');return route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:searchComplete.id,status:'queued',progress:0,message:'Hledám…'})});});
+  await page.route('**/api/jobs/ui-free-search', route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(searchComplete)}));
+  await page.getByLabel('Co dnes rankujeme?').fill('funny cats');
+  await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
+  await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).inputValue(),'');
+  assert.equal(await page.getByRole('switch',{name:'AI voiceover',exact:true}).getAttribute('aria-checked'),'false');
+  await page.locator('.found-links > summary').click();
+  assert.equal(await page.getByRole('link',{name:'Funny cats source'}).getAttribute('href'),'https://www.tiktok.com/@example/video/123456');
+  await page.unroute('**/api/discover');
+  await page.unroute('**/api/jobs/ui-free-search');
   await page.getByRole('button', { name: /Vyzkoušet syntetickou ukázku/ }).click();
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor({ timeout: 120000 });
   assert.equal(await page.locator('.clip-thumb').count(), 5);
@@ -55,7 +71,7 @@ try {
   await page.waitForTimeout(1200);
   assert.ok(await page.locator('video').evaluate(v => v.currentTime) > 0);
   await page.getByRole('button', { name: 'Pozastavit', exact: true }).click();
-  await page.getByRole('switch', { name: 'AI voiceover', exact: true }).click();
+  if(await page.getByRole('switch', { name: 'AI voiceover', exact: true }).getAttribute('aria-checked')==='true')await page.getByRole('switch', { name: 'AI voiceover', exact: true }).click();
   await page.getByLabel('ROZLIŠENÍ', { exact: true }).selectOption('720');
   for (let i = 1; i <= 5; i++) await page.getByRole('spinbutton', { name: `Délka klipu ${i}`, exact: true }).fill('2');
   await page.getByRole('button', { name: 'Exportovat Short' }).click();
@@ -70,6 +86,7 @@ try {
   const completed = {id:'ui-assistant-test',kind:'assistant',status:'done',progress:100,message:'Příkaz dokončen.',assistant_reply:'Změny jsou hotové.',download:await download.getAttribute('href'),project:{topic:'timing',title:'AI DIRECTOR TEST',ranking_criteria:'Timing and skill',language:'en',resolution:'720',candidate_count:12,allow_youtube:true,voice:false,effects:true,captions:true,original_volume:.12,voice_volume:1,effects_volume:.55,voice_settings:{provider:'openai',voice:'echo',speed:1,delivery:'Natural male delivery.'},layout:{font:'bold',title_color:'FFFFFF',rank_color:'FF00AA',caption_color:'FFFFFF',title_y:.0615,title_size:.0454,rank_x:.0602,rank_y:.1719,rank_size:.1343,caption_y:.7708,caption_size:.0528,header_darkness:.5,show_label:true,show_criteria:true},clips:demo.clips.map(c=>({...c,sourceDuration:c.duration,duration:2,start:0}))}};
   await page.route('**/api/assistant', route=>route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:completed.id,kind:'assistant',status:'queued',progress:0,message:'Připravuji…'})}));
   await page.route('**/api/jobs/ui-assistant-test', route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(completed)}));
+  await page.locator('.paid-assistant > summary').click();
   await page.getByRole('textbox',{name:'Příkaz pro AI režiséra'}).fill('Změň název a použij růžová čísla.');
   await page.getByRole('button',{name:'Odeslat příkaz'}).click();
   await page.locator('.chat-message.assistant').filter({hasText:'Změny jsou hotové.'}).waitFor();
@@ -87,5 +104,5 @@ try {
   await page.screenshot({ path: '.runtime/screenshots/editor-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
+  console.log('Browser checks passed: free discovery mode/payload/results (mocked), chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
 } finally { await browser.close(); }

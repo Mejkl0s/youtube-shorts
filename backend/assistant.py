@@ -241,7 +241,7 @@ def run_assistant(job_id: str, body: Request):
                 with m.job_lock:
                     m.jobs[child] = {'id': child, 'status': 'queued', 'kind': 'discover', 'progress': 0, 'message': 'Hledám…'}
                 m.set_job(job_id, child_job=child, child_base=progress, child_span=int(85/max(1,len(plan.actions))))
-                m.discover(child, m.DiscoverRequest(topic=state.topic, ranking_criteria=state.ranking_criteria, language=state.language, candidate_count=state.candidate_count, allow_youtube=state.allow_youtube))
+                m.discover(child, m.DiscoverRequest(topic=state.topic, ranking_criteria=state.ranking_criteria, language=state.language, candidate_count=state.candidate_count, allow_youtube=state.allow_youtube, mode='ai'))
                 if m.jobs[child]['status'] != 'done':
                     raise ValueError(m.jobs[child]['message'])
                 state.clips = [m.Clip.model_validate(c) for c in m.jobs[child]['clips']]

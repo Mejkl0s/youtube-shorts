@@ -13,6 +13,7 @@ import threading
 import uuid
 import wave
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -23,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .style import FONTS, Layout, VoiceSettings, voice_available
 from .access import owner_access
+from .free_search import public_search, select_free
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('RANK_DATA_DIR', str(ROOT / '.runtime'))).resolve()
@@ -130,7 +132,7 @@ class Project(BaseModel):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'ffmpeg': bool(shutil.which('ffmpeg')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
+    return {'status': 'ok', 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
 
 
 @app.get('/api/fonts/{name}')
@@ -550,6 +552,15 @@ class DiscoverRequest(BaseModel):
     allow_youtube: bool = True
     language: str = 'en'
     candidate_count: int = Field(default=12, ge=8, le=20)
+    mode: Literal['free', 'ai'] = 'free'
+
+    @field_validator('topic')
+    @classmethod
+    def useful_topic(cls, value):
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError('Napište téma alespoň o třech znacích.')
+        return value
 
     @model_validator(mode='after')
     def valid(self):
@@ -558,55 +569,77 @@ class DiscoverRequest(BaseModel):
         return self
 
 
+def ai_search(body: DiscoverRequest):
+    domains = ['tiktok.com', 'instagram.com'] + (['youtube.com', 'youtu.be'] if body.allow_youtube else [])
+    found = ai_request({'model': 'gpt-4.1', 'tools': [{'type': 'web_search', 'filters': {'allowed_domains': domains}}], 'include': ['web_search_call.action.sources'], 'input': f'Find up to {body.candidate_count} distinct publicly discoverable short videos that fit {body.topic!r} for a ranking Short. Primary sources MUST be TikTok and Instagram Reels. {"YouTube Shorts may supplement these sources only if particularly relevant; prefer TikTok and Instagram." if body.allow_youtube else "Do not use YouTube."} Use web search, do not invent URLs. URLs must match actual search source URLs. Prefer short videos of individual clear moments. Return ONLY JSON {{"videos":[{{"url":"https://www.tiktok.com/@creator/video/numeric-id or https://www.instagram.com/reel/ID/ or a YouTube Shorts URL","title":"brief grounded title"}}]}}. Exclude profile pages. Search evidence is not permission to reuse content.', 'max_output_tokens': 2500}, responses=True)
+    entries, seen = [], set()
+    evidence = {canonical_url(u) for u in found.get('_evidence_urls', [])}
+    for item in found.get('videos', []):
+        url = item.get('url', '')
+        if not social_url(url, body.allow_youtube):
+            continue
+        identity = canonical_url(url)
+        if identity not in seen and identity in evidence:
+            entries.append({'url': url, 'title': str(item.get('title', 'Video clip'))[:100]})
+            seen.add(identity)
+    return entries[:body.candidate_count]
+
+
+def download_candidate(item: dict):
+    import sys
+    if not social_url(item['url'], True):
+        raise ValueError('Neplatná adresa sociálního videa.')
+    asset_id = uuid.uuid4().hex
+    folder = DATA / 'media' / asset_id
+    folder.mkdir()
+    try:
+        run([sys.executable, '-m', 'yt_dlp', '--no-playlist', '--no-progress', '--socket-timeout', '15', '--retries', '1', '--max-filesize', '300M', '--match-filter', 'duration <= 120', '--restrict-filenames', '--merge-output-format', 'mp4', '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '-o', str(folder / 'download.%(ext)s'), '--', item['url']], 75)
+        files = [p for p in folder.glob('download.*') if p.suffix not in ('.part', '.ytdl')]
+        if len(files) != 1:
+            raise ValueError('Video nebylo dostupné.')
+        if files[0].stat().st_size > MAX_UPLOAD:
+            raise ValueError('Video překračuje limit 300 MB.')
+        files[0].rename(folder / 'source')
+        candidate = register(folder / 'source', asset_id, item['title'])
+        candidate.update({key: item[key] for key in ('search_score', 'source', 'provider') if key in item})
+        candidate['source_url'] = item.get('source_url', item['url'])
+        return candidate
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+
+
 def discover(job_id: str, body: DiscoverRequest):
     try:
         set_job(job_id, status='searching', progress=3, message=f'Hledám {body.candidate_count} kandidátů podle tématu…')
-        domains = ['tiktok.com', 'instagram.com'] + (['youtube.com', 'youtu.be'] if body.allow_youtube else [])
-        found = ai_request({'model': 'gpt-4.1', 'tools': [{'type': 'web_search', 'filters': {'allowed_domains': domains}}], 'include': ['web_search_call.action.sources'], 'input': f'Find up to {body.candidate_count} distinct publicly discoverable short videos that fit {body.topic!r} for a ranking Short. Primary sources MUST be TikTok and Instagram Reels. {"YouTube Shorts may supplement these sources only if particularly relevant; prefer TikTok and Instagram." if body.allow_youtube else "Do not use YouTube."} Use web search, do not invent URLs. URLs must match actual search source URLs. Prefer short videos of individual clear moments. Return ONLY JSON {{"videos":[{{"url":"https://www.tiktok.com/@creator/video/numeric-id or https://www.instagram.com/reel/ID/ or a YouTube Shorts URL","title":"brief grounded title"}}]}}. Exclude profile pages. Search evidence is not permission to reuse content.', 'max_output_tokens': 2500}, responses=True)
-        entries, seen = [], set()
-        evidence = {canonical_url(u) for u in found.get('_evidence_urls', [])}
-        for item in found.get('videos', []):
-            url = item.get('url', '')
-            if social_url(url, body.allow_youtube) and url not in seen and canonical_url(url) in evidence:
-                entries.append({'url': url, 'title': str(item.get('title', 'Video clip'))[:100]})
-                seen.add(url)
-        entries = entries[:body.candidate_count]
+        warnings = []
+        if body.mode == 'free':
+            entries, warnings = public_search(body.topic, body.allow_youtube, body.candidate_count)
+        else:
+            entries = ai_search(body)
+        set_job(job_id, mode=body.mode, search_results=[{'url': e['url'], 'title': e['title']} for e in entries], warnings=warnings)
         if len(entries) < 5:
-            raise ValueError(f'Vyhledávání našlo pouze {len(entries)} videí. Zkuste širší nebo anglické téma.')
+            raise ValueError(f'Vyhledávání našlo pouze {len(entries)} odpovídajících videí. Zkuste širší nebo anglické téma.' + (' Veřejné vyhledávače byly omezené nebo nedostupné.' if warnings else ''))
         candidates, rejected = [], 0
         for i, item in enumerate(entries):
             set_job(job_id, progress=10 + int(55 * i / len(entries)), message=f'Načítám kandidáta {i + 1}/{len(entries)}…')
-            asset_id = uuid.uuid4().hex
-            folder = DATA / 'media' / asset_id
-            folder.mkdir()
             try:
-                import sys
-                run([sys.executable, '-m', 'yt_dlp', '--no-playlist', '--no-progress', '--socket-timeout', '20', '--retries', '1', '--max-filesize', '300M', '--match-filter', 'duration <= 120', '--restrict-filenames', '--merge-output-format', 'mp4', '-f', 'bestvideo[height<=1920]+bestaudio/best', '-o', str(folder / 'download.%(ext)s'), '--', item['url']], 120)
-                files = [p for p in folder.glob('download.*') if p.suffix not in ('.part', '.ytdl')]
-                if len(files) != 1:
-                    raise ValueError('Video nebylo dostupné.')
-                if files[0].stat().st_size > MAX_UPLOAD:
-                    raise ValueError('Video překračuje limit 300 MB.')
-                files[0].rename(folder / 'source')
-                candidate = register(folder / 'source', asset_id, item['title'])
-                candidate['source_url'] = item.get('source_url', item['url'])
-                candidates.append(candidate)
+                candidates.append(download_candidate(item))
             except Exception:
                 rejected += 1
-                shutil.rmtree(folder, ignore_errors=True)
         if len(candidates) < 5:
             raise ValueError(f'Podařilo se načíst jen {len(candidates)} videí; {rejected} bylo nedostupných. TikTok nebo Instagram může vyžadovat přihlášení či blokovat stahování. Zkuste jiné téma nebo nahrajte vlastní klipy.')
-        set_job(job_id, progress=70, message='AI hodnotí obsah a vybírá samostatné scény…')
-        selected = select_candidates(candidates, body.topic, body.language, body.ranking_criteria)
-        set_job(job_id, status='done', progress=100, message='Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=rejected)
+        set_job(job_id, progress=70, message='Vybírám souvislé scény podle pohybu a ostrosti…' if body.mode == 'free' else 'AI hodnotí obsah a vybírá samostatné scény…')
+        selected = select_free(candidates, body.topic) if body.mode == 'free' else select_candidates(candidates, body.topic, body.language, body.ranking_criteria)
+        set_job(job_id, status='done', progress=100, message='Pět momentů je připravených. Zkontroluj obsah a pořadí.' if body.mode == 'free' else 'Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=rejected)
     except Exception as error:
         set_job(job_id, status='failed', message=f'Vyhledávání se nezdařilo: {str(error)[:700]}')
 
 
 @app.post('/api/discover', status_code=202)
 def start_discover(body: DiscoverRequest):
-    if not os.environ.get('OPENAI_API_KEY'):
-        raise HTTPException(409, 'Automatické vyhledávání a výběr vyžaduje OPENAI_API_KEY v nastavení prostředí.')
+    if body.mode == 'ai' and not os.environ.get('OPENAI_API_KEY'):
+        raise HTTPException(409, 'AI výběr potřebuje OPENAI_API_KEY. Zvolte režim Zdarma pro vyhledávání bez placeného API.')
     with job_lock:
         if any(j['status'] in ('queued', 'rendering', 'searching', 'working') for j in jobs.values()):
             raise HTTPException(409, 'Jeden úkol právě běží. Počkejte na jeho dokončení.')

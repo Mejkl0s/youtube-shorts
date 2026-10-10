@@ -119,7 +119,7 @@ def test_provider_video_url_restrictions(url, allowed):
 def test_missing_integrations_and_invalid_upload_fail_honestly(isolated):
     client = TestClient(m.app)
     assert client.get('/api/health').json()['voices']['en'] is False
-    assert client.post('/api/discover', json={'topic': 'funny cats'}).status_code == 409
+    assert client.post('/api/discover', json={'topic': 'funny cats', 'mode': 'ai'}).status_code == 409
     assert client.post('/api/voice-preview', json={'text': 'Great timing wins this round.'}).status_code == 409
     assert client.post('/api/research', json={'topic': 'ranking Shorts'}).status_code == 409
     response = client.post('/api/upload', files={'file': ('bad.mp4', b'not a video', 'video/mp4')})
