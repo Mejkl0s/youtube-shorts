@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 
 const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:8000';
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox'] });
@@ -12,6 +13,8 @@ await mkdir('.runtime/screenshots', { recursive: true });
 try {
   await page.goto(base);
   await page.getByRole('heading', { name: 'Najdi momenty. Vytvoř svůj Short.' }).waitFor();
+  await page.getByRole('heading', {name:'Vzhled podle předlohy',exact:true}).waitFor();
+  assert.equal(await page.getByLabel('ROZPOZNÁNÍ VZHLEDU', {exact:true}).inputValue(),'free');
   assert.equal(await page.getByLabel('REŽIM HLEDÁNÍ', {exact:true}).inputValue(), 'free');
   assert.equal(await page.getByRole('switch', {name:'AI voiceover',exact:true}).getAttribute('aria-checked'), 'false');
   assert.equal(await page.locator('.clip-card').count(), 5);
@@ -47,6 +50,24 @@ try {
   await page.getByRole('button', { name: /Vyzkoušet syntetickou ukázku/ }).click();
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor({ timeout: 120000 });
   assert.equal(await page.locator('.clip-thumb').count(), 5);
+  // Actual template upload, local OCR, manual adjustment and server-side save (no provider mocks).
+  const templateFile='.runtime/screenshots/reference-fixture.png';
+  const font='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','color=c=0x181818:s=720x1280','-vf',`drawtext=fontfile=${font}:text='TOP FIVE MOMENTS':fontsize=46:fontcolor=white:x=(w-tw)/2:y=65,drawtext=fontfile=${font}:text='#5':fontsize=95:fontcolor=0xCAFA63:x=50:y=250,drawtext=fontfile=${font}:text='THE PERFECT MOMENT':fontsize=37:fontcolor=white:x=(w-tw)/2:y=1020`,'-frames:v','1',templateFile]);
+  await page.getByLabel('Pokyny k předloze',{exact:true}).fill('Keep the lime ranking number and white captions.');
+  await page.getByLabel('Soubor předlohy',{exact:true}).setInputFiles(templateFile);
+  await page.getByText('Základní odhad použit',{exact:true}).waitFor({timeout:60000});
+  assert.equal(await page.locator('.template-reference img').count(),1);
+  await page.locator('.template-controls > summary').click();
+  async function inputValue(locator,value){await locator.evaluate((el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));},value);}
+  await inputValue(page.getByLabel('Barva čísel',{exact:true}),'#ff00aa');
+  await inputValue(page.getByLabel('Číslo · výška',{exact:true}),'38');
+  await page.getByLabel('Zarovnání nadpisu',{exact:true}).selectOption('left');
+  assert.equal(await page.locator('.phone-rank').evaluate(el=>getComputedStyle(el).color),'rgb(255, 0, 170)');
+  assert.equal(await page.locator('.phone-rank').evaluate(el=>el.style.top),'38%');
+  assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).textAlign),'left');
+  await page.getByRole('button',{name:'Uložit vzhled předlohy',exact:true}).click();
+  await page.getByText('Vlastní vzhled uložen',{exact:true}).waitFor();
   const first = page.getByRole('textbox', { name: 'Název klipu 5', exact: true });
   const second = page.getByRole('textbox', { name: 'Název klipu 4', exact: true });
   const firstBefore = await first.inputValue();
@@ -67,6 +88,9 @@ try {
   await page.reload();
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).inputValue(), 'TOP 5 TEST MOMENTS');
+  assert.equal(await page.getByLabel('Pokyny k předloze',{exact:true}).inputValue(),'Keep the lime ranking number and white captions.');
+  assert.equal(await page.locator('.phone-rank').evaluate(el=>el.style.top),'38%');
+  assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).textAlign),'left');
   await page.getByRole('button', { name: 'Přehrát náhled' }).click();
   await page.waitForTimeout(1200);
   assert.ok(await page.locator('video').evaluate(v => v.currentTime) > 0);
@@ -84,7 +108,8 @@ try {
   // UI integration test only: backend action execution is covered by pytest.
   const demo = await (await page.request.post(base+'/api/demo', {data:{}})).json();
   const completed = {id:'ui-assistant-test',kind:'assistant',status:'done',progress:100,message:'Příkaz dokončen.',assistant_reply:'Změny jsou hotové.',download:await download.getAttribute('href'),project:{topic:'timing',title:'AI DIRECTOR TEST',ranking_criteria:'Timing and skill',language:'en',resolution:'720',candidate_count:12,allow_youtube:true,voice:false,effects:true,captions:true,original_volume:.12,voice_volume:1,effects_volume:.55,voice_settings:{provider:'openai',voice:'echo',speed:1,delivery:'Natural male delivery.'},layout:{font:'bold',title_color:'FFFFFF',rank_color:'FF00AA',caption_color:'FFFFFF',title_y:.0615,title_size:.0454,rank_x:.0602,rank_y:.1719,rank_size:.1343,caption_y:.7708,caption_size:.0528,header_darkness:.5,show_label:true,show_criteria:true},clips:demo.clips.map(c=>({...c,sourceDuration:c.duration,duration:2,start:0}))}};
-  await page.route('**/api/assistant', route=>route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:completed.id,kind:'assistant',status:'queued',progress:0,message:'Připravuji…'})}));
+  await page.getByLabel('Pokyny k předloze',{exact:true}).fill('Keep the ranking marker pink.');
+  await page.route('**/api/assistant', route=>{assert.equal(route.request().postDataJSON().reference_instructions,'Keep the ranking marker pink.');assert.ok(route.request().postDataJSON().reference_id);return route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:completed.id,kind:'assistant',status:'queued',progress:0,message:'Připravuji…'})});});
   await page.route('**/api/jobs/ui-assistant-test', route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(completed)}));
   await page.locator('.paid-assistant > summary').click();
   await page.getByRole('textbox',{name:'Příkaz pro AI režiséra'}).fill('Změň název a použij růžová čísla.');
@@ -104,5 +129,5 @@ try {
   await page.screenshot({ path: '.runtime/screenshots/editor-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: free discovery mode/payload/results (mocked), chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
+  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
 } finally { await browser.close(); }

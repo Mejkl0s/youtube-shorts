@@ -1,0 +1,36 @@
+import type {RefObject} from 'react';
+import {Check,ChevronDown,Paperclip,RotateCcw,Save,SlidersHorizontal,Upload,WandSparkles,X} from 'lucide-react';
+import {DEFAULT_LAYOUT,type Layout,type Reference} from './template';
+import './template.css';
+
+type Props = {
+  reference:Reference|null;layout:Layout;onLayout:(value:Layout)=>void;
+  method:'free'|'ai';onMethod:(value:'free'|'ai')=>void;aiAvailable:boolean;
+  instructions:string;onInstructions:(value:string)=>void;frame:number;onFrame:(value:number)=>void;
+  input:RefObject<HTMLInputElement|null>;onUpload:(file:File)=>void;onAnalyze:()=>void;onSave:()=>void;onRemove:()=>void;disabled:boolean;
+};
+const sliders = [
+  {key:'title_y',name:'Nadpis · výška',min:1,max:35},{key:'title_size',name:'Nadpis · velikost',min:2,max:8.5},
+  {key:'title_x',name:'Nadpis · boční okraj',min:1,max:75},
+  {key:'rank_x',name:'Číslo · vodorovná poloha',min:1,max:80},{key:'rank_y',name:'Číslo · výška',min:5,max:65},{key:'rank_size',name:'Číslo · velikost',min:5,max:24},
+  {key:'caption_y',name:'Titulky · výška',min:45,max:90},{key:'caption_size',name:'Titulky · velikost',min:2.5,max:9},
+  {key:'caption_x',name:'Titulky · boční okraj',min:1,max:75},{key:'header_darkness',name:'Ztmavení pod nadpisem',min:0,max:90},
+] as const;
+
+export default function TemplatePanel(p:Props){
+  const change=(key:keyof Layout,value:Layout[keyof Layout])=>p.onLayout({...p.layout,[key]:value});
+  return <section className="template-panel" aria-labelledby="template-title">
+    <div className="template-heading"><span><Paperclip size={17}/></span><div><h2 id="template-title">Vzhled podle předlohy</h2><p>Ukaž, kde mají být čísla, nadpis a titulky.</p></div><button className="button secondary" disabled={p.disabled} onClick={()=>p.input.current?.click()}><Upload size={14}/>{p.reference?'Změnit předlohu':'Nahrát předlohu'}</button></div>
+    <input ref={p.input} type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime" className="hidden" aria-label="Soubor předlohy" onChange={e=>{if(e.target.files?.[0])p.onUpload(e.target.files[0]);}}/>
+    {p.reference?<div className="template-reference"><a href={p.reference.url} target="_blank" rel="noreferrer" title="Otevřít snímek předlohy"><img src={p.reference.url} alt="Předloha vzhledu Shortu"/></a><div><strong>{p.reference.name}</strong><span>{p.reference.analyzed?(p.reference.analysis_mode==='manual'?'Vlastní vzhled uložen':p.reference.analysis_mode==='ai'?'AI odhad použit':'Základní odhad použit'):'Předloha nahraná'}</span><p>{p.reference.notes}</p>{!!p.reference.duration&&<label className="reference-frame">Snímek videa · {p.frame.toFixed(1)} s<input type="range" aria-label="Čas snímku předlohy" min={0} max={Math.max(0,p.reference.duration-.1)} step={.1} value={p.frame} disabled={p.disabled} onChange={e=>p.onFrame(Number(e.target.value))}/><small>Vyber okamžik s viditelnými čísly a textem; potvrď „Použít předlohu“.</small></label>}</div><button aria-label="Odebrat předlohu" disabled={p.disabled} onClick={p.onRemove}><X size={15}/></button></div>:<button className="template-drop" disabled={p.disabled} onClick={()=>p.input.current?.click()} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!p.disabled&&e.dataTransfer.files[0])p.onUpload(e.dataTransfer.files[0]);}}><Upload size={24}/><strong>Přetáhni obrázek nebo ukázkové video</strong><span>Snímek samotného Shortu · PNG, JPG, WebP nebo video · do 40 MB</span></button>}
+    <div className="template-method"><label htmlFor="template-method">ROZPOZNÁNÍ VZHLEDU</label><div className="select-wrap"><select id="template-method" disabled={p.disabled} value={p.method} onChange={e=>p.onMethod(e.target.value as 'free'|'ai')}><option value="free">Základní odhad · zdarma</option><option value="ai" disabled={!p.aiAvailable}>AI rozpoznání · placené API{!p.aiAvailable?' · připoj klíč':''}</option></select><ChevronDown size={12}/></div><button className="button primary" disabled={p.disabled||!p.reference} onClick={p.onAnalyze}><WandSparkles size={14}/>Použít předlohu</button></div>
+    <label className="template-instructions">Pokyny pro volitelné AI<textarea aria-label="Pokyny k předloze" maxLength={500} value={p.instructions} disabled={p.disabled} onChange={e=>p.onInstructions(e.target.value)} placeholder="Např. zachovej žlutá čísla vlevo, velký nadpis nahoře a bílé titulky dole."/></label><p className="template-help">Po nahrání se použije zvolený odhad. Zkontroluj náhled vpravo a uprav detaily níže. Textové pokyny využije AI režim; základní odhad pracuje se snímkem.</p>
+    <details className="template-controls"><summary><SlidersHorizontal size={14}/>Doladit čísla, nadpis a titulky<ChevronDown size={13}/></summary><fieldset disabled={p.disabled}>
+      <div className="template-colors">{([{key:'title_color',name:'Barva nadpisu'},{key:'rank_color',name:'Barva čísel'},{key:'caption_color',name:'Barva titulků'}] as const).map(c=><label key={c.key}>{c.name}<input type="color" aria-label={c.name} value={'#'+p.layout[c.key]} onChange={e=>change(c.key,e.target.value.slice(1).toUpperCase())}/></label>)}<label>Písmo<select aria-label="Písmo šablony" value={p.layout.font} onChange={e=>change('font',e.target.value as Layout['font'])}><option value="bold">Tučné</option><option value="condensed">Úzké tučné</option><option value="serif">Patkové</option></select></label></div>
+      <div className="template-align">{(['title','caption'] as const).map(name=><label key={name}>{name==='title'?'Zarovnání nadpisu':'Zarovnání titulků'}<select aria-label={name==='title'?'Zarovnání nadpisu':'Zarovnání titulků'} value={p.layout[`${name}_align`]??'center'} onChange={e=>change(`${name}_align`,e.target.value as Layout['title_align'])}><option value="left">Vlevo</option><option value="center">Na střed</option><option value="right">Vpravo</option></select></label>)}</div>
+      <div className="template-sliders">{sliders.map(s=><label key={s.key}><span>{s.name}<strong>{(p.layout[s.key]*100).toFixed(1)} %</strong></span><input type="range" aria-label={s.name} min={s.min} max={s.max} step={.1} value={p.layout[s.key]*100} onChange={e=>change(s.key,Number(e.target.value)/100)}/></label>)}</div>
+      <div className="template-checks"><label><input type="checkbox" checked={p.layout.show_label} onChange={e=>change('show_label',e.target.checked)}/>Názvy jednotlivých klipů</label><label><input type="checkbox" checked={p.layout.show_criteria} onChange={e=>change('show_criteria',e.target.checked)}/>Kritéria hodnocení ve videu</label></div>
+      <div className="template-save"><button className="button secondary" onClick={()=>p.onLayout({...DEFAULT_LAYOUT})}><RotateCcw size={13}/>Výchozí vzhled</button><button className="button primary" disabled={!p.reference} onClick={p.onSave}><Save size={13}/>Uložit vzhled předlohy<Check size={13}/></button></div>
+    </fieldset></details>
+  </section>;
+}

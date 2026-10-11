@@ -156,7 +156,7 @@ def test_research_discards_uncited_channel_links(isolated, monkeypatch):
     assert [c['name'] for c in result['channels']] == ['Supported example']
 
 
-def test_reference_image_upload_is_real_and_requires_ai_for_analysis(isolated):
+def test_reference_image_upload_is_real_and_paid_analysis_requires_key(isolated):
     image = isolated / 'reference.png'
     m.ffmpeg('-f', 'lavfi', '-i', 'color=c=yellow:s=180x320', '-frames:v', '1', str(image))
     client = TestClient(m.app)
@@ -165,7 +165,7 @@ def test_reference_image_upload_is_real_and_requires_ai_for_analysis(isolated):
     reference = result.json()
     assert reference['analyzed'] is False
     assert (isolated / 'media' / reference['id'] / 'frame.jpg').stat().st_size > 100
-    assert client.post(f'/api/templates/{reference["id"]}/analyze').status_code == 409
+    assert client.post(f'/api/templates/{reference["id"]}/analyze', json={'mode': 'ai'}).status_code == 409
     bad = client.post('/api/templates/upload', files={'file': ('fake.png', b'not an image', 'image/png')})
     assert bad.status_code == 400
 

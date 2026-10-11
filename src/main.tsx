@@ -2,13 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowDown, ArrowUp, ArrowUpRight, AudioLines, Check, ChevronDown, Clapperboard, Download, Film, FolderOpen, Info, Layers3, LoaderCircle, Mic2, MessageSquare, Paperclip, Send, Pause, Play, Plus, RotateCcw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Trophy, Upload, Volume2, VolumeX, WandSparkles, X, Zap } from 'lucide-react';
 import './styles.css';
+import TemplatePanel from './TemplatePanel';
+import {DEFAULT_LAYOUT,type Layout,type Reference} from './template';
 
 type Clip = { id: string; name: string; title: string; voiceover: string; duration: number; sourceDuration: number; start: number; url: string; thumbnail: string; reason?: string; source_url?: string };
-type Layout = { font: 'bold'|'condensed'|'serif'; title_color: string; rank_color: string; caption_color: string; title_y: number; title_size: number; rank_x: number; rank_y: number; rank_size: number; caption_y: number; caption_size: number; header_darkness: number; show_label: boolean; show_criteria: boolean };
 type VoiceSettings = { provider: 'openai'|'elevenlabs'|'piper'; voice: string; speed: number; delivery: string };
-type Reference = { id: string; name: string; url: string; analyzed: boolean; layout?: Layout; notes: string };
 type ChatMessage = { id: string; role: 'user'|'assistant'; content: string; pending?: boolean };
-const DEFAULT_LAYOUT: Layout = { font:'bold', title_color:'FFFFFF', rank_color:'CAFA63', caption_color:'FFFFFF', title_y:.0615, title_size:.0454, rank_x:.0602, rank_y:.1719, rank_size:.1343, caption_y:.7708, caption_size:.0528, header_darkness:.5, show_label:true, show_criteria:true };
 const DEFAULT_VOICE: VoiceSettings = { provider:'openai', voice:'onyx', speed:1, delivery:'A confident, natural male narrator. Clear English, conversational energy, varied emphasis. No exaggerated shouting. Let the key observation land.' };
 const VOICES = [{id:'openai:onyx',name:'Onyx · hlubší mužský',provider:'openai',voice:'onyx'}, {id:'openai:echo',name:'Echo · přirozený mužský',provider:'openai',voice:'echo'}, {id:'elevenlabs:adam',name:'Adam · ElevenLabs',provider:'elevenlabs',voice:'adam'}, {id:'elevenlabs:josh',name:'Josh · ElevenLabs',provider:'elevenlabs',voice:'josh'}, {id:'elevenlabs:antoni',name:'Antoni · ElevenLabs',provider:'elevenlabs',voice:'antoni'}, {id:'elevenlabs:custom',name:'Vlastní · ElevenLabs',provider:'elevenlabs',voice:'custom'}, {id:'piper:local',name:'Piper · lokální alternativa',provider:'piper',voice:'local'}] as const;
 type AIProject = { topic:string; title:string; ranking_criteria:string; language:string; resolution:string; candidate_count:number; allow_youtube:boolean; voice:boolean; effects:boolean; captions:boolean; original_volume:number; voice_volume:number; effects_volume:number; layout:Layout; voice_settings:VoiceSettings; clips:Record<string,unknown>[] };
@@ -34,6 +33,9 @@ function App() {
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [reference, setReference] = useState<Reference | null>(null);
+  const [templateMethod,setTemplateMethod]=useState<'free'|'ai'>('free');
+  const [templateInstructions,setTemplateInstructions]=useState('');
+  const [templateFrame,setTemplateFrame]=useState(0);
   const [layout, setLayout] = useState<Layout>(DEFAULT_LAYOUT);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_VOICE);
   const [clips, setClips] = useState<(Clip | null)[]>(blankClips);
@@ -81,14 +83,14 @@ function App() {
   const occupied = !!busy || !!(job && !['done', 'failed'].includes(job.status));
 
   useEffect(() => {
-    api<Health>('/health').then(setHealth).catch(() => setError('Server není dostupný. Spusťte backend podle README.'));
+    api<Health>('/health').then(h=>{setHealth(h);if(!h.ai_scripts)setTemplateMethod('free');}).catch(() => setError('Server není dostupný. Spusťte backend podle README.'));
     try {
       const savedProject = JSON.parse(localStorage.getItem('rank-studio-project') ?? 'null');
       if (savedProject?.clips?.length === 5) {
         setClips(savedProject.clips); setTitle(savedProject.title || 'TOP 5 MOMENTS'); setTopic(savedProject.topic || ''); setCriteria(savedProject.criteria || 'Surprise, timing and skill'); setLanguage(savedProject.language || 'en');
         setVoice(savedProject.voice ?? false); setEffects(savedProject.effects ?? true); setCaptions(savedProject.captions ?? true); setResolution(savedProject.resolution || '1080'); setDiscoveryMode(savedProject.discoveryMode==='ai'?'ai':'free');
         setAllowYoutube(savedProject.allowYoutube ?? true); setCandidateCount(savedProject.candidateCount || 12); setOriginalVolume(savedProject.originalVolume ?? 0.12); setVoiceVolume(savedProject.voiceVolume ?? 1); setEffectsVolume(savedProject.effectsVolume ?? 0.55);
-        setLayout({...DEFAULT_LAYOUT,...savedProject.layout}); setVoiceSettings(savedProject.voiceSettings || DEFAULT_VOICE); setReference(savedProject.reference || null); setRestored(true); setToast('Uložený projekt byl obnoven.');
+        setLayout({...DEFAULT_LAYOUT,...savedProject.layout}); setVoiceSettings(savedProject.voiceSettings || DEFAULT_VOICE); setReference(savedProject.reference || null);setTemplateInstructions(savedProject.templateInstructions??savedProject.reference?.instructions??'');setTemplateFrame(savedProject.reference?.frame_time??0);setTemplateMethod(savedProject.templateMethod==='ai'?'ai':'free'); setRestored(true); setToast('Uložený projekt byl obnoven.');
       }
     } catch { localStorage.removeItem('rank-studio-project'); }
     try { const history=JSON.parse(localStorage.getItem('rank-studio-chat') || '[]'); if(Array.isArray(history))setMessages(history.slice(-30).filter(m=>['user','assistant'].includes(m.role)).map(m=>m.pending?{...m,pending:false,content:'Po obnovení nebyl výsledek tohoto příkazu ověřen. Zkontroluj projekt.'}:m)); } catch {}
@@ -104,7 +106,7 @@ function App() {
         const next = await api<Job>(`/jobs/${job.id}`);
         setJob(next);
         if(next.kind==='assistant' && next.assistant_reply && assistantTurn.current){setMessages(old=>old.map(m=>m.id===assistantTurn.current?{...m,content:next.assistant_reply!,pending:!['done','failed'].includes(next.status)}:m));}
-        if(next.kind==='assistant' && ['done','failed'].includes(next.status)){if(next.project){pendingDownload.current=next.download || null;applyProject(next.project);}else if(next.download)setExported(next.download);if(next.reference)setReference(next.reference);if(next.research){setResearch(next.research);setModal('research');}}
+        if(next.kind==='assistant' && ['done','failed'].includes(next.status)){if(next.project){pendingDownload.current=next.download || null;applyProject(next.project);}else if(next.download)setExported(next.download);if(next.reference){setReference(next.reference);setTemplateInstructions(next.reference.instructions??'');setTemplateFrame(next.reference.frame_time??0);}if(next.research){setResearch(next.research);setModal('research');}}
         if (next.status === 'failed') setError(next.message);
         if (next.status === 'done') {
           if (next.clips) { setClips(next.clips.map(normalize)); setSelected(0); if(next.mode==='free')setVoice(false); setToast(next.mode==='free'?`Vybráno pět scén z ${next.candidate_count} videí bez placeného API. Zkontroluj obsah a pořadí.`:`AI vybrala pět momentů z ${next.candidate_count} videí.`); }
@@ -196,12 +198,12 @@ function App() {
     finally { setBusy(''); }
   }
   function saveProject() {
-    try { localStorage.setItem('rank-studio-project', JSON.stringify({ clips, title, topic, criteria, allowYoutube, layout, voiceSettings, reference, language, voice, effects, captions, resolution, originalVolume, voiceVolume, effectsVolume, candidateCount, discoveryMode })); setSaved(true); setRestored(true); setToast('Projekt uložen v tomto prohlížeči.'); }
+    try { localStorage.setItem('rank-studio-project', JSON.stringify({ clips, title, topic, criteria, allowYoutube, layout, voiceSettings, reference, language, voice, effects, captions, resolution, originalVolume, voiceVolume, effectsVolume, candidateCount, discoveryMode, templateMethod, templateInstructions })); setSaved(true); setRestored(true); setToast('Projekt uložen v tomto prohlížeči.'); }
     catch { setError('Prohlížeč nemohl projekt uložit.'); }
   }
   function resetProject() {
     if (ready && !window.confirm('Vymazat aktuální projekt? Nahrané soubory zůstanou na serveru.')) return;
-    setClips(blankClips()); setDiscoveryMode('free');setVoice(false); setLayout(DEFAULT_LAYOUT);setVoiceSettings(DEFAULT_VOICE);setReference(null);setMessages([]); setTopic(''); setCriteria('Surprise, timing and skill'); setTitle('TOP 5 UNEXPECTED MOMENTS'); setSelected(0); setPlaying(false); setElapsed(0); setJob(null); setExported(null); setError(''); localStorage.removeItem('rank-studio-project'); setRestored(false); setToast('Nový projekt je připravený.');
+    setClips(blankClips()); setDiscoveryMode('free');setVoice(false); setLayout(DEFAULT_LAYOUT);setVoiceSettings(DEFAULT_VOICE);setReference(null);setTemplateInstructions('');setTemplateFrame(0);setTemplateMethod('free');setMessages([]); setTopic(''); setCriteria('Surprise, timing and skill'); setTitle('TOP 5 UNEXPECTED MOMENTS'); setSelected(0); setPlaying(false); setElapsed(0); setJob(null); setExported(null); setError(''); localStorage.removeItem('rank-studio-project'); setRestored(false); setToast('Nový projekt je připravený.');
   }
   function moveClip(index: number, direction: number) {
     const target = index + direction;
@@ -211,7 +213,7 @@ function App() {
   }
 
   function applyProject(p:AIProject){
-    setTopic(p.topic);setTitle(p.title);setCriteria(p.ranking_criteria);setLanguage(p.language);setResolution(p.resolution);setCandidateCount(p.candidate_count);setAllowYoutube(p.allow_youtube);setVoice(p.voice);setEffects(p.effects);setCaptions(p.captions);setOriginalVolume(p.original_volume);setVoiceVolume(p.voice_volume);setEffectsVolume(p.effects_volume);setLayout(p.layout);setVoiceSettings(p.voice_settings);const next:(Clip|null)[]=p.clips.map(normalize);while(next.length<5)next.push(null);setClips(next);setSelected(0);setPlaying(false);
+    setTopic(p.topic);setTitle(p.title);setCriteria(p.ranking_criteria);setLanguage(p.language);setResolution(p.resolution);setCandidateCount(p.candidate_count);setAllowYoutube(p.allow_youtube);setVoice(p.voice);setEffects(p.effects);setCaptions(p.captions);setOriginalVolume(p.original_volume);setVoiceVolume(p.voice_volume);setEffectsVolume(p.effects_volume);setLayout({...DEFAULT_LAYOUT,...p.layout});setVoiceSettings(p.voice_settings);const next:(Clip|null)[]=p.clips.map(normalize);while(next.length<5)next.push(null);setClips(next);setSelected(0);setPlaying(false);
   }
   function chooseVoice(id:string){const v=VOICES.find(v=>v.id===id);if(v)setVoiceSettings({...voiceSettings,provider:v.provider,voice:v.voice});}
   async function previewMaleVoice(){
@@ -219,19 +221,35 @@ function App() {
     try{const r=await api<{url:string}>('/voice-preview',{text:'That recovery turns failure into a win.',language,voice_settings:voiceSettings});voiceAudio.current?.pause();const a=new Audio(r.url);voiceAudio.current=a;await a.play();}catch(e){setError((e as Error).message);}finally{setBusy('');}
   }
   async function uploadReference(file:File){
-    setBusy('Načítám tvůj vzor…');setError('');
-    try{const form=new FormData();form.append('file',file);const r=await api<Reference>('/templates/upload',form,true);setReference(r);setToast('Vzor nahrán. Napiš asistentovi, ať jej použije.');}catch(e){setError((e as Error).message);}finally{setBusy('');if(referenceInput.current)referenceInput.current.value='';}
+    if(file.size>40*1024*1024){setError('Předloha může mít nejvýše 40 MB.');return;}
+    setBusy('Načítám předlohu a přebírám vzhled…');setError('');
+    try{
+      const form=new FormData();form.append('file',file);
+      const uploaded=await api<Reference>('/templates/upload',form,true);setReference(uploaded);setTemplateFrame(uploaded.frame_time??0);
+      const result=await api<Reference>(`/templates/${uploaded.id}/analyze`,{mode:templateMethod,instructions:templateInstructions,base_layout:layout});
+      setReference(result);if(result.layout)setLayout({...DEFAULT_LAYOUT,...result.layout});
+      setToast(result.analyzed?'Vzhled předlohy použit. Zkontroluj náhled a dolaď detaily.':'Předloha nahraná. Vyber jiný snímek nebo dolaď vzhled ručně.');
+    }catch(e){setError((e as Error).message);}finally{setBusy('');if(referenceInput.current)referenceInput.current.value='';}
   }
   async function analyzeReference(){
-    if(!reference)return;setBusy('Rozpoznávám barvy, pozice a písmo šablony…');setError('');
-    try{const r=await api<Reference>(`/templates/${reference.id}/analyze`,{});setReference(r);if(r.layout)setLayout(r.layout);setToast('Styl použit. Zkontroluj náhled před exportem.');}catch(e){setError((e as Error).message);}finally{setBusy('');}
+    if(!reference)return;setBusy('Přebírám polohy, barvy a velikosti z předlohy…');setError('');
+    try{
+      const r=await api<Reference>(`/templates/${reference.id}/analyze`,{mode:templateMethod,instructions:templateInstructions,frame_time:templateFrame,base_layout:layout});
+      setReference(r);if(r.layout)setLayout({...DEFAULT_LAYOUT,...r.layout});
+      setToast(r.analyzed?'Vzhled použit. Zkontroluj náhled.':'V tomto snímku není rozpoznaný text. Dolaď vzhled ručně.');
+    }catch(e){setError((e as Error).message);}finally{setBusy('');}
+  }
+  async function saveTemplate(){
+    if(!reference)return;setBusy('Ukládám tvůj vzhled…');setError('');
+    try{const r=await api<Reference>(`/templates/${reference.id}/settings`,{layout,instructions:templateInstructions});setReference(r);setToast('Vzhled uložen pro asistenta, náhled a export. Projekt ulož tlačítkem Uložit projekt.');}
+    catch(e){setError((e as Error).message);}finally{setBusy('');}
   }
   async function sendCommand(command=chatInput){
     if(occupied || !command.trim())return;
     const id=Date.now().toString(36)+Math.random().toString(36).slice(2);assistantTurn.current=id;setChatInput('');setError('');setBusy('Předávám příkaz tvému AI režisérovi…');
     const history=messages.filter(m=>!m.pending).slice(-12).map(({role,content})=>({role,content}));
     setMessages(old=>[...old,{id:id+'u',role:'user',content:command},{id,role:'assistant',content:'Připravuji postup…',pending:true}]);
-    try{setJob(await api<Job>('/assistant',{message:command,history,reference_id:reference?.id??null,state:{topic,title,ranking_criteria:criteria,language,resolution,candidate_count:candidateCount,allow_youtube:allowYoutube,voice,effects,captions,original_volume:originalVolume,voice_volume:voiceVolume,effects_volume:effectsVolume,layout,voice_settings:voiceSettings,clips:clips.filter(Boolean)}}));}
+    try{setJob(await api<Job>('/assistant',{message:command,history,reference_id:reference?.id??null,reference_instructions:reference?templateInstructions:null,state:{topic,title,ranking_criteria:criteria,language,resolution,candidate_count:candidateCount,allow_youtube:allowYoutube,voice,effects,captions,original_volume:originalVolume,voice_volume:voiceVolume,effects_volume:effectsVolume,layout,voice_settings:voiceSettings,clips:clips.filter(Boolean)}}));}
     catch(e){const content=(e as Error).message;setMessages(old=>old.map(m=>m.id===id?{...m,content,pending:false}:m));setError(content);}finally{setBusy('');}
   }
 
@@ -269,6 +287,7 @@ function App() {
           <div className="hero-row"><div><h1>Najdi momenty.<br/><span>Vytvoř svůj Short.</span></h1><p>Hledej veřejné klipy podle tématu zdarma.<br className="desktop-break"/> Pět momentů. Tvůj styl. AI hlas volitelně.</p></div><div className="hero-art" aria-hidden="true"><div className="art-orbit"/><div className="art-tile tile-back"><Film size={25}/></div><div className="art-tile tile-front"><Trophy size={33}/><span>#1</span></div><Sparkles className="art-spark" size={23}/></div></div>
           <div className="workflow-tags"><span><Layers3 size={13}/>5 momentů</span><span><Search size={13}/>Hledání zdarma</span><span><Zap size={13}/>Sound effects</span><span className="format-tag">9:16</span></div>
 
+          <TemplatePanel reference={reference} layout={layout} onLayout={setLayout} method={templateMethod} onMethod={setTemplateMethod} aiAvailable={!!health?.ai_scripts} instructions={templateInstructions} onInstructions={setTemplateInstructions} frame={templateFrame} onFrame={setTemplateFrame} input={referenceInput} onUpload={uploadReference} onAnalyze={analyzeReference} onSave={saveTemplate} onRemove={()=>{setReference(null);setTemplateInstructions('');setTemplateFrame(0);}} disabled={occupied}/>
           <details className="paid-assistant"><summary><Sparkles size={13}/>Osobní AI režisér · volitelné placené API<ChevronDown size={13}/></summary>
           <section className="director-card">
             <div className="director-header"><span className="director-avatar"><Sparkles size={17}/></span><div><strong>Tvůj AI režisér</strong><small>Od příkazu po hotový Short</small></div><button className={`director-connection ${health?.ai_scripts?'connected':''}`} onClick={()=>setModal('settings')}><span className="dot"/>{health?.ai_scripts?'API připojeno':'Připojit AI'}</button></div>
@@ -276,7 +295,6 @@ function App() {
             {reference && <div className="reference-card"><img src={reference.url} alt="Nahraný vzor šablony"/><div><strong>{reference.name}</strong><small>{reference.analyzed?'Styl rozpoznán · přibližná shoda':'Vzor připravený k rozpoznání'}</small></div><button disabled={occupied} onClick={analyzeReference} title="Rozpoznat styl"><WandSparkles size={14}/></button><button disabled={occupied} onClick={()=>setReference(null)} aria-label="Odebrat vzor"><X size={14}/></button></div>}
             <div className="director-composer"><textarea aria-label="Příkaz pro AI režiséra" value={chatInput} maxLength={2500} placeholder="Napiš, co mám udělat…" onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendCommand();}}} disabled={occupied}/><button className="send-command" aria-label="Odeslat příkaz" onClick={()=>sendCommand()} disabled={occupied||!chatInput.trim()}>{occupied?<LoaderCircle size={17} className="spin"/>:<Send size={17}/>}</button></div>
             <div className="director-bottom"><button disabled={occupied} onClick={()=>referenceInput.current?.click()}><Paperclip size={13}/>Ukaž šablonu</button><span><Mic2 size={11}/>{VOICES.find(v=>v.voice===voiceSettings.voice)?.name} · {language.toUpperCase()}</span><small>Enter odešle · Shift + Enter nový řádek</small></div>
-            <input ref={referenceInput} type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime" className="hidden" aria-label="Vzor šablony" onChange={e=>{if(e.target.files?.[0])uploadReference(e.target.files[0]);}}/>
           </section>
           </details>
           <details className="manual-controls" open><summary><Search size={13}/>Automatické hledání klipů<ChevronDown size={13}/></summary><div className="topic-box">
@@ -312,7 +330,7 @@ function App() {
           <div className="preview-heading"><h2><span className="dot green"/>Náhled Shortu</h2><span className="preview-badge">9:16</span></div>
           <div className="phone" onClick={() => {if(current)setPlaying(!playing);}}>
             {current ? <video ref={video} key={current.url} src={current.url} poster={current.thumbnail} muted={muted} playsInline onLoadedMetadata={() => { if(video.current)video.current.currentTime=current.start; }} onTimeUpdate={updateTime} onEnded={() => {if(playing && selected<4 && clips[selected+1])setSelected(selected+1);else setPlaying(false);}} onError={() => setError('Náhled klipu není dostupný. Nahrajte jej znovu.')} /> : <div className="phone-art"><div className="art-grid"/><div className="orb orb-one"/><div className="orb orb-two"/><div className="phone-art-label"><Film size={21}/><span>Tvoje momenty.<br/>Tvoje pořadí.</span></div></div>}
-            <div className="phone-overlay" style={{fontFamily:layout.font==='serif'?'RankSerif,Georgia,serif':layout.font==='condensed'?'RankCondensed,Arial,sans-serif':'RankBold,Arial,sans-serif',background:`linear-gradient(180deg,rgba(0,0,0,${layout.header_darkness}) 0%,transparent 29%,transparent 68%,rgba(0,0,0,.65))`}}><span className="phone-series">THE TOP FIVE</span><h3 style={{top:`${layout.title_y*100}%`,fontSize:`${layout.title_size*100}cqw`,color:`#${layout.title_color}`}}>{title || 'TOP 5 MOMENTS'}</h3><div className="phone-rank" style={{top:`${layout.rank_y*100}%`,left:`${layout.rank_x*100}%`,fontSize:`${layout.rank_size*100}cqw`,color:`#${layout.rank_color}`}}>#{5-selected}</div>{current && layout.show_label && <div className="phone-clip-label" style={{color:`#${layout.rank_color}`}}>{current.title}</div>}{captions && current?.voiceover && <p className="phone-caption" style={{top:`${layout.caption_y*100}%`,fontSize:`${layout.caption_size*100}cqw`,color:`#${layout.caption_color}`}}>{current.voiceover}</p>}{layout.show_criteria && <div className="phone-criteria">{criteria}</div>}<div className="phone-bottom"><span className="phone-watermark">RANK STUDIO</span><div className="phone-dots">{clips.map((_,i)=><span key={i} className={i===selected?'active':''}/>)}</div></div></div>
+            <div className="phone-overlay" style={{fontFamily:layout.font==='serif'?'RankSerif,Georgia,serif':layout.font==='condensed'?'RankCondensed,Arial,sans-serif':'RankBold,Arial,sans-serif',background:`linear-gradient(180deg,rgba(0,0,0,${layout.header_darkness}) 0%,transparent 29%,transparent 68%,rgba(0,0,0,.65))`}}><span className="phone-series">THE TOP FIVE</span><h3 style={{top:`${layout.title_y*100}%`,fontSize:`${layout.title_size*100}cqw`,color:`#${layout.title_color}`,textAlign:layout.title_align??'center',left:`${layout.title_align==='left'?layout.title_x*100:5}%`,right:`${layout.title_align==='right'?layout.title_x*100:5}%`}}>{title || 'TOP 5 MOMENTS'}</h3><div className="phone-rank" style={{top:`${layout.rank_y*100}%`,left:`${layout.rank_x*100}%`,fontSize:`${layout.rank_size*100}cqw`,color:`#${layout.rank_color}`}}>#{5-selected}</div>{current && layout.show_label && <div className="phone-clip-label" style={{color:`#${layout.rank_color}`}}>{current.title}</div>}{captions && current?.voiceover && <p className="phone-caption" style={{top:`${layout.caption_y*100}%`,fontSize:`${layout.caption_size*100}cqw`,color:`#${layout.caption_color}`,textAlign:layout.caption_align??'center',left:`${layout.caption_align==='left'?layout.caption_x*100:7}%`,right:`${layout.caption_align==='right'?layout.caption_x*100:7}%`}}>{current.voiceover}</p>}{layout.show_criteria && <div className="phone-criteria">{criteria}</div>}<div className="phone-bottom"><span className="phone-watermark">RANK STUDIO</span><div className="phone-dots">{clips.map((_,i)=><span key={i} className={i===selected?'active':''}/>)}</div></div></div>
             {current && !playing && <button className="phone-play" aria-label="Přehrát náhled" onClick={e => {e.stopPropagation();setPlaying(true);}}><Play size={23} fill="currentColor"/></button>}
           </div>
           <div className="playback"><button aria-label={playing?'Pozastavit':'Přehrát'} disabled={!current} onClick={() => setPlaying(!playing)}>{playing?<Pause size={16}/>:<Play size={16} fill="currentColor"/>}</button><span>{time(elapsed)}</span><div className="playback-track"><span style={{width:`${Math.min(100, elapsed/totalDuration*100)}%`}}/></div><span>{time(totalDuration)}</span><button aria-label={muted?'Zapnout zvuk':'Ztlumit'} onClick={() => setMuted(!muted)}>{muted?<VolumeX size={16}/>:<Volume2 size={16}/>}</button></div>

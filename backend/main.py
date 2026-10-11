@@ -132,7 +132,7 @@ class Project(BaseModel):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
+    return {'status': 'ok', 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
 
 
 @app.get('/api/fonts/{name}')
@@ -353,17 +353,21 @@ def render(job_id: str, project: Project):
             criteriafile = folder / f'criteria-{rank}.txt'
             criteriafile.write_text(wrap(project.ranking_criteria.upper(), 50))
             font = FONTS[layout.font]
-            def draw_text(file: Path, size: int, y: str, color: str = 'white'):
-                return f'drawtext=fontfile={font}:textfile={file}:expansion=none:fontsize={size}:fontcolor={color}:x=(w-text_w)/2:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
+            def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2'):
+                return f'drawtext=fontfile={font}:textfile={file}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
+            def aligned_x(name):
+                alignment = getattr(layout, name+'_align')
+                margin = int(width * getattr(layout, name+'_x'))
+                return str(margin) if alignment == 'left' else f'w-text_w-{margin}' if alignment == 'right' else '(w-text_w)/2'
             video = f'[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS,drawbox=x=0:y=0:w=iw:h={int(310*scale)}:color=black@{layout.header_darkness}:t=fill,'
-            video += draw_text(titlefile, int(width*layout.title_size), str(int(height*layout.title_y)), '0x'+layout.title_color)
+            video += draw_text(titlefile, int(width*layout.title_size), str(int(height*layout.title_y)), '0x'+layout.title_color, aligned_x('title'))
             video += f",drawtext=fontfile={font}:text='#{rank}':fontsize={int(width*layout.rank_size)}:fontcolor=0x{layout.rank_color}:x={int(width*layout.rank_x)}:y={int(height*layout.rank_y)}:borderw={int(4*scale)}:bordercolor=black@0.6"
             if layout.show_label:
                 video += ',' + draw_text(labelfile, int(34*scale), str(int(515*scale)), '0x'+layout.rank_color)
             if layout.show_criteria:
                 video += ',' + draw_text(criteriafile, int(24*scale), f'h-{int(210*scale)}', 'white@0.7')
             if project.captions and clip.voiceover:
-                video += ',' + draw_text(captionfile, int(width*layout.caption_size), str(int(height*layout.caption_y)), '0x'+layout.caption_color)
+                video += ',' + draw_text(captionfile, int(width*layout.caption_size), str(int(height*layout.caption_y)), '0x'+layout.caption_color, aligned_x('caption'))
             filters.append(video + '[video]')
             out = folder / f'clip-{rank}.mp4'
             ffmpeg(*inputs, '-filter_complex_threads', '2', '-filter_complex', ';'.join(filters), '-map', '[video]', '-map', '[audio]', '-t', str(duration), '-c:v', 'libx264', '-threads', '2', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2', '-movflags', '+faststart', str(out))
