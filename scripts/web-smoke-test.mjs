@@ -9,13 +9,13 @@ if (!password)
   );
 assert.equal((await fetch(base + "/api/health")).status, 200);
 assert.equal((await fetch(base + "/")).status, 401);
-assert.equal((await fetch(base + "/examples/story-narrated.mp4")).status, 401);
+assert.equal((await fetch(base + "/examples/story-english.mp4")).status, 401);
 const headers = {
   Authorization:
     "Basic " + Buffer.from(username + ":" + password).toString("base64"),
   Range: "bytes=0-127",
 };
-const media = await fetch(base + "/examples/story-narrated.mp4", { headers });
+const media = await fetch(base + "/examples/story-english.mp4", { headers });
 assert.equal(media.status, 206);
 assert.match(media.headers.get("content-range"), /^bytes 0-127\//);
 const browser = await chromium.launch({
@@ -32,7 +32,7 @@ try {
   await page.goto(base);
   await page
     .getByRole("button", {
-      name: "Přehrát hotovou ukázku s hlasem",
+      name: "Play the English example",
       exact: true,
     })
     .click();
@@ -58,10 +58,10 @@ try {
   assert.equal(caps.local, true);
   assert.equal(caps.blender, true);
   await page
-    .getByRole("button", { name: "Poslechnout mužský hlas", exact: true })
+    .getByRole("button", { name: "Preview male voice", exact: true })
     .click();
   await page
-    .getByLabel("Ukázka mužského vypravěče")
+    .getByLabel("Male narrator preview")
     .waitFor({ timeout: 30000 });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(

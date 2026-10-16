@@ -19,3 +19,9 @@ Pro automatické nasazení z tohoto pracovního prostředí je potřeba bezpečn
 - První verze používá tři připravené děje a jednoduché stylizované postavy. Úpravy komentáře mění titulky a vyprávění, nikoli choreografii. Další vzhled a funkce lze doplnit později.
 
 Při sestavení za firemní proxy můžeš předat důvěryhodný CA bundle jako volitelný BuildKit secret `build_ca`. Dockerfile ho použije pouze při instalaci balíčků; certifikát neukládá do výsledného obrazu. Ověřování TLS zůstává zapnuté. Při běžném sestavení na Renderu tento parametr není potřeba.
+
+## Anglická verze
+
+Hlavní studio, výchozí komentáře i nová přibalená ukázka jsou anglicky. Nová verze používá společné časové značky pro pohyb, titulky a komentář, takže při klíčové akci není místo hlasu vložená pauza. Referenční video se přidává veřejným odkazem na konkrétní YouTube/TikTok/Instagram video. Základní analýza barev a světla nepotřebuje placený klíč; volitelná AI analýza vyžaduje `OPENAI_API_KEY` nastavený bezpečně na Renderu. AI ani modely, které nejsou dostupné, se v rozhraní nevydávají za zapnuté.
+
+Přirozenější lokální anglický mužský hlas Ryan je volitelný: pro Docker build lze nastavit `INSTALL_STORY_NEURAL_VOICE=1`, čímž se stáhne a ověří oficiální model. Bez tohoto nastavení funguje základní syntetický mužský hlas. Onyx je další výslovně volitelná placená API varianta. U nové verze v již existující službě spusť **Manual Deploy → Deploy latest commit** ze stejné větve `codex/story-web-20261016`; její `autoDeploy` zůstává vypnuté.

@@ -13,7 +13,7 @@ async def owner_access(request, call_next):
     password = os.environ.get('STUDIO_PASSWORD', '')
     if not password:
         if os.environ.get('STUDIO_PUBLIC') == '1':
-            return JSONResponse({'detail': 'Nastavte STUDIO_PASSWORD na hostingu, aby byl web přístupný pouze majiteli.'}, status_code=503)
+            return JSONResponse({'detail': 'Set STUDIO_PASSWORD on the hosting service to protect your studio.'}, status_code=503)
         return await call_next(request)
     try:
         scheme, encoded = request.headers.get('authorization', '').split(' ', 1)
@@ -25,5 +25,5 @@ async def owner_access(request, call_next):
     except (ValueError, UnicodeError):
         valid = False
     if not valid:
-        return JSONResponse({'detail': 'Přihlaste se do svého Short Story Studia.'}, status_code=401, headers={'WWW-Authenticate': 'Basic realm="Short Story Studio", charset="UTF-8"'})
+        return JSONResponse({'detail': 'Sign in to your Short Story Studio.'}, status_code=401, headers={'WWW-Authenticate': 'Basic realm="Short Story Studio", charset="UTF-8"'})
     return await call_next(request)

@@ -1,65 +1,88 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Clapperboard,
   Download,
   Eye,
   Film,
+  Link,
   LoaderCircle,
   Mic2,
   Sparkles,
   Volume2,
+  X,
 } from "lucide-react";
 import "./story.css";
-
-const EXAMPLE_VIDEO = "/examples/story-narrated.mp4";
-const EXAMPLE_POSTER = "/examples/story-poster.png";
-
+const EXAMPLE_VIDEO = "/examples/story-english.mp4";
+const EXAMPLE_POSTER = "/examples/story-english-poster.png";
+const STORAGE = "short-story-project-v2-en";
 const STORIES = {
   parcel: {
-    name: "Ztracený balíček",
-    detail: "Malá pomoc, velká radost.",
+    name: "The lost parcel",
+    detail: "A small kindness changes an ordinary day.",
     lines: [
-      "Alex se procházel parkem. Netušil, že dnes někomu změní den.",
-      "Na cestě uviděl malý balíček. Jeho majitel už byl daleko.",
-      "Místo aby šel dál, zastavil se a balíček zvedl.",
-      "Patřil Samovi. Když mu ho Alex vrátil, oběma se rozzářil den.",
-      "Někdy stačí malá laskavost. Z obyčejného dne se stane příběh.",
+      "Alex was heading home through the park, expecting nothing out of the ordinary.",
+      "Then he spotted a forgotten parcel beside the path. Its owner could still be close by.",
+      "He picked it up carefully. Instead of walking away, he decided to help whoever had lost it.",
+      "Sam recognized the parcel. A grateful wave said everything.",
+      "They walked on together. A small act of kindness had turned strangers into friends.",
     ],
   },
   kindness: {
-    name: "Nečekaná laskavost",
-    detail: "Dárek pro někoho, kdo ho nečekal.",
+    name: "An unexpected gift",
+    detail: "A thoughtful gesture for someone feeling alone.",
     lines: [
-      "Alex šel parkem. Přemýšlel, jak někomu udělat radost.",
-      "U lavičky čekal Sam. Ten den se cítil trochu sám.",
-      "Alex zvedl malý dárek, který pro něj připravil.",
-      "Podal ho Samovi. Někdy potěší hlavně to, že si někdo vzpomene.",
-      "Teď už šli společně. Malé gesto dokáže změnit celý den.",
+      "Alex had brought a small surprise for his friend.",
+      "Sam was waiting by the bench, lost in thought.",
+      "Alex picked up the gift he had brought along.",
+      "He handed it to Sam, who waved his thanks.",
+      "They headed home together. Sometimes, being remembered is the greatest gift.",
     ],
   },
   reunion: {
-    name: "Znovu spolu",
-    detail: "Setkání dvou starých přátel.",
+    name: "Together again",
+    detail: "Two old friends cross paths after years apart.",
     lines: [
-      "Alex se vracel parkem, který znal už od dětství.",
-      "U staré lavičky zahlédl známou tvář. Mohl to být Sam?",
-      "Zastavil se. Svého kamaráda neviděl už několik let.",
-      "Sam ho poznal a zamával. Tolik si toho potřebovali říct.",
-      "Domů už pokračovali společně. Některá přátelství prostě nezmizí.",
+      "Alex was walking through a park he knew well.",
+      "By the old bench, he noticed a familiar face.",
+      "He stopped. It was Sam, a friend he had not seen in years.",
+      "Sam waved. Some friendships never really fade.",
+      "They walked on together, with years of stories to share.",
     ],
   },
 };
 type StoryKey = keyof typeof STORIES;
-type Provider = "local" | "piper";
+type Provider = "local" | "piper" | "openai";
+type Reference = {
+  id: string;
+  url: string;
+  mode: "basic" | "ai";
+  notes: string;
+  frames: string[];
+  style: {
+    coat_primary: string;
+    coat_secondary: string;
+    backdrop: string;
+    lighting: string;
+    framing: string;
+  };
+};
 type Job = {
   id: string;
   status: string;
   progress: number;
   message: string;
+  kind?: string;
   image?: string;
   video?: string;
-  duration?: number;
-  voice?: boolean;
+  reference?: Reference;
+};
+type Capabilities = {
+  local: boolean;
+  piper: boolean;
+  openai: boolean;
+  ai: boolean;
+  blender: boolean;
+  beats: { start: number; end: number; speech_start: number }[];
 };
 type Saved = {
   story?: StoryKey;
@@ -70,6 +93,9 @@ type Saved = {
   job?: Job;
   image?: string;
   video?: string;
+  reference?: Reference;
+  referenceUrl?: string;
+  referenceMode?: "basic" | "ai";
 };
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch("/api/story" + path, {
@@ -83,30 +109,29 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
     throw new Error(
       typeof result.detail === "string"
         ? result.detail
-        : "Požadavek se nepodařil.",
+        : Array.isArray(result.detail)
+          ? result.detail.map((d: { msg: string }) => d.msg).join(" ")
+          : "The request could not be completed.",
     );
   return result;
 }
 function load(): Saved {
   try {
-    const saved = JSON.parse(
-      localStorage.getItem("short-story-project") || "{}",
-    );
+    const s = JSON.parse(localStorage.getItem(STORAGE) || "{}");
     if (
-      !Object.hasOwn(STORIES, saved.story) ||
-      ![35, 40, 45].includes(saved.duration) ||
-      !Array.isArray(saved.captions) ||
-      saved.captions.length !== 5 ||
-      saved.captions.some(
-        (line: unknown) => typeof line !== "string" || line.length > 160,
-      )
+      !Object.hasOwn(STORIES, s.story) ||
+      ![35, 40, 45].includes(s.duration) ||
+      !Array.isArray(s.captions) ||
+      s.captions.length !== 5 ||
+      s.captions.some((x: unknown) => typeof x !== "string" || x.length > 160)
     )
       return {};
-    return saved;
+    return s;
   } catch {
     return {};
   }
 }
+const stamp = (seconds: number) => `${seconds.toFixed(1).replace(/\.0$/, "")}s`;
 export default function StoryStudio() {
   const [saved] = useState(load);
   const [story, setStory] = useState<StoryKey>(saved.story || "parcel");
@@ -114,14 +139,15 @@ export default function StoryStudio() {
   const [captions, setCaptions] = useState(
     saved.captions || STORIES.parcel.lines,
   );
-  const [provider, setProvider] = useState<Provider>(
-    saved.provider === "piper" ? "piper" : "local",
-  );
+  const [provider, setProvider] = useState<Provider>(saved.provider || "local");
   const [voice, setVoice] = useState(saved.voice ?? true);
-  const [caps, setCaps] = useState({
+  const [caps, setCaps] = useState<Capabilities>({
     local: false,
     piper: false,
+    openai: false,
+    ai: false,
     blender: false,
+    beats: [],
   });
   const [job, setJob] = useState<Job | null>(saved.job || null);
   const [image, setImage] = useState(saved.image || "");
@@ -131,17 +157,32 @@ export default function StoryStudio() {
   const [previewing, setPreviewing] = useState(false);
   const [audio, setAudio] = useState("");
   const [stale, setStale] = useState(false);
-  const audioElement = useRef<HTMLAudioElement>(null);
+  const [reference, setReference] = useState<Reference | null>(
+    saved.reference || null,
+  );
+  const [referenceUrl, setReferenceUrl] = useState(saved.referenceUrl || "");
+  const [referenceMode, setReferenceMode] = useState<"basic" | "ai">(
+    saved.referenceMode || "basic",
+  );
   const busy = sending || (!!job && !["done", "failed"].includes(job.status));
   useEffect(() => {
-    request<typeof caps>("/capabilities")
+    request<Capabilities>("/capabilities")
       .then(setCaps)
-      .catch(() => setError("Server není dostupný."));
+      .catch(() => setError("The server is unavailable."));
+    if (saved.reference)
+      request<Reference>("/references/" + saved.reference.id)
+        .then(setReference)
+        .catch(() => {
+          setReference(null);
+          setError(
+            "The saved reference is no longer on the server. Import it again to use its style.",
+          );
+        });
   }, []);
   useEffect(() => {
     try {
       localStorage.setItem(
-        "short-story-project",
+        STORAGE,
         JSON.stringify({
           story,
           duration,
@@ -151,10 +192,25 @@ export default function StoryStudio() {
           job,
           image,
           video,
+          reference,
+          referenceUrl,
+          referenceMode,
         }),
       );
     } catch {}
-  }, [story, duration, captions, provider, voice, job, image, video]);
+  }, [
+    story,
+    duration,
+    captions,
+    provider,
+    voice,
+    job,
+    image,
+    video,
+    reference,
+    referenceUrl,
+    referenceMode,
+  ]);
   useEffect(() => {
     if (!job || ["done", "failed"].includes(job.status)) return;
     let disposed = false,
@@ -167,12 +223,17 @@ export default function StoryStudio() {
         if (disposed) return;
         setJob(next);
         if (next.status === "done") {
-          if (next.image) {
-            setImage(next.image);
-            setVideo("");
+          if (next.reference) {
+            setReference(next.reference);
+            setStale(true);
+          } else {
+            if (next.image) {
+              setImage(next.image);
+              setVideo("");
+            }
+            if (next.video) setVideo(next.video);
+            setStale(false);
           }
-          if (next.video) setVideo(next.video);
-          setStale(false);
         }
         if (next.status === "failed") setError(next.message);
       } catch (e) {
@@ -202,6 +263,7 @@ export default function StoryStudio() {
           provider,
           voice,
           preview,
+          reference_id: reference?.id || null,
         }),
       );
     } catch (e) {
@@ -226,12 +288,23 @@ export default function StoryStudio() {
       setPreviewing(false);
     }
   }
-  function playExample() {
-    setVideo(EXAMPLE_VIDEO);
-    setImage(EXAMPLE_POSTER);
-    setStale(false);
+  async function importReference() {
+    if (busy) return;
+    setSending(true);
+    setError("");
+    try {
+      setJob(
+        await request<Job>("/references", {
+          url: referenceUrl,
+          mode: referenceMode,
+        }),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
   }
-
   function choose(key: StoryKey) {
     setStory(key);
     setCaptions([...STORIES[key].lines]);
@@ -245,31 +318,32 @@ export default function StoryStudio() {
           <Clapperboard />
           short<span>story</span>
         </a>
-        <span>3D PŘÍBĚHY S VYPRAVĚČEM</span>
+        <span>ENGLISH STORY STUDIO</span>
       </header>
       <main className="story-grid">
         <section>
           <div className="story-eyebrow">
-            <Sparkles size={14} /> MALÝ PŘÍBĚH. VLASTNÍ HLAS.
+            <Sparkles size={14} />A LITTLE STORY. ROOM TO BREATHE.
           </div>
           <h1>
-            Příběhy, které
+            Stories that
             <br />
-            <em>ožijí a promluví.</em>
+            <em>move and speak.</em>
           </h1>
           <p className="story-lead">
-            Dva lidé, krátký příběh a mužský hlas, který tě provede dějem. Tvůj
-            animovaný Short dlouhý 35–45 sekund.
+            Two people. One meaningful moment. Create a 35–45 second animated
+            Short with an English male narrator and pauses that follow the
+            action.
           </p>
           <div className="story-tags">
-            <span>Skutečné 3D</span>
-            <span>Český vypravěč</span>
+            <span>Actual 3D</span>
+            <span>English narration</span>
             <span>9:16</span>
-            <span>Bez API klíče</span>
+            <span>Voice preview</span>
           </div>
           <div className="story-panel">
             <h2>
-              01 <span>Vyber příběh</span>
+              01 <span>Choose a story</span>
             </h2>
             <div className="story-options">
               {Object.entries(STORIES).map(([key, item]) => (
@@ -285,13 +359,122 @@ export default function StoryStudio() {
               ))}
             </div>
             <p className="story-note">
-              Tři připravené děje se stejnými postavami. Úprava komentáře mění
-              hlas a titulky, ne choreografii animace.
+              These starting stories use fixed choreography. Editing narration
+              changes the voice and captions, not the character actions.
             </p>
           </div>
           <div className="story-panel">
             <h2>
-              02 <span>Mužský vypravěč</span>
+              02 <span>Reference video</span>
+            </h2>
+            <p className="story-note">
+              Share a public YouTube, TikTok or Instagram video to guide the
+              approximate look. The next preview and export will use its
+              supported visual settings.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void importReference();
+              }}
+            >
+              <label className="story-select">
+                VIDEO LINK
+                <input
+                  aria-label="Reference video URL"
+                  type="url"
+                  placeholder="https://www.youtube.com/shorts/…"
+                  value={referenceUrl}
+                  disabled={busy}
+                  required
+                  onChange={(e) => setReferenceUrl(e.target.value)}
+                />
+              </label>
+              <label className="story-select">
+                ANALYSIS
+                <select
+                  aria-label="Reference analysis"
+                  value={referenceMode}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setReferenceMode(e.target.value as "basic" | "ai")
+                  }
+                >
+                  <option value="basic">
+                    Basic visual analysis · no paid API
+                  </option>
+                  <option value="ai" disabled={!caps.ai}>
+                    AI visual analysis{!caps.ai ? " · API key required" : ""}
+                  </option>
+                </select>
+              </label>
+              <button
+                className="story-secondary"
+                type="submit"
+                disabled={busy || !referenceUrl.trim()}
+              >
+                <Link size={16} />
+                Import and analyze reference
+              </button>
+            </form>
+            <p className="story-note">
+              Basic analysis samples real frames for colors and lighting.
+              Optional AI analysis also estimates camera distance. Neither mode
+              copies the story, exact models, motion or narrator. AI mode uses
+              the configured OpenAI account and may incur usage charges. Public
+              download restrictions still apply. Up to 120 seconds / 60 MB.
+            </p>
+            {reference && (
+              <div className="story-reference">
+                <div className="story-reference-heading">
+                  <strong>
+                    {reference.mode === "ai"
+                      ? "AI-analyzed reference"
+                      : "Basic visual reference"}{" "}
+                    · applied
+                  </strong>
+                  <button
+                    aria-label="Remove reference"
+                    disabled={busy}
+                    onClick={() => {
+                      setReference(null);
+                      setStale(true);
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="story-reference-frames">
+                  {reference.frames.map((url, i) => (
+                    <img
+                      key={url}
+                      src={url}
+                      alt={`Actual reference frame ${i + 1}`}
+                    />
+                  ))}
+                </div>
+                <div className="story-reference-style">
+                  <span
+                    style={{ background: "#" + reference.style.coat_primary }}
+                  />
+                  <span
+                    style={{ background: "#" + reference.style.coat_secondary }}
+                  />
+                  <small>
+                    {reference.style.lighting} light · {reference.style.framing}{" "}
+                    framing
+                  </small>
+                </div>
+                <p>{reference.notes}</p>
+                <a href={reference.url} target="_blank" rel="noreferrer">
+                  Open original reference
+                </a>
+              </div>
+            )}
+          </div>
+          <div className="story-panel">
+            <h2>
+              03 <span>English male narrator</span>
             </h2>
             <label className="story-voice-toggle">
               <input
@@ -304,12 +487,12 @@ export default function StoryStudio() {
                 }}
               />
               <Mic2 size={18} />
-              Komentář, který vysvětluje děj
+              Narrate the story
             </label>
             <label className="story-select">
-              HLAS
+              VOICE
               <select
-                aria-label="Mužský hlas příběhu"
+                aria-label="Narrator voice"
                 value={provider}
                 disabled={busy || !voice}
                 onChange={(e) => {
@@ -319,18 +502,24 @@ export default function StoryStudio() {
                 }}
               >
                 <option value="local" disabled={!caps.local}>
-                  Český mužský · základní syntetický
+                  English male · basic synthetic voice
                 </option>
                 <option value="piper" disabled={!caps.piper}>
-                  Jirka · přirozenější lokální hlas
-                  {!caps.piper ? " (model není stažený)" : ""}
+                  Ryan · local neural voice
+                  {!caps.piper ? " (model not installed)" : ""}
+                </option>
+                <option value="openai" disabled={!caps.openai}>
+                  Onyx · natural male voice
+                  {!caps.openai ? " (API key required)" : ""}
                 </option>
               </select>
             </label>
             <p className="story-note">
               {provider === "local"
-                ? "Základní hlas funguje zdarma a offline. Zní roboticky; přehraj si ukázku před exportem."
-                : "Český mužský hlas Piper / Jirka. Po stažení modelu funguje offline."}
+                ? "The basic voice works offline and sounds robotic. Preview it before exporting. Natural voices require their configured model or provider."
+                : provider === "piper"
+                  ? "Ryan is an English male neural voice that runs offline after its model is installed."
+                  : "Onyx uses the configured OpenAI API and may incur provider charges."}
             </p>
             <button
               className="story-secondary"
@@ -342,25 +531,24 @@ export default function StoryStudio() {
               ) : (
                 <Volume2 size={16} />
               )}
-              Poslechnout mužský hlas
+              Preview male voice
             </button>
             {audio && (
               <div className="story-audio">
                 <audio
-                  ref={audioElement}
                   controls
                   src={audio}
-                  aria-label="Ukázka mužského vypravěče"
+                  aria-label="Male narrator preview"
                 />
-                <a href={audio} download="muzsky-hlas.wav">
-                  Stáhnout hlasovou ukázku
+                <a href={audio} download="male-narrator.wav">
+                  Download voice preview
                 </a>
               </div>
             )}
           </div>
           <div className="story-panel">
             <h2>
-              03 <span>Délka a komentář scén</span>
+              04 <span>Duration and scene narration</span>
             </h2>
             <div className="story-length">
               {[35, 40, 45].map((n) => (
@@ -374,40 +562,45 @@ export default function StoryStudio() {
                     setStale(true);
                   }}
                 >
-                  {n} sekund
+                  {n} seconds
                 </button>
               ))}
             </div>
             <div className="story-beats">
-              {captions.map((text, i) => (
-                <label key={i}>
-                  <span>
-                    {String(i + 1).padStart(2, "0")}
-                    <small>
-                      {(i * duration) / 5}–{((i + 1) * duration) / 5} s
-                    </small>
-                  </span>
-                  <textarea
-                    aria-label={`Komentář scény ${i + 1}`}
-                    maxLength={160}
-                    value={text}
-                    disabled={busy}
-                    onChange={(e) => {
-                      setCaptions((old) =>
-                        old.map((v, index) =>
-                          index === i ? e.target.value : v,
-                        ),
-                      );
-                      setStale(true);
-                      setAudio("");
-                    }}
-                  />
-                </label>
-              ))}
+              {captions.map((text, i) => {
+                const cue = caps.beats[i];
+                return (
+                  <label key={i}>
+                    <span>
+                      {String(i + 1).padStart(2, "0")}
+                      <small>
+                        {cue
+                          ? `${stamp(cue.start * duration)}–${stamp(cue.end * duration)}`
+                          : `Scene ${i + 1}`}
+                      </small>
+                    </span>
+                    <textarea
+                      aria-label={`Scene ${i + 1} narration`}
+                      maxLength={160}
+                      value={text}
+                      disabled={busy}
+                      onChange={(e) => {
+                        setCaptions((old) =>
+                          old.map((v, j) => (j === i ? e.target.value : v)),
+                        );
+                        setStale(true);
+                        setAudio("");
+                      }}
+                    />
+                  </label>
+                );
+              })}
             </div>
             <p className="story-note">
-              Vypravěč přečte tyto věty ve správných scénách. Dlouhé věty zkrať;
-              slova na konci neusekáváme.
+              Narration follows arrival, discovery, the key action, the response
+              and the ending. Short pauses separate complete thoughts; the key
+              action is spoken about as it happens. Overlong lines are rejected
+              rather than cut off or rushed.
             </p>
           </div>
           <div className="story-actions">
@@ -417,7 +610,7 @@ export default function StoryStudio() {
               onClick={() => generate(true)}
             >
               <Eye size={17} />
-              Ukázat vzhled
+              Preview the scene
             </button>
             <button
               className="story-primary"
@@ -429,13 +622,14 @@ export default function StoryStudio() {
               ) : (
                 <Film size={17} />
               )}
-              Vygenerovat Short{voice ? " s hlasem" : ""}
+              Generate Short{voice ? " with narration" : ""}
             </button>
           </div>
           <p className="story-note">
-            Skutečný lokální render trvá několik minut. Jednoduché stylizované
-            3D, MP4 360 × 640, 12 snímků/s. Zatím nejde o polorealistický film
-            ani generování libovolného děje z textu.
+            Rendering takes several minutes and can be slower on free hosting.
+            Output: MP4, 360 × 640, 12 fps. This version uses simple stylized 3D
+            and prepared stories. Download finished videos: hosting restarts may
+            remove them.
           </p>
           {error && (
             <div role="alert" className="story-error">
@@ -449,8 +643,8 @@ export default function StoryStudio() {
                 <>
                   <progress max="100" value={job.progress} />
                   <span>
-                    Stránku můžeš obnovit; uloženou úlohu znovu načteme. Server
-                    musí během renderu běžet.
+                    You can refresh the page to reconnect to a saved job. The
+                    server must keep running.
                   </span>
                 </>
               )}
@@ -459,16 +653,20 @@ export default function StoryStudio() {
         </section>
         <aside className="story-preview">
           <div className="story-preview-label">
-            <span>Náhled tvého příběhu</span>
+            <span>Your story preview</span>
             <span>9:16</span>
           </div>
           <button
             className="story-secondary story-example-button"
             disabled={busy}
-            onClick={playExample}
+            onClick={() => {
+              setVideo(EXAMPLE_VIDEO);
+              setImage(EXAMPLE_POSTER);
+              setStale(false);
+            }}
           >
             <Film size={16} />
-            Přehrát hotovou ukázku s hlasem
+            Play the English example
           </button>
           <div className="story-phone">
             {video ? (
@@ -481,23 +679,23 @@ export default function StoryStudio() {
                 poster={image || undefined}
               />
             ) : image ? (
-              <img src={image} alt="Skutečný 3D náhled lidí v parku" />
+              <img src={image} alt="Actual 3D scene preview" />
             ) : (
               <div className="story-empty">
                 <div className="story-preview-icon">
                   <Clapperboard size={44} />
                 </div>
-                <h3>Podívej se. Poslechni si.</h3>
+                <h3>Watch. Listen. Create.</h3>
                 <p>
-                  Nejdřív si poslechni hlas a vytvoř rychlý obrázkový náhled.
-                  Potom vygeneruj celý příběh.
+                  Play the finished example, preview the voice or render a frame
+                  before making your own Short.
                 </p>
                 <button
                   disabled={busy || !caps.blender}
                   onClick={() => generate(true)}
                 >
                   <Eye size={16} />
-                  Vytvořit náhled
+                  Create a scene preview
                 </button>
               </div>
             )}
@@ -506,25 +704,25 @@ export default function StoryStudio() {
             <strong>
               {video
                 ? video === EXAMPLE_VIDEO
-                  ? "Ukázkový příběh · 35 sekund · mužský hlas"
-                  : "Hotový MP4 příběh · přehraj se zvukem"
+                  ? "English example · 35 seconds · male narrator"
+                  : "Your MP4 story · play with sound"
                 : image
-                  ? "Skutečně vyrenderovaný snímek"
-                  : "Tvůj příběh začíná tady"}
+                  ? "An actual rendered frame"
+                  : "Your story starts here"}
             </strong>
             <p>
               {stale && (image || video)
-                ? "Nastavení se změnilo. Vytvoř nový náhled nebo film."
-                : "Náhled i film používají stejnou scénu a postavy."}
+                ? "Settings changed. Render a new preview or film to see them."
+                : "The preview and film share the same characters and visual settings."}
             </p>
             {video && (
               <a
                 className="story-primary"
                 href={video}
-                download="pribeh-s-vypravecem.mp4"
+                download="english-story.mp4"
               >
                 <Download size={16} />
-                Stáhnout MP4
+                Download MP4
               </a>
             )}
           </div>

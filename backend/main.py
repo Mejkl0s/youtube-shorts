@@ -691,6 +691,8 @@ def download(job_id: str):
 
 from .story import router as story_router
 app.include_router(story_router)
+from .story_reference import router as story_reference_router
+app.include_router(story_reference_router)
 
 # Production build and API are served together. During development Vite proxies API.
 from .assistant import router as assistant_router

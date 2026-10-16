@@ -23,7 +23,12 @@ RUN --mount=type=secret,id=build_ca \
     python -m venv .venv; \
     .venv/bin/python -m pip install -r requirements.txt
 COPY backend ./backend
-COPY scripts/start.sh scripts/render_story.py ./scripts/
+COPY scripts/start.sh scripts/render_story.py scripts/download_models.py ./scripts/
+ARG INSTALL_STORY_NEURAL_VOICE=0
+RUN --mount=type=secret,id=build_ca \
+    set -eu; \
+    if [ -f /run/secrets/build_ca ]; then export SSL_CERT_FILE=/run/secrets/build_ca; fi; \
+    if [ "$INSTALL_STORY_NEURAL_VOICE" = "1" ]; then .venv/bin/python scripts/download_models.py --language en-male; fi
 COPY --from=frontend /build/dist ./dist
 RUN useradd --create-home --uid 10001 studio && chown -R studio:studio /app
 USER studio

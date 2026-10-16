@@ -9,7 +9,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:browser": "node scripts/browser-test.mjs",
     "test:story": "node scripts/story-browser-test.mjs",
-    "test:web": "node scripts/web-smoke-test.mjs"
+    "test:web": "node scripts/web-smoke-test.mjs",
+    "test:reference": ".venv/bin/python scripts/prepare_reference_fixture.py && node scripts/reference-browser-test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

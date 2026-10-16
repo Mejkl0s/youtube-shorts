@@ -358,8 +358,7 @@ function Integration({name,code,ready,text}:{name:string;code:string;ready:boole
 function VolumeSlider({label,value,set,max=1}:{label:string;value:number;set:(v:number)=>void;max?:number}) { return <label className="volume-slider"><span>{label}<strong>{Math.round(value*100)}%</strong></span><input type="range" min={0} max={max} step={0.01} value={value} onChange={e=>set(Number(e.target.value))}/></label>; }
 
 function Workspace() {
-  const [mode,setMode] = useState<'story'|'ranking'>(() => {try {return localStorage.getItem('short-studio-mode')==='ranking'?'ranking':'story';} catch {return 'story';}});
-  useEffect(() => {try {localStorage.setItem('short-studio-mode',mode);} catch {}}, [mode]);
-  return <><nav className="studio-modes" aria-label="Typ studia"><button className={mode==='story'?'active':''} onClick={()=>setMode('story')}>3D příběhy</button><button className={mode==='ranking'?'active':''} onClick={()=>setMode('ranking')}>Ranking editor</button></nav><div hidden={mode!=='story'}><StoryStudio/></div><div hidden={mode!=='ranking'}><App/></div></>;
+  // Keep earlier editing tools accessible without showing a Czech-language mode in the English studio.
+  return new URLSearchParams(window.location.search).get('workspace') === 'ranking' ? <App/> : <StoryStudio/>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><Workspace/></React.StrictMode>);

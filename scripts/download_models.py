@@ -10,6 +10,15 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 MODELS = Path(os.environ.get('PIPER_MODEL_DIR', str(ROOT / '.runtime/models')))
 MANIFEST = {
+    'en-male': {
+        'name': 'en_US-ryan-medium',
+        'path': 'en/en_US/ryan/medium/',
+        'files': {
+            '.onnx': (63201294, '8f06d3aff8ded5a7f13f907e6bec32ac'),
+            '.onnx.json': (7008, '6222797bca87b2a799ef0ed2d2f66adf'),
+            'MODEL_CARD': (306, '79d9200481a9dcabfa1803cb9e31c28a'),
+        },
+    },
     'en': {
         'name': 'en_US-lessac-medium',
         'path': 'en/en_US/lessac/medium/',
@@ -62,7 +71,7 @@ def download(language):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--language', choices=['en', 'cs', 'all'], default='en')
+    parser.add_argument('--language', choices=['en', 'cs', 'en-male', 'all'], default='en')
     args = parser.parse_args()
     try:
         for language in MANIFEST if args.language == 'all' else [args.language]:

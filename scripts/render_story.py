@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 from mathutils import Vector
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from backend.storyboard import ACTIONS
+
 cfg = json.loads(Path(sys.argv[sys.argv.index('--') + 1]).read_text())
 out = Path(cfg['output'])
 bpy.ops.object.select_all(action='SELECT')
@@ -23,8 +26,13 @@ scene.render.resolution_y = 640
 scene.render.resolution_percentage = 100
 scene.render.fps = 12
 scene.world.use_nodes = True
-scene.world.node_tree.nodes['Background'].inputs['Color'].default_value = (.58,.72,.86,1)
-scene.world.node_tree.nodes['Background'].inputs['Strength'].default_value = .7
+style = cfg.get('style', {})
+def rgb(name, default):
+    value = style.get(name, default)
+    return tuple(int(value[i:i+2], 16)/255 for i in (0,2,4))
+scene.world.node_tree.nodes['Background'].inputs['Color'].default_value = (*rgb('backdrop', '94B8DB'),1)
+lighting = style.get('lighting', 'soft')
+scene.world.node_tree.nodes['Background'].inputs['Strength'].default_value = {'soft':.7, 'bright':.95, 'moody':.3}[lighting]
 
 
 def material(name, color):
@@ -36,8 +44,9 @@ def material(name, color):
 skin = material('warm skin', (.64,.38,.24))
 skin2 = material('light skin', (.84,.60,.43))
 hair = material('hair', (.045,.024,.015))
-blue = material('jacket', (.06,.23,.40))
-green = material('coat', (.24,.40,.25))
+blue = material('jacket', rgb('coat_primary', '173B66'))
+green = material('coat', rgb('coat_secondary', '496D40'))
+foliage = material('foliage', (.24,.40,.25))
 pants = material('trousers', (.045,.065,.09))
 white = material('eyes', (.9,.9,.86))
 black = material('pupils', (.015,.018,.02))
@@ -112,7 +121,7 @@ cube('park path', (0,0,-.1), (200,200,.2), material('stone', (.61,.59,.53)))
 cube('grass', (0,3,-.08), (25,4,.15), material('grass', (.24,.34,.18)))
 for x in [-3,3]:
     cube('trunk', (x,2,1.1), (.22,.22,2.2), wood)
-    ball('canopy', (x,2,2.8), (.85,.8,1.1), green)
+    ball('canopy', (x,2,2.8), (.85,.8,1.1), foliage)
 cube('bench seat', (1.4,1,.55), (1.7,.55,.13), wood)
 cube('bench back', (1.4,1.25,.93), (1.7,.12,.65), wood)
 for x in [.8,2]:
@@ -123,33 +132,34 @@ n = cfg['duration'] * 12
 scene.frame_end = n
 for frame in range(1,n+1):
     t = (frame-1)/(n-1)
-    ax = -1.8 + min(t/.38,1)*1.4
-    if t > .8:
-        ax = -.4+(t-.8)*4
+    ax = -1.8 + min(t/ACTIONS['notice_stop'],1)*1.4
+    if t > ACTIONS['depart']:
+        ax = -.4+(t-ACTIONS['depart'])*4
     a.location.x = ax
     a.keyframe_insert('location', frame=frame)
-    b.location.x = 1.05 if t < .8 else 1.05+(t-.8)*3
+    b.location.x = 1.05 if t < ACTIONS['depart'] else 1.05+(t-ACTIONS['depart'])*3
     b.keyframe_insert('location', frame=frame)
-    walking = t < .38 or t > .8
+    walking = t < ACTIONS['notice_stop'] or t > ACTIONS['depart']
     for i, leg in enumerate(legs):
         leg.rotation_euler.x = math.sin(t*math.pi*24+i*math.pi)*.23 if walking else 0
         leg.keyframe_insert('rotation_euler', frame=frame)
     for i, arm in enumerate(arms):
-        arm.rotation_euler.x = math.sin(t*math.pi*24+i*math.pi)*.2 if walking else (-1.0 if .4<t<.65 else 0)
+        arm.rotation_euler.x = math.sin(t*math.pi*24+i*math.pi)*.2 if walking else (-1.0 if .4<t<ACTIONS['handoff'] else 0)
         arm.keyframe_insert('rotation_euler', frame=frame)
     for arm in arms2:
-        arm.rotation_euler.x = -.8 if .65<t<.8 else 0
+        arm.rotation_euler.x = -.8 if ACTIONS['handoff']<t<ACTIONS['depart'] else 0
         arm.keyframe_insert('rotation_euler', frame=frame)
-    parcel.location = (b.location.x,-.3,1.1) if t>.65 else ((ax+.25,-.3,1.1) if t>.45 else (.2,-.4,.18))
+    parcel.location = (b.location.x,-.3,1.1) if t>ACTIONS['handoff'] else ((ax+.25,-.3,1.1) if t>ACTIONS['pickup'] else (.2,-.4,.18))
     parcel.keyframe_insert('location', frame=frame)
 for obj in [a,b,parcel,*legs,*arms,*arms2]:
     for curve in obj.animation_data.action.fcurves:
         for key in curve.keyframe_points:
             key.interpolation = 'LINEAR'
 bpy.ops.object.light_add(type='AREA', location=(-3,-4,7))
-bpy.context.object.data.energy = 900
+bpy.context.object.data.energy = {'soft':900, 'bright':1400, 'moody':450}[lighting]
 bpy.context.object.data.size = 5
-bpy.ops.object.camera_add(location=(3.2,-7,3.0))
+framing = style.get('framing', 'medium')
+bpy.ops.object.camera_add(location={'wide':(3.8,-8,3.4), 'medium':(3.2,-7,3.0), 'close':(2.4,-6,2.5)}[framing])
 camera = bpy.context.object
 camera.rotation_euler = (Vector((0,0,1.15))-camera.location).to_track_quat('-Z','Y').to_euler()
 camera.data.lens = 48

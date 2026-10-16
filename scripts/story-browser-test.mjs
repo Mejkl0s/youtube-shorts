@@ -13,16 +13,16 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:8000");
   await page
-    .getByRole("heading", { name: "Příběhy, které ožijí a promluví." })
+    .getByRole("heading", { name: "Stories that move and speak." })
     .waitFor();
   const checkbox = page.getByRole("checkbox", {
-    name: "Komentář, který vysvětluje děj",
+    name: "Narrate the story",
   });
   assert.equal(await checkbox.isChecked(), true);
   await page
-    .getByRole("button", { name: "Poslechnout mužský hlas", exact: true })
+    .getByRole("button", { name: "Preview male voice", exact: true })
     .click();
-  const audio = page.getByLabel("Ukázka mužského vypravěče");
+  const audio = page.getByLabel("Male narrator preview");
   await audio.waitFor({ timeout: 60000 });
   await audio.evaluate(
     (el) =>
@@ -39,12 +39,12 @@ try {
   await page.waitForTimeout(600);
   assert.ok((await audio.evaluate((el) => el.currentTime)) > 0);
   await audio.evaluate((el) => el.pause());
-  await page.getByRole("button", { name: "35 sekund", exact: true }).click();
+  await page.getByRole("button", { name: "35 seconds", exact: true }).click();
   await page
-    .getByRole("button", { name: "Ukázat vzhled", exact: true })
+    .getByRole("button", { name: "Preview the scene", exact: true })
     .click();
   await page
-    .getByAltText("Skutečný 3D náhled lidí v parku")
+    .getByAltText("Actual 3D scene preview")
     .waitFor({ timeout: 90000 });
   assert.equal(
     await page.locator(".story-phone img").evaluate((el) => el.naturalWidth),
@@ -56,17 +56,17 @@ try {
     fullPage: true,
   });
   await page
-    .getByRole("button", { name: "Vygenerovat Short s hlasem", exact: true })
+    .getByRole("button", { name: "Generate Short with narration", exact: true })
     .click();
   await page.waitForFunction(() =>
     ["queued", "running"].includes(
-      JSON.parse(localStorage.getItem("short-story-project") || "{}").job
+      JSON.parse(localStorage.getItem("short-story-project-v2-en") || "{}").job
         ?.status,
     ),
   );
   await page.reload(); // Running jobs and inputs survive browser refresh.
   await page
-    .getByRole("link", { name: "Stáhnout MP4", exact: true })
+    .getByRole("link", { name: "Download MP4", exact: true })
     .waitFor({ timeout: 1800000 });
   const video = page.locator(".story-phone video");
   await video.evaluate(
@@ -87,7 +87,7 @@ try {
   const result = await video.getAttribute("src");
   console.log("Generated example: " + result);
   await page.reload();
-  await page.getByRole("link", { name: "Stáhnout MP4", exact: true }).waitFor();
+  await page.getByRole("link", { name: "Download MP4", exact: true }).waitFor();
   assert.equal(
     await page.locator(".story-phone video").getAttribute("src"),
     result,
@@ -104,7 +104,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "Passed: real Czech male voice preview/playback, Blender preview, 35-second narrated MP4, refresh during/after render, download and mobile layout.",
+    "Passed: real English male voice preview/playback, Blender preview, 35-second narrated MP4, refresh during/after render, download and mobile layout.",
   );
 } finally {
   await browser.close();

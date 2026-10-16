@@ -1,4 +1,4 @@
-"""Explicit Czech male speech providers; no silent voice substitutions."""
+"""Explicit English male speech providers; no silent voice substitutions."""
 import os
 import shutil
 import subprocess
@@ -25,30 +25,39 @@ def local_command():
 
 def capabilities():
     command, _ = local_command()
-    return {'local': bool(command), 'piper': all((MODELS / ('cs_CZ-jirka-medium' + suffix)).is_file() for suffix in ['.onnx', '.onnx.json']), 'blender': bool(shutil.which('blender'))}
+    return {'local': bool(command), 'piper': all((MODELS / ('en_US-ryan-medium' + suffix)).is_file() for suffix in ['.onnx', '.onnx.json']), 'blender': bool(shutil.which('blender')), 'ai': bool(os.environ.get('OPENAI_API_KEY')), 'openai': bool(os.environ.get('OPENAI_API_KEY'))}
 
 
 def synthesize(text: str, provider: str, output: Path):
     if not text.strip():
-        raise ValueError('Napiš text, který má vypravěč přečíst.')
+        raise ValueError('Enter the narration text.')
     if provider == 'local':
         command, env = local_command()
         if not command:
-            raise ValueError('Základní český hlas není nainstalovaný. Spusť scripts/install_speech.sh.')
-        result = subprocess.run([*command, '-v', 'cs+m3', '-s', '145', '-p', '40', '-w', str(output), '--stdin'], input=text.encode(), capture_output=True, env=env, timeout=30)
+            raise ValueError('The basic English male voice is not installed. Run scripts/install_speech.sh.')
+        result = subprocess.run([*command, '-v', 'en-us+m3', '-s', '150', '-p', '40', '-w', str(output), '--stdin'], input=text.encode(), capture_output=True, env=env, timeout=30)
         if result.returncode:
-            raise RuntimeError('Lokální hlas se nepodařilo vytvořit: ' + result.stderr.decode(errors='replace')[-500:])
+            raise RuntimeError('Local speech generation failed: ' + result.stderr.decode(errors='replace')[-500:])
     elif provider == 'piper':
         if not capabilities()['piper']:
-            raise ValueError('Hlas Jirka není stažený. Nejdřív povol Hugging Face a spusť scripts/download_models.py --language cs.')
+            raise ValueError('Ryan is not installed. Allow the model download and run scripts/download_models.py --language en-male.')
         from piper import PiperVoice
-        voice = PiperVoice.load(str(MODELS / 'cs_CZ-jirka-medium.onnx'))
+        voice = PiperVoice.load(str(MODELS / 'en_US-ryan-medium.onnx'))
         with wave.open(str(output), 'wb') as audio:
             voice.synthesize_wav(text, audio)
+    elif provider == 'openai':
+        if not os.environ.get('OPENAI_API_KEY'):
+            raise ValueError('OpenAI narration requires a configured API key.')
+        from .main import synthesize as premium_speech
+        from .style import VoiceSettings
+        try:
+            premium_speech(text, 'en', output, VoiceSettings(provider='openai', voice='onyx', speed=1, delivery='Speak natural, clear English in a warm male storytelling voice. Follow the punctuation. Keep sentence endings intact.'))
+        except Exception as error:
+            raise ValueError('The natural voice provider is unavailable. Check the API key, network access and provider credit.') from error
     else:
-        raise ValueError('Neznámý hlas.')
+        raise ValueError('Unknown voice.')
     with wave.open(str(output), 'rb') as audio:
         duration = audio.getnframes() / audio.getframerate()
         if duration <= 0:
-            raise ValueError('Hlas neobsahuje zvuk.')
+            raise ValueError('The generated voice contains no audio.')
     return duration
