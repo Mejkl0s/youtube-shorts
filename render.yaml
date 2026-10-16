@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: rank-studio
+    name: short-story-studio
     runtime: docker
     plan: free
     healthCheckPath: /api/health
@@ -11,4 +11,4 @@ services:
       - key: STUDIO_USERNAME
         value: owner
       - key: STUDIO_PASSWORD
-        sync: false
+        generateValue: true

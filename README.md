@@ -1,10 +1,12 @@
-# Rank Studio
+# Short Story Studio
+
+Webové studio pro krátké 3D příběhy s mužským českým vypravěčem. Hotovou ukázku lze přehrát přímo ve webu. Nasazení na skutečnou webovou adresu popisuje [DEPLOY.md](DEPLOY.md). Původní ranking editor je dostupný jako druhý režim.
 
 A personal AI director, editor and MP4 renderer for ranking Shorts: exactly five clips, #5 → #1, portrait 9:16, sound effects and a short English neural voiceover per clip (1–7 words).
 
 ## Run
 
-Requires Node 20.19+ (Node 24 tested), Python 3.12, FFmpeg with libx264/drawtext, ffprobe and DejaVu Sans Bold. Python and Node dependencies are locked in `requirements.txt` and `package-lock.json`.
+Requires Node 20.19+ (Node 24 tested), Python 3.12, Blender, FFmpeg with libx264/drawtext, ffprobe and DejaVu Sans Bold. Python and Node dependencies are locked in `requirements.txt` and `package-lock.json`.
 
 ```bash
 python3 -m venv .venv
@@ -108,3 +110,16 @@ The visible **Vzhled podle předlohy** section accepts PNG/JPEG/WebP or a short 
 Expand **Doladit čísla, nadpis a titulky** to adjust colors, font, sizes, positions, alignment, margins, header darkness and editorial labels in the live preview. **Uložit vzhled předlohy** saves that layout with visual preferences for the assistant; the current layout also drives actual FFmpeg export. Instructions typed alongside the reference are forwarded with the next assistant command. Free OCR works from the image; interpreting written preferences requires the optional AI mode and a configured API key. AI analysis additionally estimates the closest of three supported fonts and header darkness. Exact font, animation and narrator matching is not promised from a still frame. **Uložit projekt** retains the reference settings, preferences and selected male voice in this browser; uploaded media remain subject to the host's storage lifetime.
 
 This is a personal application using configured AI providers, rather than a newly trained model. Your prompts, sampled clip images, reference frame and voiceover text are sent to the chosen providers only for the requested AI operations. There is no model training pipeline or automatic publication.
+
+## 3D stories with a male Czech narrator
+
+The default **3D příběhy** workspace provides three prepared stories, 35/40/45 seconds, editable scene commentary, a real Blender frame preview, and a complete H.264/AAC MP4. The retained **Ranking editor** remains available. Characters and choreography are procedural, with a simple stylized look, not unrestricted text-to-video or semirealistic cinematic animation. Output is 360×640 at 12 fps.
+
+Male narration is on by default. **Poslechnout mužský hlas** reads the first scene before a full render; the resulting audio player requires a click to play. The five commentary fields drive both subtitles and speech in the corresponding scenes. Audio is resampled and padded to exact sample counts for each scene. Speech may be fitted up to 1.2×; text that would need faster delivery is rejected before rendering instead of truncating words. Finished job metadata and browser project settings allow refresh and reopening completed exports; an interrupted job after a server restart is reported as interrupted.
+
+- **Český mužský · základní syntetický**: local eSpeak NG `cs+m3`, deliberately labelled as basic/robotic. It needs no API key or network at runtime. Install system `espeak-ng` or run `bash scripts/install_speech.sh`. The latter downloads signed Debian package metadata, verifies package hashes through APT, and extracts the packages into ignored `.runtime/tools/espeak` without root access or changing system files.
+- **Jirka · přirozenější lokální hlas**: optional neural Piper voice, disabled until `scripts/download_models.py --language cs` installs the official checksum-verified model. This model download was blocked by network policy in this task. Required destinations include `huggingface.co`, `cdn-lfs.huggingface.co`, `cdn-lfs-us-1.hf.co` and `cas-bridge.xethub.hf.co`. The application never silently switches to a different voice. No paid provider credentials are required for either local choice.
+
+Requires Blender CPU Cycles (4.3.2 available here), FFmpeg/ffprobe, DejaVu fonts, Node and Python 3.12. `bash scripts/install.sh` installs the local speech tool and the existing pinned dependencies/build. `bash scripts/start.sh` runs the combined application on port 8000. The production Docker image includes Blender, eSpeak NG and the scene renderer. It was built and tested with a 512 MiB memory limit and one CPU: protected web access, bundled movie playback/download, male voice preview, exact 35-second narration and actual Blender 3.4.1 scene rendering passed. This does not establish performance on Render’s free CPU allocation. The renderer uses light FFmpeg spatial denoising and reuses genuinely identical static poses. OpenImageDenoise is disabled because the local Blender build lacks it. A CPU render takes several minutes, with one active story job at a time.
+
+Checks: `npm run build`, `.venv/bin/python -m pytest -q`, `npm run test:browser` for the retained ranking workflow, and `npm run test:story` for actual male speech playback, Blender preview, full 35-second narrated animation, refresh recovery and mobile layout. The story browser check requires the server running on port 8000 and can take several minutes. Media and diagnostic logs are under `.runtime/media/stories/<id>/`; browser project storage contains no credentials. Preserve users' media when maintaining the environment.

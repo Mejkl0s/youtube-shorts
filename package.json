@@ -7,7 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test:browser": "node scripts/browser-test.mjs"
+    "test:browser": "node scripts/browser-test.mjs",
+    "test:story": "node scripts/story-browser-test.mjs",
+    "test:web": "node scripts/web-smoke-test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

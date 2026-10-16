@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowDown, ArrowUp, ArrowUpRight, AudioLines, Check, ChevronDown, Clapperboard, Download, Film, FolderOpen, Info, Layers3, LoaderCircle, Mic2, MessageSquare, Paperclip, Send, Pause, Play, Plus, RotateCcw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Trophy, Upload, Volume2, VolumeX, WandSparkles, X, Zap } from 'lucide-react';
 import './styles.css';
+import StoryStudio from './StoryStudio';
 import TemplatePanel from './TemplatePanel';
 import {DEFAULT_LAYOUT,type Layout,type Reference} from './template';
 
@@ -356,4 +357,9 @@ function Toggle({ value, set, label }: { value: boolean; set: (v:boolean)=>void;
 function Integration({name,code,ready,text}:{name:string;code:string;ready:boolean;text:string}) { return <div className="integration"><div><strong>{name}</strong><span className={ready?'connected':'not-connected'}>{ready?<Check size={12}/>:<span className="dot"/>}{ready?'Připojeno':'Vyžaduje nastavení'}</span></div><p>{text}</p><code>{code}</code></div>; }
 function VolumeSlider({label,value,set,max=1}:{label:string;value:number;set:(v:number)=>void;max?:number}) { return <label className="volume-slider"><span>{label}<strong>{Math.round(value*100)}%</strong></span><input type="range" min={0} max={max} step={0.01} value={value} onChange={e=>set(Number(e.target.value))}/></label>; }
 
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+function Workspace() {
+  const [mode,setMode] = useState<'story'|'ranking'>(() => {try {return localStorage.getItem('short-studio-mode')==='ranking'?'ranking':'story';} catch {return 'story';}});
+  useEffect(() => {try {localStorage.setItem('short-studio-mode',mode);} catch {}}, [mode]);
+  return <><nav className="studio-modes" aria-label="Typ studia"><button className={mode==='story'?'active':''} onClick={()=>setMode('story')}>3D příběhy</button><button className={mode==='ranking'?'active':''} onClick={()=>setMode('ranking')}>Ranking editor</button></nav><div hidden={mode!=='story'}><StoryStudio/></div><div hidden={mode!=='ranking'}><App/></div></>;
+}
+createRoot(document.getElementById('root')!).render(<React.StrictMode><Workspace/></React.StrictMode>);

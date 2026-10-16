@@ -25,5 +25,5 @@ async def owner_access(request, call_next):
     except (ValueError, UnicodeError):
         valid = False
     if not valid:
-        return JSONResponse({'detail': 'Přihlaste se do svého Rank Studia.'}, status_code=401, headers={'WWW-Authenticate': 'Basic realm="Rank Studio", charset="UTF-8"'})
+        return JSONResponse({'detail': 'Přihlaste se do svého Short Story Studia.'}, status_code=401, headers={'WWW-Authenticate': 'Basic realm="Short Story Studio", charset="UTF-8"'})
     return await call_next(request)

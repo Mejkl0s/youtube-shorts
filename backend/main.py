@@ -32,7 +32,7 @@ MODELS = Path(os.environ.get('PIPER_MODEL_DIR', str(ROOT / '.runtime/models'))).
 FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 for folder in [DATA / 'media', DATA / 'jobs', MODELS]:
     folder.mkdir(parents=True, exist_ok=True)
-app = FastAPI(title='Rank Studio')
+app = FastAPI(title='Short Story Studio')
 app.middleware('http')(owner_access)
 app.mount('/media', StaticFiles(directory=DATA / 'media'), name='media')
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -688,6 +688,9 @@ def download(job_id: str):
         raise HTTPException(409, 'Export zatím není hotový.')
     return FileResponse(path, media_type='video/mp4', filename='rank-studio-short.mp4')
 
+
+from .story import router as story_router
+app.include_router(story_router)
 
 # Production build and API are served together. During development Vite proxies API.
 from .assistant import router as assistant_router

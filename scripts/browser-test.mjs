@@ -12,6 +12,7 @@ page.on('dialog', d => d.accept());
 await mkdir('.runtime/screenshots', { recursive: true });
 try {
   await page.goto(base);
+  await page.getByRole('button', {name:'Ranking editor',exact:true}).click();
   await page.getByRole('heading', { name: 'Najdi momenty. Vytvoř svůj Short.' }).waitFor();
   await page.getByRole('heading', {name:'Vzhled podle předlohy',exact:true}).waitFor();
   assert.equal(await page.getByLabel('ROZPOZNÁNÍ VZHLEDU', {exact:true}).inputValue(),'free');
