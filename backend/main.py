@@ -132,7 +132,7 @@ class Project(BaseModel):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
+    return {'status': 'ok', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
 
 
 @app.get('/api/fonts/{name}')

@@ -69,6 +69,8 @@ npm run build
 .venv/bin/python -m pytest -q
 # Start server on 8000 before the browser checks:
 npm run test:browser
+# Self-contained real browser login/logout check (starts its own isolated server):
+node scripts/browser-login-test.mjs
 ```
 
 The backend checks exercise actual FFmpeg rendering and scene detection, validation, provider URL restrictions and missing-integration responses. Browser checks exercise the chat’s missing-key handling, male voice selection, editor, demo, ordering, word limit, saved project and real export. Live AI/search/voice calls require the credentials, model and network destinations above; mocked provider responses do not establish that those integrations work live.
@@ -79,7 +81,7 @@ This is a single-user application with optional owner password protection and no
 
 The repository includes a multi-stage Dockerfile and `render.yaml` Blueprint for one **free** web service. Deploy this repository through Render's Blueprint flow, connecting your GitHub account if needed. Enter these values securely in Render, never in chat or Git:
 
-- `STUDIO_PASSWORD`: a strong password you choose for your personal studio. The username is `owner` (`STUDIO_USERNAME`). The browser requests this login before opening the editor.
+- `STUDIO_PASSWORD`: a strong password you choose for your personal studio. The username is `owner` (`STUDIO_USERNAME`). The app shows its own HTML login form so embedded browsers need no native Basic Auth popup. Login is also available at `/login`. Successful login sets a signed, HttpOnly, SameSite=Lax cookie that expires after 12 hours and is Secure on public hosting. Changing the password or username invalidates existing sessions. Use **Odhlásit se** in the editor to clear the cookie. Passwords are never stored in cookies or browser local storage. Explicit Basic Auth remains supported for API clients. Cross-origin browser requests that change state are rejected.
 - Optional `OPENAI_API_KEY`: add your own OpenAI API key for AI discovery, the AI director and premium male speech only if desired. Provider usage is billed by OpenAI independently of Render. Free public discovery, demo clips, manual uploads and exports with narration disabled work without this key. The free Blueprint does not require it.
 
 Render sets `PORT` automatically; the container serves the frontend, API and media together. `STUDIO_PUBLIC=1` makes a missing studio password block the app rather than expose your videos or let strangers use your AI key. `/api/health` remains accessible for Render's health check. Optional ElevenLabs credentials can be added in Render's environment settings.

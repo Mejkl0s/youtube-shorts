@@ -11,7 +11,7 @@ type ChatMessage = { id: string; role: 'user'|'assistant'; content: string; pend
 const DEFAULT_VOICE: VoiceSettings = { provider:'openai', voice:'onyx', speed:1, delivery:'A confident, natural male narrator. Clear English, conversational energy, varied emphasis. No exaggerated shouting. Let the key observation land.' };
 const VOICES = [{id:'openai:onyx',name:'Onyx · hlubší mužský',provider:'openai',voice:'onyx'}, {id:'openai:echo',name:'Echo · přirozený mužský',provider:'openai',voice:'echo'}, {id:'elevenlabs:adam',name:'Adam · ElevenLabs',provider:'elevenlabs',voice:'adam'}, {id:'elevenlabs:josh',name:'Josh · ElevenLabs',provider:'elevenlabs',voice:'josh'}, {id:'elevenlabs:antoni',name:'Antoni · ElevenLabs',provider:'elevenlabs',voice:'antoni'}, {id:'elevenlabs:custom',name:'Vlastní · ElevenLabs',provider:'elevenlabs',voice:'custom'}, {id:'piper:local',name:'Piper · lokální alternativa',provider:'piper',voice:'local'}] as const;
 type AIProject = { topic:string; title:string; ranking_criteria:string; language:string; resolution:string; candidate_count:number; allow_youtube:boolean; voice:boolean; effects:boolean; captions:boolean; original_volume:number; voice_volume:number; effects_volume:number; layout:Layout; voice_settings:VoiceSettings; clips:Record<string,unknown>[] };
-type Health = { voices: Record<string, boolean>; ai_scripts: boolean; elevenlabs: boolean; reference_voice: boolean };
+type Health = { voices: Record<string, boolean>; ai_scripts: boolean; elevenlabs: boolean; reference_voice: boolean; owner_login?:boolean };
 type Job = { id: string; status: string; progress: number; message: string; download?: string; clips?: Record<string, unknown>[]; candidate_count?: number; kind?: string; mode?: 'free'|'ai'; search_results?: {url:string;title:string}[]; warnings?:string[]; assistant_reply?: string; project?: AIProject; reference?: Reference; research?: Research };
 type Research = { channels: { name: string; url: string; observation: string; evidence: string }[]; recommendations: string[]; limitations: string };
 const words = (text: string) => text.match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
@@ -279,7 +279,7 @@ function App() {
       <header className="topbar">
         <a className="wordmark" href="/">rank<span>studio</span><span className="beta">BETA</span></a>
         <div className="breadcrumbs"><span>Workspace</span><span>/</span><strong>Nový Short</strong></div>
-        <div className="top-actions"><span className="save-status"><span className={saved ? 'dot green' : 'dot'}/>{saved ? 'Uloženo' : restored ? 'Projekt obnoven' : 'Nový projekt'}</span><button className="button secondary save-button" onClick={saveProject} disabled={occupied}><Save size={15}/> Uložit projekt</button></div>
+        <div className="top-actions"><span className="save-status"><span className={saved ? 'dot green' : 'dot'}/>{saved ? 'Uloženo' : restored ? 'Projekt obnoven' : 'Nový projekt'}</span><button className="button secondary save-button" onClick={saveProject} disabled={occupied}><Save size={15}/> Uložit projekt</button>{health?.owner_login&&<form action="/auth/logout" method="post"><button className="button secondary save-button" disabled={occupied}>Odhlásit se</button></form>}</div>
       </header>
       <main>
         <section className="editor">
