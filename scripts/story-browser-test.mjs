@@ -39,7 +39,7 @@ try {
   await page.waitForTimeout(600);
   assert.ok((await audio.evaluate((el) => el.currentTime)) > 0);
   await audio.evaluate((el) => el.pause());
-  await page.getByRole("button", { name: "35 seconds", exact: true }).click();
+  await page.getByLabel("Optional duration", {exact: true}).fill("35");
   await page
     .getByRole("button", { name: "Preview the scene", exact: true })
     .click();

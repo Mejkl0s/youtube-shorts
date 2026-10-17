@@ -86,7 +86,8 @@ type Capabilities = {
 };
 type Saved = {
   story?: StoryKey;
-  duration?: number;
+  duration?: number | null;
+  topic?: string;
   captions?: string[];
   provider?: Provider;
   voice?: boolean;
@@ -120,7 +121,7 @@ function load(): Saved {
     const s = JSON.parse(localStorage.getItem(STORAGE) || "{}");
     if (
       !Object.hasOwn(STORIES, s.story) ||
-      ![35, 40, 45].includes(s.duration) ||
+      (s.duration != null && (!Number.isInteger(s.duration) || s.duration < 10 || s.duration > 120)) ||
       !Array.isArray(s.captions) ||
       s.captions.length !== 5 ||
       s.captions.some((x: unknown) => typeof x !== "string" || x.length > 160)
@@ -135,7 +136,9 @@ const stamp = (seconds: number) => `${seconds.toFixed(1).replace(/\.0$/, "")}s`;
 export default function StoryStudio() {
   const [saved] = useState(load);
   const [story, setStory] = useState<StoryKey>(saved.story || "parcel");
-  const [duration, setDuration] = useState(saved.duration || 40);
+  const [duration, setDuration] = useState<number | null>(saved.duration ?? null);
+  const [topic, setTopic] = useState(saved.topic || "");
+  const [writing, setWriting] = useState(false);
   const [captions, setCaptions] = useState(
     saved.captions || STORIES.parcel.lines,
   );
@@ -164,7 +167,7 @@ export default function StoryStudio() {
   const [referenceMode, setReferenceMode] = useState<"basic" | "ai">(
     saved.referenceMode || "basic",
   );
-  const busy = sending || (!!job && !["done", "failed"].includes(job.status));
+  const busy = writing || sending || (!!job && !["done", "failed"].includes(job.status));
   useEffect(() => {
     request<Capabilities>("/capabilities")
       .then(setCaps)
@@ -186,6 +189,7 @@ export default function StoryStudio() {
         JSON.stringify({
           story,
           duration,
+          topic,
           captions,
           provider,
           voice,
@@ -201,6 +205,7 @@ export default function StoryStudio() {
   }, [
     story,
     duration,
+    topic,
     captions,
     provider,
     voice,
@@ -272,6 +277,19 @@ export default function StoryStudio() {
       setSending(false);
     }
   }
+  async function writeScript() {
+    setWriting(true);
+    setError("");
+    try {
+      const plan = await request<{story: StoryKey; captions: string[]}>("/script", {topic});
+      setStory(plan.story);
+      setCaptions(plan.captions);
+      setDuration(null);
+      setStale(true);
+      setAudio("");
+    } catch (e) { setError((e as Error).message); }
+    finally { setWriting(false); }
+  }
   async function voicePreview() {
     setPreviewing(true);
     setError("");
@@ -331,7 +349,7 @@ export default function StoryStudio() {
             <em>move and speak.</em>
           </h1>
           <p className="story-lead">
-            Two people. One meaningful moment. Create a 35–45 second animated
+            Two people. One meaningful moment. Create an animated
             Short with an English male narrator and pauses that follow the
             action.
           </p>
@@ -343,8 +361,20 @@ export default function StoryStudio() {
           </div>
           <div className="story-panel">
             <h2>
-              01 <span>Choose a story</span>
+              01 <span>Video topic and story</span>
             </h2>
+            <label className="story-select">
+              VIDEO TOPIC · 2–3 SENTENCES
+              <textarea aria-label="Video topic" maxLength={1000} rows={4}
+                placeholder="Describe your idea, the central moment and how it should end."
+                value={topic} disabled={busy} onChange={(e) => setTopic(e.target.value)} />
+            </label>
+            <button className="story-secondary" disabled={busy || !caps.ai || topic.trim().length < 5} onClick={writeScript}>
+              {writing ? "Writing script…" : "Create English script from topic"}
+            </button>
+            <p className="story-note">AI adapts your topic to the available park scenes. Review the script below before rendering. This uses the configured OpenAI API and may incur charges.
+              {!caps.ai && " An OpenAI API key is required on the server; manual narration remains available."}
+            </p>
             <div className="story-options">
               {Object.entries(STORIES).map(([key, item]) => (
                 <button
@@ -551,20 +581,14 @@ export default function StoryStudio() {
               04 <span>Duration and scene narration</span>
             </h2>
             <div className="story-length">
-              {[35, 40, 45].map((n) => (
-                <button
-                  key={n}
-                  disabled={busy}
-                  aria-pressed={duration === n}
-                  className={duration === n ? "selected" : ""}
-                  onClick={() => {
-                    setDuration(n);
-                    setStale(true);
-                  }}
-                >
-                  {n} seconds
-                </button>
-              ))}
+              <button disabled={busy} aria-pressed={duration === null}
+                className={duration === null ? "selected" : ""}
+                onClick={() => { setDuration(null); setStale(true); }}>Automatic · follow the story</button>
+              <label>Optional duration (10–120 seconds)
+                <input aria-label="Optional duration" type="number" min={10} max={120}
+                  disabled={busy} value={duration ?? ""} placeholder="Automatic"
+                  onChange={(e) => { setDuration(e.target.value ? Math.max(10, Math.min(120, Number(e.target.value))) : null); setStale(true); }} />
+              </label>
             </div>
             <div className="story-beats">
               {captions.map((text, i) => {
@@ -574,7 +598,7 @@ export default function StoryStudio() {
                     <span>
                       {String(i + 1).padStart(2, "0")}
                       <small>
-                        {cue
+                        {cue && duration !== null
                           ? `${stamp(cue.start * duration)}–${stamp(cue.end * duration)}`
                           : `Scene ${i + 1}`}
                       </small>
@@ -598,7 +622,7 @@ export default function StoryStudio() {
             </div>
             <p className="story-note">
               Narration follows arrival, discovery, the key action, the response
-              and the ending. Short pauses separate complete thoughts; the key
+              and the ending. Automatic duration follows the actual voice and allows breathing room. Short pauses separate complete thoughts; the key
               action is spoken about as it happens. Overlong lines are rejected
               rather than cut off or rushed.
             </p>

@@ -12,12 +12,12 @@ from backend import narration as speech
 from backend import story
 
 
-@pytest.mark.parametrize('duration', [35, 40, 45])
+@pytest.mark.parametrize('duration', [10, 24, 36, 57, 120])
 def test_supported_story_duration(duration):
     assert story.Story(duration=duration, captions=['A short line.']*5).duration == duration
 
 
-@pytest.mark.parametrize('change', [{'duration': 36}, {'provider': 'unknown'}, {'captions': ['one']}, {'story': '../outside'}])
+@pytest.mark.parametrize('change', [{'duration': 121}, {'provider': 'unknown'}, {'captions': ['one']}, {'story': '../outside'}])
 def test_invalid_story_configuration(change):
     with pytest.raises(ValidationError):
         story.Story(**{'captions': ['Text']*5, **change})
@@ -90,3 +90,38 @@ def test_actual_speech_leaves_breaths_and_covers_key_actions(tmp_path):
     assert events[2]['speech_start']==15.75
     assert events[3]['speech_start']==22.75
     assert sum(e['speech_end']-e['speech_start'] for e in events)<35*.84
+
+
+def test_automatic_duration_tracks_real_voice(tmp_path):
+    if not speech.capabilities()['local']:
+        pytest.skip('Local speech requires eSpeak NG.')
+    body = story.Story(captions=['They met again. It was a happy moment.']*5)
+    assert body.duration is None
+    events = story.narration(body, tmp_path)
+    assert 10 <= body.duration <= 120
+    assert body.duration < 35
+    with wave.open(str(tmp_path/'narration.wav'), 'rb') as audio:
+        assert audio.getnframes() / audio.getframerate() == body.duration
+    assert all(e['speech_end'] <= e['end']-.4 for e in events)
+
+
+def test_topic_requires_key(monkeypatch):
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    assert TestClient(app).post('/api/story/script', json={'topic': 'Two friends meet again in the park.'}).status_code == 409
+
+
+def test_topic_generates_validated_english_script(monkeypatch):
+    import backend.main as main
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-only')
+    seen = []
+    def respond(payload):
+        seen.append(payload)
+        return {'story': 'reunion', 'captions': ['Two friends meet again.']*5}
+    monkeypatch.setattr(main, 'ai_request', respond)
+    result = TestClient(app).post('/api/story/script', json={'topic': 'Old friends recognize each other. They reconnect.'})
+    assert result.status_code == 200
+    assert result.json()['story'] == 'reunion'
+    assert len(result.json()['captions']) == 5
+    assert seen[0]['messages'][1]['content'].startswith('Old friends')
+    monkeypatch.setattr(main, 'ai_request', lambda payload: {'story': 'reunion', 'captions': ['incomplete']})
+    assert TestClient(app).post('/api/story/script', json={'topic': 'Friends meet again.'}).status_code == 502
