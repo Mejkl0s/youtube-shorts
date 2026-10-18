@@ -35,7 +35,7 @@ try {
   await page.getByRole('button', { name: 'Zavřít chybu' }).click();
   // Search providers are mocked here; real search/download/scene/export orchestration is covered by pytest.
   const searchDemo = await (await page.request.post(base+'/api/demo', {data:{}})).json();
-  const searchComplete = {id:'ui-free-search',kind:'discover',mode:'free',status:'done',progress:100,message:'Pět momentů je připravených.',candidate_count:8,clips:searchDemo.clips.map(c=>({...c,voiceover:'',sourceDuration:c.duration,start:0,duration:3})),search_results:[{url:'https://www.tiktok.com/@example/video/123456',title:'Funny cats source'}]};
+  const searchComplete = {id:'ui-free-search',kind:'discover',mode:'free',status:'done',progress:100,message:'Pět momentů je připravených.',candidate_count:8,youtube_fallback:true,source_stats:{TikTok:{found:8,downloaded:0,failed:8},YouTube:{found:5,downloaded:5,failed:0}},download_failures:[{source:'TikTok',url:'https://www.tiktok.com/@example/video/123456',kind:'login_required',reason:'Zdroj vyžaduje platnou přihlášenou relaci.'}],clips:searchDemo.clips.map(c=>({...c,voiceover:'',sourceDuration:c.duration,start:0,duration:3})),search_results:[{url:'https://www.tiktok.com/@example/video/123456',title:'Funny cats source'}]};
   await page.route('**/api/discover', route=>{assert.equal(route.request().postDataJSON().mode,'free');return route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:searchComplete.id,status:'queued',progress:0,message:'Hledám…'})});});
   await page.route('**/api/jobs/ui-free-search', route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(searchComplete)}));
   await page.getByLabel('Co dnes rankujeme?').fill('funny cats');
@@ -43,6 +43,9 @@ try {
   await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
   assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).inputValue(),'');
   assert.equal(await page.getByRole('switch',{name:'AI voiceover',exact:true}).getAttribute('aria-checked'),'false');
+  await page.locator('.source-diagnostics > summary').click();
+  assert.match(await page.locator('.source-stats').innerText(),/YouTube · 5\/5 načteno/);
+  await page.getByText('Zdroj vyžaduje platnou přihlášenou relaci.',{exact:false}).waitFor();
   await page.locator('.found-links > summary').click();
   assert.equal(await page.getByRole('link',{name:'Funny cats source'}).getAttribute('href'),'https://www.tiktok.com/@example/video/123456');
   await page.unroute('**/api/discover');

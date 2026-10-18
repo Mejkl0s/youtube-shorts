@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import json
+import sys
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlparse
 from xml.etree import ElementTree
@@ -101,11 +103,13 @@ def relevance(topic, title, description=''):
     return len(matched) / len(wanted)
 
 
-def public_search(topic: str, allow_youtube: bool, limit: int):
+def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False):
     from .main import canonical_url, social_url
     sources = [('TikTok', 'site:tiktok.com'), ('Instagram', 'site:instagram.com/reel/')]
     if allow_youtube:
         sources.append(('YouTube', 'site:youtube.com/shorts/'))
+    if only_youtube:
+        sources = [source for source in sources if source[0] == 'YouTube']
     entries, seen, warnings = [], set(), []
     for source, restriction in sources:
         for suffix in ('', ' moments'):
@@ -141,6 +145,46 @@ def public_search(topic: str, allow_youtube: bool, limit: int):
                 if added:
                     break
     return entries, list(dict.fromkeys(warnings))
+
+
+def youtube_search(topic: str, limit: int):
+    """Independent public YouTube search; social results cannot consume its budget."""
+    from . import main as m
+    entries, seen, warnings = [], set(), []
+    try:
+        raw = m.run([sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir',
+                     '--no-warnings', '--no-remote-components', '--flat-playlist', '--skip-download',
+                     '--dump-single-json', '--socket-timeout', '10', '--retries', '0',
+                     '--playlist-end', str(limit), '--', f'ytsearch{limit}:{topic} shorts'], 40)
+        if len(raw) > 4 * 1024 * 1024:
+            raise ValueError('Too many search results')
+        for index, row in enumerate(json.loads(raw).get('entries', [])[:limit]):
+            if not isinstance(row, dict) or not re.fullmatch(r'[\w-]{11}', str(row.get('id', ''))):
+                continue
+            duration = row.get('duration')
+            if (isinstance(duration, (int, float)) and not 2 <= duration <= 120) or row.get('live_status') in ('is_live', 'is_upcoming'):
+                continue
+            title = plain(row.get('title', ''))
+            score = relevance(topic, title, plain(row.get('description', '')))
+            if not score:
+                continue
+            url = 'https://www.youtube.com/watch?v=' + row['id']
+            identity = m.canonical_url(url)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            entries.append({'url': url, 'title': title[:100], 'source': 'YouTube', 'provider': 'youtube', 'search_score': score*.85 + .15/(index+1)})
+    except Exception:
+        warnings.append('Přímé veřejné hledání na YouTube nebylo dostupné.')
+    if len(entries) < limit:
+        extra, engine_warnings = public_search(topic, True, limit, only_youtube=True)
+        warnings.extend(engine_warnings)
+        for row in extra:
+            identity = m.canonical_url(row['url'])
+            if identity not in seen:
+                seen.add(identity)
+                entries.append(row)
+    return entries[:limit], list(dict.fromkeys(warnings))
 
 
 def window_score(raw: bytes):

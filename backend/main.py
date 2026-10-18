@@ -24,7 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .style import FONTS, Layout, VoiceSettings, voice_available
 from .access import owner_access
-from .free_search import public_search, select_free
+from .free_search import public_search, youtube_search, select_free
+from .social_sessions import download_session
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('RANK_DATA_DIR', str(ROOT / '.runtime'))).resolve()
@@ -597,7 +598,11 @@ def download_candidate(item: dict):
     folder = DATA / 'media' / asset_id
     folder.mkdir()
     try:
-        run([sys.executable, '-m', 'yt_dlp', '--no-playlist', '--no-progress', '--socket-timeout', '15', '--retries', '1', '--max-filesize', '300M', '--match-filter', 'duration <= 120', '--restrict-filenames', '--merge-output-format', 'mp4', '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '-o', str(folder / 'download.%(ext)s'), '--', item['url']], 75)
+        with download_session(item['url']) as cookies:
+            args = [sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir', '--no-remote-components', '--js-runtimes', 'node', '--no-playlist', '--no-progress', '--socket-timeout', '15', '--retries', '1', '--max-filesize', '300M', '--match-filter', 'duration <= 120', '--restrict-filenames', '--merge-output-format', 'mp4', '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '-o', str(folder / 'download.%(ext)s')]
+            if cookies:
+                args += ['--cookies', str(cookies)]
+            run([*args, '--', item['url']], 75)
         files = [p for p in folder.glob('download.*') if p.suffix not in ('.part', '.ytdl')]
         if len(files) != 1:
             raise ValueError('Video nebylo dostupné.')
@@ -613,6 +618,22 @@ def download_candidate(item: dict):
         raise
 
 
+def source_name(url):
+    host = urlparse(url).hostname or ''
+    return 'TikTok' if host in ('tiktok.com', 'www.tiktok.com') else 'Instagram' if host in ('instagram.com', 'www.instagram.com') else 'YouTube'
+
+
+def download_failure(error):
+    detail = str(error).lower()
+    if any(word in detail for word in ('403', '429', 'captcha', 'not a bot', 'cloudflare', 'challenge')):
+        return 'blocked', 'Zdroj odmítá stahování z tohoto serveru nebo omezuje počet požadavků.'
+    if any(word in detail for word in ('login', 'log in', 'sign in', 'cookies', '401', 'private video')):
+        return 'login_required', 'Zdroj vyžaduje platnou přihlášenou relaci.'
+    if isinstance(error, subprocess.TimeoutExpired) or 'timed out' in detail:
+        return 'timeout', 'Zdroj neodpověděl v časovém limitu.'
+    return 'unavailable', 'Video se nepodařilo stáhnout nebo zpracovat; může být nedostupné či delší než 120 sekund.'
+
+
 def discover(job_id: str, body: DiscoverRequest):
     try:
         set_job(job_id, status='searching', progress=3, message=f'Hledám {body.candidate_count} kandidátů podle tématu…')
@@ -621,21 +642,67 @@ def discover(job_id: str, body: DiscoverRequest):
             entries, warnings = public_search(body.topic, body.allow_youtube, body.candidate_count)
         else:
             entries = ai_search(body)
-        set_job(job_id, mode=body.mode, search_results=[{'url': e['url'], 'title': e['title']} for e in entries], warnings=warnings)
-        if len(entries) < 5:
-            raise ValueError(f'Vyhledávání našlo pouze {len(entries)} odpovídajících videí. Zkuste širší nebo anglické téma.' + (' Veřejné vyhledávače byly omezené nebo nedostupné.' if warnings else ''))
-        candidates, rejected = [], 0
-        for i, item in enumerate(entries):
-            set_job(job_id, progress=10 + int(55 * i / len(entries)), message=f'Načítám kandidáta {i + 1}/{len(entries)}…')
+        candidates, attempted, found, failures, blocked = [], set(), [], [], {}
+        stats = {name: {'found': 0, 'downloaded': 0, 'failed': 0} for name in ('TikTok', 'Instagram', 'YouTube')}
+        def publish(**updates):
+            set_job(job_id, mode=body.mode, search_results=list(found), download_failures=list(failures),
+                    source_stats={name: dict(row) for name, row in stats.items()}, warnings=list(dict.fromkeys(warnings)), **updates)
+        def load(items, base, span):
+            for index, item in enumerate(items[:body.candidate_count]):
+                if not social_url(item.get('url', ''), body.allow_youtube):
+                    continue
+                identity = canonical_url(item['url'])
+                if identity in attempted:
+                    continue
+                attempted.add(identity)
+                source = source_name(item['url'])
+                found.append({'url': item['url'], 'title': str(item.get('title', body.topic))[:100]})
+                stats[source]['found'] += 1
+                publish(progress=base+int(span*index/max(1, len(items))), message=f'Načítám {source}: kandidát {index+1}/{len(items)}…')
+                if blocked.get(source, 0) >= 2:
+                    kind, reason = 'paused', 'Další pokusy z této sítě byly pozastavené po opakovaném odmítnutí nebo vypršení času.'
+                else:
+                    try:
+                        candidate = download_candidate({**item, 'source': source})
+                        candidates.append(candidate)
+                        stats[source]['downloaded'] += 1
+                        blocked[source] = 0
+                        continue
+                    except Exception as error:
+                        kind, reason = download_failure(error)
+                        if kind in ('blocked', 'timeout') or (kind == 'login_required' and source != 'YouTube'):
+                            blocked[source] = blocked.get(source, 0)+1
+                        else:
+                            blocked[source] = 0
+                stats[source]['failed'] += 1
+                failures.append({'url': item['url'], 'source': source, 'kind': kind, 'reason': reason})
+            publish()
+        def choose(progress):
+            if len(candidates) < 5:
+                return None, None
+            publish(progress=progress, message='Vybírám souvislé scény podle pohybu a ostrosti…' if body.mode == 'free' else 'AI hodnotí obsah a vybírá samostatné scény…')
             try:
-                candidates.append(download_candidate(item))
-            except Exception:
-                rejected += 1
-        if len(candidates) < 5:
-            raise ValueError(f'Podařilo se načíst jen {len(candidates)} videí; {rejected} bylo nedostupných. TikTok nebo Instagram může vyžadovat přihlášení či blokovat stahování. Zkuste jiné téma nebo nahrajte vlastní klipy.')
-        set_job(job_id, progress=70, message='Vybírám souvislé scény podle pohybu a ostrosti…' if body.mode == 'free' else 'AI hodnotí obsah a vybírá samostatné scény…')
-        selected = select_free(candidates, body.topic) if body.mode == 'free' else select_candidates(candidates, body.topic, body.language, body.ranking_criteria)
-        set_job(job_id, status='done', progress=100, message='Pět momentů je připravených. Zkontroluj obsah a pořadí.' if body.mode == 'free' else 'Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=rejected)
+                selected = select_free(candidates, body.topic) if body.mode == 'free' else select_candidates(candidates, body.topic, body.language, body.ranking_criteria)
+                return selected, None
+            except ValueError as error:
+                return None, str(error)[:250]
+        publish(youtube_fallback=False)
+        load(entries, 10, 35)
+        selected, selection_error = choose(55)
+        if selected is None and body.allow_youtube:
+            publish(progress=60, youtube_fallback=True, message='Ze sociálních sítí není pět použitelných klipů. Hledám další přímo na YouTube…')
+            extra, more_warnings = youtube_search(body.topic, body.candidate_count)
+            warnings.extend(more_warnings)
+            # A separate budget ensures a full social result list cannot starve YouTube.
+            load([row for row in extra if source_name(row.get('url', '')) == 'YouTube'], 62, 20)
+            selected, selection_error = choose(88)
+        if selected is None:
+            summary = '; '.join(f'{name}: {row["downloaded"]}/{row["found"]}' for name, row in stats.items() if row['found'])
+            raise ValueError(f'Podařilo se načíst jen {len(candidates)} videí. {summary or "Nenalezeny odpovídající zdroje."}. '
+                             + (selection_error+' ' if selection_error else '')
+                             + ('Bylo vyzkoušeno i samostatné hledání na YouTube. ' if body.allow_youtube else 'Doplňování z YouTube je vypnuté. ')
+                             + 'Důvody odmítnutí jsou v přehledu zdrojů. Přidej aktuální relaci sítě, zkus jiné téma nebo nahraj vlastní klipy.')
+        publish(status='done', progress=100, message='Pět momentů je připravených. Zkontroluj obsah a pořadí.' if body.mode == 'free' else 'Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=len(failures))
     except Exception as error:
         set_job(job_id, status='failed', message=f'Vyhledávání se nezdařilo: {str(error)[:700]}')
 
@@ -692,6 +759,8 @@ def download(job_id: str):
 # Production build and API are served together. During development Vite proxies API.
 from .assistant import router as assistant_router
 app.include_router(assistant_router)
+from .social_sessions import router as source_sessions_router
+app.include_router(source_sessions_router)
 
 if (ROOT / 'dist').exists():
     app.mount('/', StaticFiles(directory=ROOT / 'dist', html=True), name='frontend')

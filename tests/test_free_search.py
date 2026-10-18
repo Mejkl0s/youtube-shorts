@@ -20,6 +20,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.delenv('OPENAI_API_KEY', raising=False)
     monkeypatch.delenv('STUDIO_PASSWORD', raising=False)
     monkeypatch.delenv('STUDIO_PUBLIC', raising=False)
+    monkeypatch.setattr(m, 'youtube_search', lambda *args: ([], []))
     with m.job_lock:
         m.jobs.clear()
     return tmp_path
@@ -148,3 +149,97 @@ def test_free_search_to_real_scene_selection_and_export_never_calls_paid_api(iso
     video = next(stream for stream in m.probe(output)['streams'] if stream['codec_type'] == 'video')
     assert (video['width'], video['height']) == (720, 1280)
     assert client.get('/api/jobs/' + render_id + '/download').status_code == 200
+
+
+def youtube_results(count=5):
+    return [{'url': f'https://www.youtube.com/shorts/CATCLIP{i:04d}', 'title': f'Funny cats moment {i}', 'source': 'YouTube'} for i in range(count)]
+
+
+@pytest.mark.parametrize('initial_count', [0, 8])
+def test_youtube_gets_own_budget_after_social_download_failures(isolated, monkeypatch, initial_count):
+    monkeypatch.setattr(m, 'public_search', lambda *args: (results(initial_count), []))
+    searches, downloaded = [], []
+    monkeypatch.setattr(m, 'youtube_search', lambda *args: (searches.append(args) or youtube_results(), []))
+    monkeypatch.setattr(m, 'ai_request', lambda *args, **kw: pytest.fail('Free fallback called paid AI'))
+    def download(item):
+        downloaded.append(item['url'])
+        if item['source'] == 'TikTok':
+            raise ValueError('Sign in required; opaque-session-secret')
+        return {'id': uuid.uuid4().hex, 'name': item['title'], 'source': item['source'], 'source_url': item['url'], 'duration': 4}
+    monkeypatch.setattr(m, 'download_candidate', download)
+    monkeypatch.setattr(m, 'select_free', lambda rows, topic: rows[:5])
+    job_id = uuid.uuid4().hex
+    m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
+    m.discover(job_id, m.DiscoverRequest(topic='funny cats', candidate_count=8))
+    job = m.jobs[job_id]
+    assert job['status'] == 'done' and len(job['clips']) == 5
+    assert job['youtube_fallback'] and len(searches) == 1
+    assert job['source_stats']['YouTube']['downloaded'] == 5
+    assert sum('tiktok' in url for url in downloaded) == min(initial_count, 2)
+    assert len(job['search_results']) == initial_count + 5
+    assert 'opaque-session-secret' not in str(job)
+
+
+def test_youtube_off_means_no_fallback_even_when_sources_fail(isolated, monkeypatch):
+    monkeypatch.setattr(m, 'public_search', lambda *args: (results(), []))
+    monkeypatch.setattr(m, 'youtube_search', lambda *args: pytest.fail('YouTube was disabled'))
+    monkeypatch.setattr(m, 'download_candidate', lambda *args: (_ for _ in ()).throw(ValueError('HTTP 403')))
+    job_id = uuid.uuid4().hex
+    m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
+    m.discover(job_id, m.DiscoverRequest(topic='funny cats', allow_youtube=False))
+    assert m.jobs[job_id]['status'] == 'failed' and not m.jobs[job_id]['youtube_fallback']
+
+
+def test_bad_social_scenes_trigger_youtube_and_canonical_duplicates_are_not_downloaded(isolated, monkeypatch):
+    primary = results(5) + youtube_results(1)
+    monkeypatch.setattr(m, 'public_search', lambda *args: (primary, []))
+    extra = youtube_results(6)
+    extra[0]['url'] = 'https://www.youtube.com/watch?v=CATCLIP0000'
+    monkeypatch.setattr(m, 'youtube_search', lambda *args: (extra, []))
+    calls = []
+    def download(item):
+        calls.append(item['url'])
+        return {'id': uuid.uuid4().hex, 'name': item['title'], 'source': item['source'], 'source_url': item['url'], 'duration': 4}
+    monkeypatch.setattr(m, 'download_candidate', download)
+    def select(rows, topic):
+        clips = [row for row in rows if row['source'] == 'YouTube']
+        if len(clips) < 5:
+            raise ValueError('Social scenes unusable')
+        return clips[:5]
+    monkeypatch.setattr(m, 'select_free', select)
+    job_id = uuid.uuid4().hex
+    m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
+    m.discover(job_id, m.DiscoverRequest(topic='funny cats'))
+    assert m.jobs[job_id]['status'] == 'done' and m.jobs[job_id]['youtube_fallback']
+    assert len(calls) == len({m.canonical_url(url) for url in calls}) == 11
+
+
+def test_no_youtube_round_when_five_social_moments_are_ready(isolated, monkeypatch):
+    monkeypatch.setattr(m, 'public_search', lambda *args: (results(), []))
+    monkeypatch.setattr(m, 'download_candidate', lambda item: {'id': uuid.uuid4().hex, 'source': 'TikTok'})
+    monkeypatch.setattr(m, 'select_free', lambda rows, topic: rows[:5])
+    monkeypatch.setattr(m, 'youtube_search', lambda *args: pytest.fail('Unnecessary YouTube round'))
+    job_id = uuid.uuid4().hex
+    m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
+    m.discover(job_id, m.DiscoverRequest(topic='funny cats'))
+    assert m.jobs[job_id]['status'] == 'done' and not m.jobs[job_id]['youtube_fallback']
+
+
+def test_direct_youtube_search_filters_long_live_unrelated_and_duplicate_results(monkeypatch):
+    import json
+    rows = [{'id': 'CATCLIP0000', 'title': 'Funny cats jumping', 'duration': 30},
+            {'id': 'CATCLIP0000', 'title': 'Funny cats duplicate', 'duration': 30},
+            {'id': 'CATCLIP0001', 'title': 'Funny cats long', 'duration': 200},
+            {'id': 'CATCLIP0002', 'title': 'Funny cats live', 'live_status': 'is_live'},
+            {'id': 'CATCLIP0003', 'title': 'Football skills', 'duration': 20},
+            {'id': '../../bad', 'title': 'Funny cats', 'duration': 20}]
+    commands = []
+    monkeypatch.setattr(m, 'run', lambda args, timeout: commands.append(args) or json.dumps({'entries': rows}).encode())
+    def engines(topic, allow_youtube, limit, only_youtube=False):
+        assert only_youtube is True
+        return [youtube_results(2)[1]], []
+    monkeypatch.setattr(f, 'public_search', engines)
+    entries, warnings = f.youtube_search('funny cats', 8)
+    assert len(entries) == 2 and not warnings
+    assert entries[0]['url'] == 'https://www.youtube.com/watch?v=CATCLIP0000'
+    assert '--flat-playlist' in commands[0] and commands[0][-1] == 'ytsearch8:funny cats shorts'

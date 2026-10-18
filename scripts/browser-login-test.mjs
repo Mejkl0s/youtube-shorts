@@ -48,6 +48,16 @@ try {
   await page.getByRole('heading',{name:/Tvoje ranking klipy/}).waitFor();
   assert.equal(await page.locator('.clip-card').count(),5);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.locator('.source-sessions > summary').click();
+  const sourceCard=page.locator('.source-session-card').filter({has:page.getByText('TikTok',{exact:true})});
+  await sourceCard.getByText('Bez uložené relace',{exact:true}).waitFor();
+  const fakeCookies=`# Netscape HTTP Cookie File\n.tiktok.com\tTRUE\t/\tTRUE\t${Math.floor(Date.now()/1000)+86400}\tsessionid\tbrowser-test-session\n`;
+  await page.getByLabel('Cookies pro TikTok',{exact:true}).setInputFiles({name:'cookies.txt',mimeType:'text/plain',buffer:Buffer.from(fakeCookies)});
+  await sourceCard.getByText('Relace nahraná · stažení ji ověří',{exact:true}).waitFor();
+  const sourceStatus=await page.request.get(base+'/api/source-sessions');
+  assert.ok(!(await sourceStatus.text()).includes('browser-test-session'));
+  await page.getByRole('button',{name:'Odpojit TikTok',exact:true}).click();
+  await sourceCard.getByText('Bez uložené relace',{exact:true}).waitFor();
   const cookies=await page.context().cookies();
   const session=cookies.find(cookie=>cookie.name==='rank_studio_session');
   assert.ok(session?.httpOnly);
@@ -77,9 +87,10 @@ try {
   assert.ok(!(await page.context().cookies()).some(cookie=>cookie.name==='rank_studio_session'));
   assert.equal((await page.request.get(base+'/api/fonts/bold')).status(),401);
   assert.equal((await page.request.get(base+completed.download)).status(),401);
+  assert.equal((await page.request.get(base+'/api/source-sessions')).status(),401);
   await page.screenshot({path:'.runtime/screenshots/login-desktop.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  console.log('Browser login passed: HTML login, wrong-password rejection, five-clip editor, protected assets, refresh, HttpOnly cookie, real FFmpeg MP4 export/download, logout and mobile layout; no native auth popup or provider mocks.');
+  console.log('Browser login passed: HTML login, wrong-password rejection, five-clip editor, protected session import/removal without credential disclosure, protected assets, refresh, HttpOnly cookie, real FFmpeg MP4 export/download, logout and mobile layout; no native auth popup or provider mocks.');
 } catch(error) {
   if(page){console.error('Login page diagnostic:',JSON.stringify({url:page.url(),text:(await page.locator('body').innerText()).slice(0,800),consoleErrors}));await page.screenshot({path:'.runtime/screenshots/login-failure.png',fullPage:true});}
   throw error;
