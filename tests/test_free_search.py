@@ -70,6 +70,65 @@ def test_search_fallback_and_youtube_option(monkeypatch):
     assert warnings
 
 
+def test_tiktok_cannot_starve_other_sources_and_video_queries_avoid_profiles(monkeypatch):
+    calls = []
+    def search(query, engine):
+        calls.append(query)
+        if 'site:tiktok.com' in query:
+            assert 'inurl:video' in query
+            return results(20)
+        if 'site:instagram.com' in query:
+            return [{'url': f'https://www.instagram.com/reel/cats{i}/', 'title': 'Funny cats'} for i in range(20)]
+        return youtube_results(20)
+    monkeypatch.setattr(f, 'engine_results', search)
+    entries, warnings = f.public_search('funny cats', True, 12)
+    assert len(entries) == len({m.canonical_url(row['url']) for row in entries}) == 12
+    assert {row['source'] for row in entries} == {'TikTok', 'Instagram'}
+    assert sum(row['source'] == 'Instagram' for row in entries) == 6
+    assert any('site:instagram.com' in query for query in calls)
+    assert any('site:youtube.com' in query for query in calls)
+    assert not warnings
+
+
+def test_topical_instagram_snippet_survives_generic_title_and_nested_markup(monkeypatch):
+    parser = f.DuckResults()
+    parser.feed('<a class="result__a" href="https://www.instagram.com/reel/snow123/">Instagram</a>'
+                '<a class="result__snippet">The funniest <b>winter fails</b> in the snow.</a>'
+                '<a class="result__a" href="https://www.instagram.com/reel/food123/">Instagram</a>'
+                '<div class="result__snippet">Delicious <span>pasta</span> recipes.</div>')
+    assert parser.results[0]['description'] == 'The funniest winter fails in the snow.'
+    assert parser.results[1]['description'] == 'Delicious pasta recipes.'
+    monkeypatch.setattr(f, 'engine_results', lambda *args: parser.results)
+    entries, _ = f.public_search('winter fails', False, 8)
+    assert [row['url'] for row in entries] == ['https://www.instagram.com/reel/snow123/']
+
+
+@pytest.mark.parametrize(('detail', 'expected'), [
+    ('Your IP address is blocked from accessing this post', 'blocked'),
+    ('Unable to extract universal data for rehydration', 'extraction'),
+    ('Requested format is not available', 'format'),
+    ('[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed', 'tls'),
+])
+def test_download_failure_reports_known_causes_without_echoing_secrets(detail, expected):
+    kind, reason = m.download_failure(RuntimeError(detail+' sessionid=opaque-owner-secret'))
+    assert kind == expected
+    assert 'opaque-owner-secret' not in reason
+
+
+def test_failed_video_preparation_is_not_reported_as_download_block(isolated, monkeypatch):
+    def download(args, timeout):
+        (isolated/'media'/args[args.index('-o')+1].split('/')[-2]/'download.mp4').write_bytes(b'video fixture')
+        return b''
+    monkeypatch.setattr(m, 'run', download)
+    monkeypatch.setattr(m, 'register', lambda *args: (_ for _ in ()).throw(RuntimeError('decoder failed; opaque-owner-secret')))
+    with pytest.raises(m.CandidateDownloadError) as failure:
+        m.download_candidate(results(1)[0])
+    kind, reason = m.download_failure(failure.value)
+    assert kind == 'processing' and 'Video se stáhlo' in reason
+    assert 'opaque-owner-secret' not in reason
+    assert not list((isolated/'media').iterdir())
+
+
 def test_http_challenge_is_not_followed_or_treated_as_results(monkeypatch):
     original = httpx.Client
     calls = []

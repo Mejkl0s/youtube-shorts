@@ -43,9 +43,14 @@ class DuckResults(HTMLParser):
         super().__init__()
         self.results = []
         self.active = None
+        self.snippet_tag = None
+        self.snippet_parts = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if self.results and 'result__snippet' in attrs.get('class', '').split():
+            self.snippet_tag = tag
+            self.snippet_parts = []
         if tag == 'a' and 'result__a' in attrs.get('class', '').split():
             href = attrs.get('href', '')
             # Decode the engine's destination parameter, never download its redirect URL.
@@ -59,8 +64,13 @@ class DuckResults(HTMLParser):
     def handle_data(self, data):
         if self.active is not None:
             self.active['parts'].append(data)
+        if self.snippet_tag:
+            self.snippet_parts.append(data)
 
     def handle_endtag(self, tag):
+        if tag == self.snippet_tag:
+            self.results[-1]['description'] = plain(' '.join(self.snippet_parts))
+            self.snippet_tag = None
         if tag == 'a' and self.active is not None:
             self.results.append({'url': self.active['url'], 'title': plain(' '.join(self.active['parts'])), 'description': ''})
             self.active = None
@@ -105,14 +115,17 @@ def relevance(topic, title, description=''):
 
 def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False):
     from .main import canonical_url, social_url
-    sources = [('TikTok', 'site:tiktok.com'), ('Instagram', 'site:instagram.com/reel/')]
+    sources = [('TikTok', 'site:tiktok.com inurl:video'), ('Instagram', 'site:instagram.com/reel/')]
     if allow_youtube:
         sources.append(('YouTube', 'site:youtube.com/shorts/'))
     if only_youtube:
         sources = [source for source in sources if source[0] == 'YouTube']
-    entries, seen, warnings = [], set(), []
+    pools, seen, warnings = [], set(), []
     for source, restriction in sources:
+        entries = []
         for suffix in ('', ' moments'):
+            if len(entries) >= limit:
+                break
             query = topic + suffix + ' ' + restriction
             for engine in ('bing', 'duckduckgo'):
                 added = 0
@@ -139,12 +152,21 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
                                         'provider': engine, 'source': source})
                         added += 1
                         if len(entries) >= limit:
-                            return entries[:limit], warnings
+                            break
                 except Exception:
                     warnings.append(f'{engine}: veřejné vyhledávání pro {source} nebylo dostupné.')
                 if added:
                     break
-    return entries, list(dict.fromkeys(warnings))
+        pools.append(entries)
+        if not entries:
+            warnings.append(f'{source}: vyhledávače nevrátily žádný odpovídající odkaz na video.')
+    # Search each enabled source before applying the total limit. Interleaving
+    # reserves opportunities for Instagram even when TikTok fills its own pool.
+    social_pools = pools if only_youtube else pools[:2]
+    entries = [pool[index] for index in range(limit) for pool in social_pools if index < len(pool)]
+    if not only_youtube:
+        entries.extend(row for pool in pools[2:] for row in pool)
+    return entries[:limit], list(dict.fromkeys(warnings))
 
 
 def youtube_search(topic: str, limit: int):

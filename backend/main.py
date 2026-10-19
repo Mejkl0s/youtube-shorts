@@ -595,6 +595,12 @@ def ai_search(body: DiscoverRequest):
     return entries[:body.candidate_count]
 
 
+class CandidateDownloadError(ValueError):
+    def __init__(self, kind, reason):
+        super().__init__(reason)
+        self.kind = kind
+
+
 def download_candidate(item: dict):
     import sys
     if not social_url(item['url'], True):
@@ -614,7 +620,10 @@ def download_candidate(item: dict):
         if files[0].stat().st_size > MAX_UPLOAD:
             raise ValueError('Video překračuje limit 300 MB.')
         files[0].rename(folder / 'source')
-        candidate = register(folder / 'source', asset_id, item['title'])
+        try:
+            candidate = register(folder / 'source', asset_id, item['title'])
+        except Exception:
+            raise CandidateDownloadError('processing', 'Video se stáhlo, ale kontrola formátu nebo příprava náhledu selhala. Zkus jiný klip.') from None
         candidate.update({key: item[key] for key in ('search_score', 'source', 'provider') if key in item})
         candidate['source_url'] = item.get('source_url', item['url'])
         return candidate
@@ -629,13 +638,21 @@ def source_name(url):
 
 
 def download_failure(error):
+    if isinstance(error, CandidateDownloadError):
+        return error.kind, str(error)
     detail = str(error).lower()
-    if any(word in detail for word in ('403', '429', 'captcha', 'not a bot', 'cloudflare', 'challenge')):
+    if any(word in detail for word in ('403', '429', 'captcha', 'not a bot', 'cloudflare', 'challenge', 'ip address is blocked')):
         return 'blocked', 'Zdroj odmítá stahování z tohoto serveru nebo omezuje počet požadavků.'
     if any(word in detail for word in ('login', 'log in', 'sign in', 'cookies', '401', 'private video')):
         return 'login_required', 'Zdroj vyžaduje platnou přihlášenou relaci.'
     if isinstance(error, subprocess.TimeoutExpired) or 'timed out' in detail:
         return 'timeout', 'Zdroj neodpověděl v časovém limitu.'
+    if 'certificate_verify_failed' in detail or 'certificate verify failed' in detail:
+        return 'tls', 'Server neověřil certifikát zdroje. Je potřeba zkontrolovat důvěryhodné certifikáty hostingu; ověřování HTTPS ponech zapnuté.'
+    if any(word in detail for word in ('unable to extract', 'unexpected response', 'expecting value', 'failed to parse')):
+        return 'extraction', 'Stahovač z odpovědi stránky nezískal data videa. Stránka může být změněná nebo omezená; nahrání cookies nemusí pomoci.'
+    if 'requested format is not available' in detail:
+        return 'format', 'Zdroj nenabízí stažitelný formát videa pro tento požadavek.'
     return 'unavailable', 'Video se nepodařilo stáhnout nebo zpracovat; může být nedostupné či delší než 120 sekund.'
 
 
