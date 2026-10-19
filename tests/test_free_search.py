@@ -103,6 +103,43 @@ def test_topical_instagram_snippet_survives_generic_title_and_nested_markup(monk
     assert [row['url'] for row in entries] == ['https://www.instagram.com/reel/snow123/']
 
 
+@pytest.mark.parametrize('title', [
+    'Antonio Vivaldi - Winter', 'Vivaldi: The Four Seasons - Fall and Winter',
+    'Beautiful winter snow scenery', 'Funny kitchen fails', 'Winter failproof ski equipment',
+])
+def test_winter_fails_rejects_partial_topic_matches(title):
+    assert f.relevance('winter fails', title) == 0
+
+
+@pytest.mark.parametrize('title', [
+    'Winter fail', 'Best winter fails compilation', 'Snow wipeouts',
+    'Slipping on ice', 'Skiing crashes', 'Winter falls', '#winterfails', '#snowfails',
+])
+def test_winter_fails_accepts_subject_and_failed_action(title):
+    assert f.relevance('winter fails', title) > 0
+
+
+def test_required_subjects_cannot_be_replaced_by_generic_style_words():
+    assert f.relevance('funny cats', 'Funny football moments') == 0
+    assert f.relevance('funny cats', 'A cat jumping') > 0
+    assert f.relevance('football skills', 'Football news') == 0
+    assert f.relevance('football skills', 'Football skill compilation') > 0
+
+
+def test_both_search_paths_reject_vivaldi_and_keep_winter_fails(monkeypatch):
+    import json
+    rows = [{'id': 'WINTER00001', 'title': 'Vivaldi - Winter', 'duration': 30},
+            {'id': 'WINTER00002', 'title': 'Snow wipeouts', 'duration': 30}]
+    monkeypatch.setattr(m, 'run', lambda *args: json.dumps({'entries': rows}).encode())
+    monkeypatch.setattr(f, 'engine_results', lambda *args: [
+        {'url': 'https://www.youtube.com/shorts/' + row['id'], 'title': row['title']}
+        for row in rows])
+    web, _ = f.public_search('winter fails', True, 8)
+    direct, _ = f.youtube_search('winter fails', 8)
+    assert [row['title'] for row in web] == ['Snow wipeouts']
+    assert [row['title'] for row in direct] == ['Snow wipeouts']
+
+
 @pytest.mark.parametrize(('detail', 'expected'), [
     ('Your IP address is blocked from accessing this post', 'blocked'),
     ('Unable to extract universal data for rehydration', 'extraction'),

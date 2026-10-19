@@ -100,17 +100,49 @@ def engine_results(query: str, engine: str):
 
 
 def tokens(value):
-    ignored = {'the', 'and', 'best', 'top', 'video', 'videos', 'clip', 'clips', 'tiktok', 'instagram', 'youtube', 'shorts', 'reels', 'na', 'a', 'z', 'klipy', 'videa', 'pet', 'pět'}
-    return {word for word in re.findall(r'[^\W_]+', value.casefold()) if len(word) > 2 and word not in ignored}
+    ignored = {'the', 'and', 'best', 'top', 'video', 'clip', 'tiktok', 'instagram', 'youtube', 'short', 'reel',
+               'moment', 'compilation', 'ranking', 'na', 'a', 'z', 'klipy', 'videa', 'pet', 'pět'}
+    words = set()
+    for word in re.findall(r'[^\W_]+', value.casefold()):
+        # Ordinary English plurals only; arbitrary prefixes (e.g. failproof)
+        # must not count as a topical match.
+        if word == 'falls':
+            word = 'falling'
+        elif word.endswith(('ches', 'shes', 'sses', 'xes', 'zes')):
+            word = word[:-2]
+        elif len(word) > 3 and word.endswith('s') and not word.endswith(('ss', 'us', 'is', 'ies')):
+            word = word[:-1]
+        if len(word) > 2 and word not in ignored:
+            words.add(word)
+    return words
+
+
+WINTER_WORDS = frozenset({'winter', 'snow', 'snowy', 'ice', 'icy', 'ski', 'skiing', 'skier',
+                          'sled', 'sledding', 'snowboard', 'snowboarding', 'snowboarder'})
+FAIL_WORDS = frozenset({'fail', 'failed', 'failing', 'failure', 'blooper', 'wipeout', 'slip',
+                       'slipped', 'slipping', 'fell', 'falling', 'crash', 'crashed', 'crashing'})
+# A bare "fall" is ambiguous (also autumn, including Vivaldi's seasons).
+COMPOUND_FAILS = frozenset(word + ending for word in WINTER_WORDS for ending in ('fail', 'fails'))
 
 
 def relevance(topic, title, description=''):
     wanted = tokens(topic)
     found = tokens(title + ' ' + description)
+    # Formatting/style words cannot replace the subject or action. Keep a
+    # style word as a last resort when the query contains no concrete subject.
+    subjects = wanted - {'funny', 'funniest', 'epic', 'amazing', 'insane'}
+    wanted = subjects or wanted
     if not wanted:
         return 0.0
-    matched = {word for word in wanted if any(word == other or (len(word) >= 4 and other.startswith(word)) for other in found)}
-    return len(matched) / len(wanted)
+    if found & COMPOUND_FAILS:
+        found.update({'winter', 'fail'})
+    for word in wanted:
+        aliases = WINTER_WORDS if word == 'winter' else FAIL_WORDS if word in FAIL_WORDS else {word}
+        if not found & aliases:
+            return 0.0
+    # Every essential concept must be present. Partial overlap must never
+    # admit music/scenery for "winter fails" just to fill the clip count.
+    return 1.0
 
 
 def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False):
