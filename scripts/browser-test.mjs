@@ -50,6 +50,23 @@ try {
   await page.getByText('Zdroj vyžaduje platnou přihlášenou relaci.',{exact:false}).waitFor();
   await page.locator('.found-links > summary').click();
   assert.equal(await page.getByRole('link',{name:'Funny cats source'}).getAttribute('href'),'https://www.tiktok.com/@example/video/123456');
+  // A failed search must still populate all usable clips and leave real empty slots.
+  searchComplete.status='failed';
+  searchComplete.message='V editoru je zachováno 3/5 použitelných klipů. Nahraj zbývající klipy do prázdných míst.';
+  searchComplete.partial_clips=searchComplete.clips.slice(0,3);
+  delete searchComplete.clips;
+  await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'zachováno 3/5'}).waitFor();
+  assert.equal(await page.locator('.clip-card').count(),5);
+  assert.equal(await page.locator('.clip-thumb').count(),3);
+  await page.getByRole('button',{name:'Exportovat Short',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'Zatím máte 3/5'}).waitFor();
+  // Fill the two empty slots through actual uploads, preserving the recovered three.
+  const completion=await (await page.request.get(base+searchDemo.clips[3].url)).body();
+  await page.locator('.clips-section input[type=file]').setInputFiles([0,1].map(i=>({name:`completion${i}.mp4`,mimeType:'video/mp4',buffer:completion})));
+  await page.getByRole('textbox',{name:'Voiceover klipu 1',exact:true}).waitFor({timeout:60000});
+  assert.equal(await page.locator('.clip-thumb').count(),5);
+  assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).inputValue(),'');
   await page.unroute('**/api/discover');
   await page.unroute('**/api/jobs/ui-free-search');
   await page.getByRole('button', { name: /Vyzkoušet syntetickou ukázku/ }).click();

@@ -703,10 +703,19 @@ def discover(job_id: str, body: DiscoverRequest):
             selected, selection_error = choose(88)
         if selected is None:
             summary = '; '.join(f'{name}: {row["downloaded"]}/{row["found"]}' for name, row in stats.items() if row['found'])
-            raise ValueError(f'Podařilo se načíst jen {len(candidates)} videí. {summary or "Nenalezeny odpovídající zdroje."}. '
-                             + (selection_error+' ' if selection_error else '')
-                             + ('Bylo vyzkoušeno i samostatné hledání na YouTube. ' if body.allow_youtube else 'Doplňování z YouTube je vypnuté. ')
-                             + 'Důvody odmítnutí jsou v přehledu zdrojů. Přidej aktuální relaci sítě, zkus jiné téma nebo nahraj vlastní klipy.')
+            # A failed search still owns real downloaded media. Keep usable scenes
+            # visible, without presenting an incomplete ranking as a successful job.
+            partial = select_free(candidates, body.topic, require_five=False) if candidates else []
+            message = (f'Podařilo se načíst jen {len(candidates)} videí. {summary or "Nenalezeny odpovídající zdroje."}. '
+                       + (selection_error+' ' if selection_error else '')
+                       + ('Bylo vyzkoušeno i samostatné hledání na YouTube. ' if body.allow_youtube else 'Doplňování z YouTube je vypnuté. ')
+                       + (f'V editoru je zachováno {len(partial)}/5 použitelných klipů. Nahraj zbývající klipy do prázdných míst. ' if partial else '')
+                       + 'Důvody odmítnutí jsou v přehledu zdrojů.')
+            if partial and body.mode == 'ai':
+                warnings.append('Zachované klipy mají pouze technický výběr scény bez AI hodnocení a komentářů. Obsah a pořadí zkontroluj.')
+            publish(status='failed', progress=100, message=message, partial_clips=partial,
+                    candidate_count=len(candidates), rejected_count=len(failures))
+            return
         publish(status='done', progress=100, message='Pět momentů je připravených. Zkontroluj obsah a pořadí.' if body.mode == 'free' else 'Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=len(failures))
     except Exception as error:
         set_job(job_id, status='failed', message=f'Vyhledávání se nezdařilo: {str(error)[:700]}')

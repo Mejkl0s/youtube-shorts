@@ -243,3 +243,67 @@ def test_direct_youtube_search_filters_long_live_unrelated_and_duplicate_results
     assert len(entries) == 2 and not warnings
     assert entries[0]['url'] == 'https://www.youtube.com/watch?v=CATCLIP0000'
     assert '--flat-playlist' in commands[0] and commands[0][-1] == 'ytsearch8:funny cats shorts'
+
+
+@pytest.mark.parametrize('unusable_extra', [False, True])
+def test_partial_search_preserves_real_scenes_for_upload_completion_and_export(isolated, monkeypatch, unusable_extra):
+    source = isolated/'moving.mp4'
+    m.ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=160x284:r=12:d=3', '-c:v', 'libx264', str(source))
+    black = isolated/'black.mp4'
+    m.ffmpeg('-f', 'lavfi', '-i', 'color=black:s=160x284:r=12:d=3', '-c:v', 'libx264', str(black))
+    entries = [{'url': f'https://www.instagram.com/reel/cats{i}/', 'title': f'Funny cats {i}'} for i in range(3 + int(unusable_extra))]
+    monkeypatch.setattr(m, 'public_search', lambda *args: (entries, []))
+    monkeypatch.setattr(m, 'ai_request', lambda *args, **kwargs: pytest.fail('Partial recovery called a paid API'))
+    original = m.run
+    def download(args, timeout=180):
+        if 'yt_dlp' in args:
+            output = args[args.index('-o')+1].replace('%(ext)s', 'mp4')
+            shutil.copyfile(black if args[-1] == 'https://www.instagram.com/reel/cats3/' else source, output)
+            return b''
+        return original(args, timeout)
+    monkeypatch.setattr(m, 'run', download)
+    job_id = uuid.uuid4().hex
+    m.jobs[job_id] = {'id': job_id, 'kind': 'discover', 'status': 'queued'}
+    m.discover(job_id, m.DiscoverRequest(topic='funny cats'))
+    client = TestClient(m.app)
+    job = client.get('/api/jobs/'+job_id).json()
+    assert job['status'] == 'failed' and job['youtube_fallback']
+    assert '3/5 použitelných klipů' in job['message']
+    clips = job['partial_clips']
+    assert len(clips) == len({clip['id'] for clip in clips}) == 3
+    assert job['candidate_count'] == 3 + int(unusable_extra)
+    assert not job.get('clips') and not job.get('download')
+    assert all(clip['voiceover'] == '' and clip['source_url'] in [row['url'] for row in entries[:3]] for clip in clips)
+    assert all(0 <= clip['start'] < clip['start']+clip['duration'] <= 3.05 for clip in clips)
+    assert client.post('/api/render', json={'title': 'TOP 5 CATS', 'clips': clips, 'voice': False}).status_code == 422
+    if not unusable_extra:
+        for index in range(2):
+            upload = client.post('/api/upload', files={'file': (f'completion{index}.mp4', source.read_bytes(), 'video/mp4')})
+            assert upload.status_code == 200, upload.text
+            clips.append({**upload.json(), 'title': f'Extra cats {index}', 'voiceover': '', 'start': 0, 'duration': 3})
+        render_id = uuid.uuid4().hex
+        m.jobs[render_id] = {'id': render_id, 'status': 'queued'}
+        m.render(render_id, m.Project(title='TOP 5 CATS', clips=clips, voice=False, resolution='720'))
+        assert m.jobs[render_id]['status'] == 'done', m.jobs[render_id]
+        assert client.get('/api/jobs/'+render_id+'/download').status_code == 200
+
+
+def test_partial_ai_discovery_keeps_scenes_and_stops_later_assistant_actions(isolated, monkeypatch):
+    from backend import assistant as a
+    partial = [{'id': uuid.uuid4().hex, 'title': f'Funny cats {i}', 'voiceover': '', 'start': 0, 'duration': 3} for i in range(3)]
+    assets = {clip['id']: {'id': clip['id'], 'name': clip['title'], 'duration': 3} for clip in partial}
+    monkeypatch.setattr(m, 'asset', lambda identity: assets[identity])
+    monkeypatch.setattr(a, 'plan_request', lambda body: a.Plan(reply='Připravím ranking.', actions=['discover', 'scripts', 'render']))
+    def incomplete(child, body):
+        assert body.mode == 'ai'
+        m.set_job(child, status='failed', message='V editoru je zachováno 3/5 klipů.', partial_clips=partial)
+    monkeypatch.setattr(m, 'discover', incomplete)
+    monkeypatch.setattr(m, 'scripts', lambda *args: pytest.fail('Scripts ran after incomplete discovery'))
+    monkeypatch.setattr(m, 'render', lambda *args: pytest.fail('Export ran after incomplete discovery'))
+    job_id = uuid.uuid4().hex
+    m.jobs[job_id] = {'id': job_id, 'kind': 'assistant', 'status': 'queued'}
+    a.run_assistant(job_id, a.Request(message='Make a ranking', state=a.State(topic='funny cats')))
+    job = m.jobs[job_id]
+    assert job['status'] == 'failed' and not job.get('download')
+    assert [clip['id'] for clip in job['project']['clips']] == [clip['id'] for clip in partial]
+    assert job['project']['voice'] is False

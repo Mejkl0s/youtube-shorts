@@ -201,7 +201,7 @@ def window_score(raw: bytes):
     return .4 * motion + .4 * edges + .2 * exposure
 
 
-def select_free(candidates, topic):
+def select_free(candidates, topic, *, require_five=True):
     from . import main as m
     selected = []
     for candidate in candidates:
@@ -227,7 +227,7 @@ def select_free(candidates, topic):
     supplement = [row for row in selected if row[1].get('source') == 'YouTube']
     chosen = sorted(social, key=lambda row: row[0], reverse=True)[:5]
     chosen += sorted(supplement, key=lambda row: row[0], reverse=True)[:5-len(chosen)]
-    if len(chosen) < 5:
+    if require_five and len(chosen) < 5:
         raise ValueError(f'Pouze {len(chosen)} dostupných videí obsahuje použitelnou souvislou scénu. Zkuste jiné téma nebo nahrajte vlastní klipy.')
     result = []
     for _, candidate, start, duration in sorted(chosen, key=lambda row: row[0]):

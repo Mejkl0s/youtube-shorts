@@ -13,7 +13,7 @@ const DEFAULT_VOICE: VoiceSettings = { provider:'edge', voice:'free_male', speed
 const VOICES = [{id:'edge:free_male',name:'Andrew / Antonín · zdarma bez klíče',provider:'edge',voice:'free_male'}, {id:'openai:onyx',name:'Onyx · placené OpenAI API',provider:'openai',voice:'onyx'}, {id:'openai:echo',name:'Echo · placené OpenAI API',provider:'openai',voice:'echo'}, {id:'elevenlabs:adam',name:'Adam · placené ElevenLabs API',provider:'elevenlabs',voice:'adam'}, {id:'elevenlabs:josh',name:'Josh · placené ElevenLabs API',provider:'elevenlabs',voice:'josh'}, {id:'elevenlabs:antoni',name:'Antoni · placené ElevenLabs API',provider:'elevenlabs',voice:'antoni'}, {id:'elevenlabs:custom',name:'Vlastní · placené ElevenLabs API',provider:'elevenlabs',voice:'custom'}, {id:'piper:local',name:'Piper · lokální alternativa',provider:'piper',voice:'local'}] as const;
 type AIProject = { topic:string; title:string; ranking_criteria:string; language:string; resolution:string; candidate_count:number; allow_youtube:boolean; voice:boolean; effects:boolean; captions:boolean; original_volume:number; voice_volume:number; effects_volume:number; layout:Layout; voice_settings:VoiceSettings; clips:Record<string,unknown>[] };
 type Health = { voices: Record<string, boolean>; ai_scripts: boolean; elevenlabs: boolean; reference_voice: boolean; owner_login?:boolean;free_voice?:boolean };
-type Job = { id: string; status: string; progress: number; message: string; download?: string; clips?: Record<string, unknown>[]; candidate_count?: number; kind?: string; mode?: 'free'|'ai'; search_results?: {url:string;title:string}[]; warnings?:string[]; youtube_fallback?:boolean; source_stats?:Record<string,{found:number;downloaded:number;failed:number}>; download_failures?:{source:string;url:string;kind:string;reason:string}[]; assistant_reply?: string; project?: AIProject; reference?: Reference; research?: Research };
+type Job = { id: string; status: string; progress: number; message: string; download?: string; clips?: Record<string, unknown>[]; partial_clips?: Record<string, unknown>[]; candidate_count?: number; kind?: string; mode?: 'free'|'ai'; search_results?: {url:string;title:string}[]; warnings?:string[]; youtube_fallback?:boolean; source_stats?:Record<string,{found:number;downloaded:number;failed:number}>; download_failures?:{source:string;url:string;kind:string;reason:string}[]; assistant_reply?: string; project?: AIProject; reference?: Reference; research?: Research };
 type Research = { channels: { name: string; url: string; observation: string; evidence: string }[]; recommendations: string[]; limitations: string };
 const words = (text: string) => text.match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
 const blankClips = (): (Clip | null)[] => Array(5).fill(null);
@@ -108,7 +108,15 @@ function App() {
         setJob(next);
         if(next.kind==='assistant' && next.assistant_reply && assistantTurn.current){setMessages(old=>old.map(m=>m.id===assistantTurn.current?{...m,content:next.assistant_reply!,pending:!['done','failed'].includes(next.status)}:m));}
         if(next.kind==='assistant' && ['done','failed'].includes(next.status)){if(next.project){pendingDownload.current=next.download || null;applyProject(next.project);}else if(next.download)setExported(next.download);if(next.reference){setReference(next.reference);setTemplateInstructions(next.reference.instructions??'');setTemplateFrame(next.reference.frame_time??0);}if(next.research){setResearch(next.research);setModal('research');}}
-        if (next.status === 'failed') setError(next.message);
+        if (next.status === 'failed') {
+          setError(next.message);
+          if (next.kind==='discover' && next.partial_clips?.length) {
+            const recovered:(Clip|null)[]=next.partial_clips.slice(0,5).map(normalize);
+            while(recovered.length<5)recovered.push(null);
+            setClips(recovered);setSelected(0);setPlaying(false);setVoice(false);
+            setToast(`Zachováno ${next.partial_clips.length}/5 klipů. Zbývající nahraj do prázdných míst.`);
+          }
+        }
         if (next.status === 'done') {
           if (next.clips) { setClips(next.clips.map(normalize)); setSelected(0); if(next.mode==='free')setVoice(false); setToast(next.mode==='free'?`Vybráno pět scén z ${next.candidate_count} videí bez placeného API. Zkontroluj obsah a pořadí.`:`AI vybrala pět momentů z ${next.candidate_count} videí.`); }
           if (next.download && next.kind!=='assistant') { setExported(next.download); setToast('Export dokončen. Váš Short je připravený!'); }
