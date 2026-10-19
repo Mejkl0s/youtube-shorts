@@ -18,9 +18,11 @@ try {
   assert.equal(await page.getByLabel('REŽIM HLEDÁNÍ', {exact:true}).inputValue(), 'free');
   assert.equal(await page.getByRole('switch', {name:'AI voiceover',exact:true}).getAttribute('aria-checked'), 'false');
   assert.equal(await page.locator('.clip-card').count(), 5);
-  assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'openai:onyx');
+  assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'edge:free_male');
   await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).selectOption('openai:echo');
   assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'openai:echo');
+  await page.getByRole('button',{name:'Použít hlas zdarma',exact:true}).click();
+  assert.equal(await page.getByLabel('MUŽSKÝ HLAS',{exact:true}).inputValue(),'edge:free_male');
   await page.locator('.paid-assistant > summary').click();
   await page.route('**/api/assistant', route => route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({detail:'Osobní AI asistent potřebuje OPENAI_API_KEY v nastavení prostředí.'})}));
   await page.getByRole('textbox', {name:'Příkaz pro AI režiséra'}).fill('Najdi pět fotbalových momentů.');

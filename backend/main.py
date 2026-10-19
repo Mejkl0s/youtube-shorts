@@ -26,6 +26,7 @@ from .style import FONTS, Layout, VoiceSettings, voice_available
 from .access import owner_access
 from .free_search import public_search, youtube_search, select_free
 from .social_sessions import download_session
+from .free_voice import available as free_voice_available
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('RANK_DATA_DIR', str(ROOT / '.runtime'))).resolve()
@@ -133,7 +134,7 @@ class Project(BaseModel):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
+    return {'status': 'ok', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'free_voice': free_voice_available(), 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
 
 
 @app.get('/api/fonts/{name}')
@@ -213,6 +214,10 @@ def scripts(body: ScriptRequest):
 
 def synthesize(text: str, language: str, output: Path, config: VoiceSettings | None = None):
     config = config or VoiceSettings()
+    if config.provider == 'edge':
+        from .free_voice import synthesize as free_speech
+        free_speech(text, language, output, config.speed)
+        return
     if config.provider == 'openai':
         key = os.environ.get('OPENAI_API_KEY')
         if not key:
@@ -390,7 +395,7 @@ def start_render(project: Project):
         if clip.start + clip.duration > metadata['duration'] + 0.05:
             raise HTTPException(422, 'Celý výřez musí být uvnitř klipu. Zkraťte délku nebo posuňte začátek.')
     if project.voice and not voice_available(project.voice_settings, project.language, health()):
-        raise HTTPException(409, 'Vybraný mužský hlas není připojený. Nastavte API klíč poskytovatele hlasu.')
+        raise HTTPException(409, 'Vybraný hlas není dostupný. Pro hlas bez API klíče vyber Andrew / Antonín · zdarma, nebo nastav požadovaný placený hlas.')
     with job_lock:
         if any(j['status'] in ('queued', 'rendering', 'searching', 'working') for j in jobs.values()):
             raise HTTPException(409, 'Jeden export právě běží. Počkejte na jeho dokončení.')

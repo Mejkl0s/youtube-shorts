@@ -216,7 +216,8 @@ def plan_request(body: Request):
     messages: list[dict] = [{'role': 'system', 'content':
         'You are Rank Studio, a personal video director. Reply in Czech unless asked otherwise. Use only the bounded tools described below. '
         'The project ALWAYS has exactly five distinct clips, #5 to #1, primary sources TikTok/Instagram and optional YouTube. '
-        'Default narration is quality English male Onyx via OpenAI; Echo is a smoother alternative, ElevenLabs Adam/Josh/Antoni are optional. '
+        'Preserve the selected narration provider. The editor defaults to keyless online male Edge speech: Andrew in English, Antonin in Czech. '
+        'OpenAI Onyx/Echo and ElevenLabs Adam/Josh/Antoni are optional paid providers; switch only when the user requests them. '
         'Keep analytical voiceover to 1–7 words. Default clips are 2–5 seconds, manually at most 8. '
         'Follow user requests using current project state, not generic advice. Return a JSON plan matching this schema: ' + json.dumps(Plan.model_json_schema()) + '. '
         'Actions execute in order: analyze_template (attached reference image), discover (find many real social candidates, visually choose 5 and create analytical comments), '
@@ -314,7 +315,7 @@ def run_assistant(job_id: str, body: Request):
                     if clip.start + clip.duration > m.asset(clip.id)['duration'] + 0.05:
                         raise ValueError('Celý výřez se musí vejít do zdrojového klipu.')
                 if project.voice and not voice_available(project.voice_settings, project.language, m.health()):
-                    raise ValueError('Připojte API klíč vybraného mužského hlasu v nastavení prostředí.')
+                    raise ValueError('Vybraný hlas není dostupný. Vyber dostupný hlas v editoru a ověř jeho ukázku.')
                 child = uuid.uuid4().hex
                 with m.job_lock:
                     m.jobs[child] = {'id': child, 'status': 'queued', 'kind': 'render', 'progress': 0, 'message': 'Exportuji…'}

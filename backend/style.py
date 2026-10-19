@@ -34,8 +34,8 @@ class Layout(BaseModel):
 
 
 class VoiceSettings(BaseModel):
-    provider: Literal['openai', 'elevenlabs', 'piper'] = 'openai'
-    voice: Literal['onyx', 'echo', 'adam', 'josh', 'antoni', 'custom', 'local'] = Field(default='onyx', validate_default=True)
+    provider: Literal['openai', 'elevenlabs', 'piper', 'edge'] = 'openai'
+    voice: Literal['onyx', 'echo', 'adam', 'josh', 'antoni', 'custom', 'local', 'free_male'] = Field(default='onyx', validate_default=True)
     speed: float = Field(default=1.0, ge=0.85, le=1.2)
     delivery: str = Field(default='A confident, natural male narrator. Clear English, conversational energy, varied emphasis. No exaggerated shouting. Let the key observation land.', max_length=300)
 
@@ -43,7 +43,7 @@ class VoiceSettings(BaseModel):
     @classmethod
     def compatible(cls, value, info):
         provider = info.data.get('provider', 'openai')
-        valid = {'openai': ['onyx', 'echo'], 'elevenlabs': ['adam', 'josh', 'antoni', 'custom'], 'piper': ['local']}
+        valid = {'openai': ['onyx', 'echo'], 'elevenlabs': ['adam', 'josh', 'antoni', 'custom'], 'piper': ['local'], 'edge': ['free_male']}
         if value not in valid[provider]:
             raise ValueError('Hlas nepatří vybranému poskytovateli.')
         return value
@@ -57,6 +57,8 @@ FONTS = {
 
 
 def voice_available(config, language, health):
+    if config.provider == 'edge':
+        return bool(health.get('free_voice')) and language in ('en', 'cs')
     if config.provider == 'openai':
         return health['ai_scripts']
     if config.provider == 'elevenlabs':

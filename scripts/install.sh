@@ -10,7 +10,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 npm ci
 npm run build
-# Premium male speech uses the configured API. Local Piper is an explicit alternative.
+# New browser projects use keyless online speech. Local Piper is an explicit alternative.
 if [ "${INSTALL_LOCAL_VOICE:-0}" = "1" ]; then
   .venv/bin/python scripts/download_models.py --language en
 fi
