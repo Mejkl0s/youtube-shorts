@@ -129,6 +129,23 @@ def test_failed_video_preparation_is_not_reported_as_download_block(isolated, mo
     assert not list((isolated/'media').iterdir())
 
 
+@pytest.mark.parametrize(('output', 'expected'), [
+    (b'[download] Winter fails does not pass filter (duration <= 120), skipping ..', 'duration'),
+    (b'[download] File is larger than max-filesize (400000000 bytes > 314572800 bytes). Aborting.', 'size'),
+])
+def test_downloader_skip_reports_actual_limit_instead_of_generic_unavailable(isolated, monkeypatch, output, expected):
+    def download(args, timeout):
+        assert args[args.index('--match-filter')+1] == 'duration <= 120'
+        assert args[args.index('--max-filesize')+1] == '300M'
+        return output+b' private-session-token-do-not-echo'
+    monkeypatch.setattr(m, 'run', download)
+    with pytest.raises(m.CandidateDownloadError) as failure:
+        m.download_candidate({'url': 'https://www.youtube.com/shorts/CATCLIP0000', 'title': 'Winter fails'})
+    kind, reason = m.download_failure(failure.value)
+    assert kind == expected and 'private-session-token' not in reason
+    assert not list((isolated/'media').iterdir())
+
+
 def test_http_challenge_is_not_followed_or_treated_as_results(monkeypatch):
     original = httpx.Client
     calls = []

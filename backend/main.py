@@ -613,9 +613,15 @@ def download_candidate(item: dict):
             args = [sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir', '--no-remote-components', '--js-runtimes', 'node', '--no-playlist', '--no-progress', '--socket-timeout', '15', '--retries', '1', '--max-filesize', '300M', '--match-filter', 'duration <= 120', '--restrict-filenames', '--merge-output-format', 'mp4', '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '-o', str(folder / 'download.%(ext)s')]
             if cookies:
                 args += ['--cookies', str(cookies)]
-            run([*args, '--', item['url']], 75)
+            output = run([*args, '--', item['url']], 75)
         files = [p for p in folder.glob('download.*') if p.suffix not in ('.part', '.ytdl')]
         if len(files) != 1:
+            if not files:
+                messages = output.decode(errors='replace').lower()
+                if 'does not pass filter' in messages:
+                    raise CandidateDownloadError('duration', 'Video nesplňuje limit délky 120 sekund; stahovač ho přeskočil.')
+                if 'larger than max-filesize' in messages:
+                    raise CandidateDownloadError('size', 'Video překračuje limit velikosti 300 MB; stahovač ho přeskočil.')
             raise ValueError('Video nebylo dostupné.')
         if files[0].stat().st_size > MAX_UPLOAD:
             raise ValueError('Video překračuje limit 300 MB.')
