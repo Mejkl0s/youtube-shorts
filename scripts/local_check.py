@@ -2,6 +2,7 @@
 from pathlib import Path
 import shutil
 import tempfile
+import sys
 
 from backend import main as m
 from backend.style import FONTS, filter_path
@@ -14,6 +15,10 @@ def main():
     for font in FONTS.values():
         if not Path(font).is_file():
             raise RuntimeError('Chybi pribalene pismo.')
+    transport = m.run([sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir', '--list-impersonate-targets'], 20)
+    if b'curl_cffi' not in transport:
+        raise RuntimeError('Stahovac nema doporucenou podporu curl_cffi. Spust instalaci ze SPUSTIT-WINDOWS.bat nebo aktualizuj zavislosti podle WINDOWS.md.')
+    print('OK: stahovac rozpoznal podporu curl_cffi pro kompatibilni nacitani stranek.')
     with tempfile.TemporaryDirectory(prefix='Rank Studio ') as directory:
         folder = Path(directory)/"O'Brien [PC], ž; test"
         folder.mkdir()

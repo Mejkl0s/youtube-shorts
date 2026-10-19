@@ -97,4 +97,5 @@ def test_local_doctor_really_encodes_mp4_and_does_not_require_online_keys(tmp_pa
                             cwd=launcher.ROOT, env=environment, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout+result.stderr
     assert 'OK: skutecne MP4, H264/AAC' in result.stdout
+    assert 'OK: stahovac rozpoznal podporu curl_cffi' in result.stdout
     assert 'offline test nepotvrzuje' in result.stdout
