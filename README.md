@@ -2,9 +2,15 @@
 
 A personal AI director, editor and MP4 renderer for ranking Shorts: exactly five clips, #5 → #1, portrait 9:16, sound effects and a short English neural voiceover per clip (1–7 words).
 
+## Windows desktop launch
+
+Download and extract the [repository ZIP](https://github.com/Mejkl0s/youtube-shorts/archive/refs/heads/main.zip), then double-click **SPUSTIT-WINDOWS.bat**. It uses winget to install missing Python 3.12 x64, Node.js LTS (24+), FFmpeg and optional Tesseract, installs the locked app dependencies and opens the same web editor on the user's PC. No Render account or paid API key is required for the free workflow. **OVERIT-WINDOWS.bat** performs a real offline MP4/codec/font/path check. See [the Czech Windows guide](WINDOWS.md) for setup, local session imports, persistence and troubleshooting. The launcher binds to loopback only and refuses an occupied port instead of opening an unrelated app.
+
+Running locally is an alternative network location to test; it is not proof that TikTok, Instagram, YouTube, search engines or online speech will allow requests. Native Windows installation and live source access must be verified on that PC. Common launcher, editor and export behavior can be tested in Linux without claiming Windows execution.
+
 ## Run
 
-Requires Node 20.19+ (Node 24 tested), Python 3.12, FFmpeg with libx264/drawtext, ffprobe and DejaVu Sans Bold. Python and Node dependencies are locked in `requirements.txt` and `package-lock.json`.
+Requires Node 24+, Python 3.12, FFmpeg with libx264/drawtext and ffprobe. DejaVu fonts and their redistribution license are bundled in `backend/fonts`; the editor and exported video use those same fonts on Linux and Windows. Python and Node dependencies are locked in `requirements.txt` and `package-lock.json`; uvloop is skipped on Windows. FFmpeg filter paths handle drive letters, spaces, apostrophes and filter delimiters, and title/caption files are written as UTF-8.
 
 ```bash
 python3 -m venv .venv

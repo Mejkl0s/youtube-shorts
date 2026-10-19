@@ -92,6 +92,11 @@ async def login(request):
 
 
 async def owner_access(request, call_next):
+    if os.environ.get('RANK_LOCAL_MODE') == '1':
+        if request.url.hostname not in ('127.0.0.1', 'localhost', '::1'):
+            return JSONResponse({'detail': 'Lokální studio přijímá jen adresu tohoto počítače.'}, status_code=400)
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not same_origin(request):
+            return JSONResponse({'detail': 'Požadavek musí pocházet z lokálního studia.'}, status_code=403)
     if request.url.path == '/api/health':
         return await call_next(request)
     password = os.environ.get('STUDIO_PASSWORD', '')

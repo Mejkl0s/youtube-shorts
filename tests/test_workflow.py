@@ -3,6 +3,9 @@ import time
 import uuid
 import io
 import wave
+import shutil
+import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -16,6 +19,16 @@ from backend.style import Layout, VoiceSettings
 
 @pytest.fixture
 def isolated(tmp_path, monkeypatch):
+    # Exercise actual filter paths with Windows-like punctuation and Czech names.
+    name = "O'Brien [Windows], ž; studio"
+    tmp_path = tmp_path/(('Drive C: ' if os.name != 'nt' else '')+name)
+    tmp_path.mkdir()
+    portable_fonts = {}
+    for name, original in m.FONTS.items():
+        target = tmp_path/Path(original).name
+        shutil.copyfile(original, target)
+        portable_fonts[name] = str(target)
+    monkeypatch.setattr(m, 'FONTS', portable_fonts)
     for directory in ['media', 'jobs', 'models']:
         (tmp_path / directory).mkdir()
     monkeypatch.setattr(m, 'DATA', tmp_path)

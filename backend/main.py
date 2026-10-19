@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
-from .style import FONTS, Layout, VoiceSettings, voice_available
+from .style import FONTS, Layout, VoiceSettings, voice_available, filter_path
 from .access import owner_access
 from .free_search import public_search, youtube_search, select_free
 from .social_sessions import download_session
@@ -31,7 +31,7 @@ from .free_voice import available as free_voice_available
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('RANK_DATA_DIR', str(ROOT / '.runtime'))).resolve()
 MODELS = Path(os.environ.get('PIPER_MODEL_DIR', str(ROOT / '.runtime/models'))).resolve()
-FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+FONT = FONTS['bold']
 for folder in [DATA / 'media', DATA / 'jobs', MODELS]:
     folder.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title='Rank Studio')
@@ -134,7 +134,7 @@ class Project(BaseModel):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'free_voice': free_voice_available(), 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
+    return {'status': 'ok', 'studio': 'rank-studio', 'local_mode': os.environ.get('RANK_LOCAL_MODE') == '1', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'free_voice': free_voice_available(), 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
 
 
 @app.get('/api/fonts/{name}')
@@ -351,16 +351,16 @@ def render(job_id: str, project: Project):
                 filters.append(f'anullsrc=r=44100:cl=stereo,atrim=duration={duration}[audio]')
             layout = project.layout
             titlefile = folder / f'title-{rank}.txt'
-            titlefile.write_text(wrap(project.title.upper(), max(10, int(26*0.0454/layout.title_size))))
+            titlefile.write_text(wrap(project.title.upper(), max(10, int(26*0.0454/layout.title_size))), encoding='utf-8')
             captionfile = folder / f'caption-{rank}.txt'
-            captionfile.write_text(wrap(clip.voiceover, max(12, int(25*0.0528/layout.caption_size))))
+            captionfile.write_text(wrap(clip.voiceover, max(12, int(25*0.0528/layout.caption_size))), encoding='utf-8')
             labelfile = folder / f'label-{rank}.txt'
-            labelfile.write_text(wrap(clip.title, 32))
+            labelfile.write_text(wrap(clip.title, 32), encoding='utf-8')
             criteriafile = folder / f'criteria-{rank}.txt'
-            criteriafile.write_text(wrap(project.ranking_criteria.upper(), 50))
-            font = FONTS[layout.font]
+            criteriafile.write_text(wrap(project.ranking_criteria.upper(), 50), encoding='utf-8')
+            font = filter_path(FONTS[layout.font])
             def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2'):
-                return f'drawtext=fontfile={font}:textfile={file}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
+                return f'drawtext=fontfile={font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
             def aligned_x(name):
                 alignment = getattr(layout, name+'_align')
                 margin = int(width * getattr(layout, name+'_x'))
@@ -380,7 +380,7 @@ def render(job_id: str, project: Project):
             rendered.append(out)
         set_job(job_id, progress=96, message='Spojuji pět klipů a dokončuji MP4…')
         concat = folder / 'concat.txt'
-        concat.write_text('\n'.join(f"file '{p.name}'" for p in rendered))
+        concat.write_text('\n'.join(f"file '{p.name}'" for p in rendered), encoding='utf-8')
         ffmpeg('-f', 'concat', '-safe', '0', '-i', str(concat), '-c', 'copy', '-movflags', '+faststart', str(folder / 'ranking.mp4'))
         output_meta = probe(folder / 'ranking.mp4')
         set_job(job_id, status='done', progress=100, message='Váš Short je připravený.', download=f'/api/jobs/{job_id}/download', duration=float(output_meta['format']['duration']))

@@ -1,5 +1,6 @@
 """Bounded template and narration settings shared by the assistant and renderer."""
 from typing import Literal
+from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -49,11 +50,20 @@ class VoiceSettings(BaseModel):
         return value
 
 
-FONTS = {
-    'bold': '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-    'condensed': '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',
-    'serif': '/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf',
-}
+FONT_DIR = Path(__file__).resolve().parent / 'fonts'
+FONTS = {name: str(FONT_DIR / filename) for name, filename in {
+    'bold': 'DejaVuSans-Bold.ttf',
+    'condensed': 'DejaVuSansCondensed-Bold.ttf',
+    'serif': 'DejaVuSerif-Bold.ttf',
+}.items()}
+
+
+def filter_path(path):
+    """Escape a path for both FFmpeg's filter-graph and option parsers."""
+    value = str(path).replace('\\', '/')
+    for special in ("\\':", "\\'[],;"):
+        value = ''.join('\\'+char if char in special else char for char in value)
+    return value
 
 
 def voice_available(config, language, health):
