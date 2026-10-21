@@ -292,3 +292,31 @@ def test_assistant_shortens_long_narration_instead_of_rushing_voice(isolated, mo
     assert m.jobs[job_id]['status'] == 'done', m.jobs[job_id]
     assert all(c.voiceover == 'Perfect timing.' for c in project.clips)
     assert (isolated / 'jobs' / job_id / 'caption-5.txt').read_text() == 'Perfect timing.'
+
+
+def test_visual_scripts_enforce_requested_short_length(isolated, monkeypatch):
+    identity = uuid.uuid4().hex
+    make_source(isolated/'media'/identity)
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-placeholder')
+    supplied = ['One small mistake.'] * 5
+    payloads = []
+    class Response:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {'choices': [{'message': {'content': json.dumps({'lines': supplied})}}]}
+    def post(url, **options):
+        payloads.append(options['json'])
+        return Response()
+    monkeypatch.setattr(m.httpx, 'post', post)
+    body = {'clips': [{'id': identity, 'title': 'Winter fails', 'voiceover': '', 'duration': 2} for _ in range(5)], 'max_words': 4}
+    client = TestClient(m.app)
+    response = client.post('/api/scripts', json=body)
+    assert response.status_code == 200 and response.json()['lines'] == supplied
+    content = payloads[0]['messages'][0]['content']
+    assert '1 to 4 words' in content[0]['text']
+    assert sum(item['type'] == 'image_url' for item in content) == 5
+    supplied[:] = ['That timing wins this round.'] * 5  # five words, valid globally but too long here
+    rejected = client.post('/api/scripts', json=body)
+    assert rejected.status_code == 502 and 'limit 4 slov' in rejected.text
+    assert client.post('/api/scripts', json={**body, 'max_words': 8}).status_code == 422

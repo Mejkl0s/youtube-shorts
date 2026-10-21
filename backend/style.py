@@ -16,13 +16,14 @@ class Layout(BaseModel):
     rank_x: float = Field(default=0.0602, ge=0.01, le=0.8)
     rank_y: float = Field(default=0.1719, ge=0.05, le=0.65)
     rank_size: float = Field(default=0.1343, ge=0.05, le=0.24)
+    rank_style: Literal['outline', 'badge', 'plain'] = 'outline'
     caption_y: float = Field(default=0.7708, ge=0.45, le=0.9)
     caption_size: float = Field(default=0.0528, ge=0.025, le=0.09)
     caption_align: Literal['left', 'center', 'right'] = 'center'
     caption_x: float = Field(default=.07, ge=.01, le=.75)
     header_darkness: float = Field(default=0.5, ge=0, le=0.9)
-    show_label: bool = True
-    show_criteria: bool = True
+    show_label: bool = False
+    show_criteria: bool = False
 
     @field_validator('title_color', 'rank_color', 'caption_color')
     @classmethod

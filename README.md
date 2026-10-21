@@ -8,6 +8,14 @@ Download and extract the [repository ZIP](https://github.com/Mejkl0s/youtube-sho
 
 Running locally is an alternative network location to test; it is not proof that TikTok, Instagram, YouTube, search engines or online speech will allow requests. Native Windows installation and live source access must be verified on that PC. Common launcher, editor and export behavior can be tested in Linux without claiming Windows execution.
 
+## Finish the ranking
+
+After finding five clips, choose **Výrazný ranking** (large yellow number with a black outline) or **Číslo v rámečku**. These presets hide source filenames and ranking criteria from the video. Font, positions, colors and number treatment remain editable and apply to the live layout and real FFmpeg export; imported reference settings are preserved until a preset is explicitly chosen.
+
+**Uvedení pořadí zdarma** prepares two-word English/Czech position announcements, selects the keyless male voice and enables speech, effects and captions. These are position announcements, not invented descriptions of the scene. They follow reordering and language changes; manually edited text is preserved. Write a specific 2–4-word comment yourself, or use the optional paid **AI komentáře · 2–4 slova**, which checks the requested limit against real scene frames. The existing seven-word maximum remains available for manual comments.
+
+**Exportovat Short** mixes the selected voice, whooshes (#5–#2) and winner chord (#1). The source player previews editing with original audio; after export, **Hotové video se zvukem** plays the actual MP4 inline, including the rendered layout and enabled audio tracks. AAC padding is removed per segment before the final audio join so sound stays aligned at the cuts. Free online speech still depends on service availability and never falls back to a paid provider.
+
 ## Run
 
 Requires Node 24+, Python 3.12, FFmpeg with libx264/drawtext and ffprobe. DejaVu fonts and their redistribution license are bundled in `backend/fonts`; the editor and exported video use those same fonts on Linux and Windows. Python and Node dependencies are locked in `requirements.txt` and `package-lock.json`; uvloop is skipped on Windows. FFmpeg filter paths handle drive letters, spaces, apostrophes and filter delimiters, and title/caption files are written as UTF-8.

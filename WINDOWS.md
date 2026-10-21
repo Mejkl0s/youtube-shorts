@@ -9,6 +9,19 @@
 
 Pro další použití stačí znovu otevřít `SPUSTIT-WINDOWS.bat`. Render teď pro lokální studio nepotřebuješ. Pokud se prohlížeč sám neotevře, spouštěč vypíše lokální adresu, kterou můžeš zadat ručně. Toto studio je přístupné jen na tvém počítači.
 
+## Dokončení videa po vyhledání klipů
+
+1. Klikni **Uložit projekt**, aby aktuální výběr zůstal uložený v tomto prohlížeči.
+2. Pro čistý vzhled zvol **Výrazný ranking** nebo **Číslo v rámečku**. Předloha zůstává volitelná; vybraný preset nastaví větší čísla a skryje názvy zdrojových souborů i kritéria ve videu.
+3. Zvol **Uvedení pořadí zdarma**: nastaví dvouslovná uvedení pořadí, mužský hlas bez klíče a zapne efekty i titulky. Místo uvedení můžeš napsat vlastní komentář, nejlépe 2–4 slova. Bezplatná uvedení nepopisují neověřený děj ve videu; AI komentáře podle obrazu jsou oddělená placená možnost.
+4. Klikni **Exportovat Short**. Výsledný mix a vzhled ověř v přehrávači **Hotové video se zvukem**. Horní pracovní náhled přehrává jen původní zvuk.
+
+## Aktualizace existující kopie
+
+Pomocník `AKTUALIZOVAT-WINDOWS.bat` stáhne jednu konkrétní otestovanou verzi tohoto repozitáře. Před aktualizací ulož projekt v aplikaci a ukonči běžící studio pomocí Ctrl+C. Pomocník zachová `.runtime` s klipy a relacemi, `.venv` i `.env`; nahrazované zdrojové soubory zálohuje do `.runtime/update-backups`. Při chybě zápisu vrací již nahrazené soubory ze zálohy. Nezastavuje běžící procesy a nepřepisuje soubory mimo zdrojové adresáře aplikace. Po aktualizaci spustí běžný spouštěč, který sestaví změněný web.
+
+Pomocníka ulož do hlavní složky existující aplikace vedle `SPUSTIT-WINDOWS.bat`. Pokud je uložen ve Stažených souborech, umí také najít dříve používanou složku `Downloads/youtube-shorts-main (1)/youtube-shorts-main`. Když nenajde ani jednu, zastaví se s vysvětlením; nevytváří prázdnou náhradní instalaci. Ověření aktualizační logiky proběhlo na Linuxu včetně zachování soukromých dat a obnovy po chybě; samotné spuštění BAT/PowerShell je potřeba ověřit na Windows.
+
 ## Co se instaluje
 
 Spouštěč je určen pro **Windows 10/11 x64** s Windows PowerShell 5.1 nebo novějším a `winget`. Chybějící nástroje instaluje přes oficiální katalog `winget`, který ověřuje balíčky. Nepoužívá vypnutí ověřování TLS ani neověřené instalátory.

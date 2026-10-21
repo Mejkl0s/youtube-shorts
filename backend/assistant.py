@@ -218,7 +218,7 @@ def plan_request(body: Request):
         'The project ALWAYS has exactly five distinct clips, #5 to #1, primary sources TikTok/Instagram and optional YouTube. '
         'Preserve the selected narration provider. The editor defaults to keyless online male Edge speech: Andrew in English, Antonin in Czech. '
         'OpenAI Onyx/Echo and ElevenLabs Adam/Josh/Antoni are optional paid providers; switch only when the user requests them. '
-        'Keep analytical voiceover to 1–7 words. Default clips are 2–5 seconds, manually at most 8. '
+        'Prefer 2–4 words for analytical voiceover; never exceed 7 words. Default clips are 2–5 seconds, manually at most 8. '
         'Follow user requests using current project state, not generic advice. Return a JSON plan matching this schema: ' + json.dumps(Plan.model_json_schema()) + '. '
         'Actions execute in order: analyze_template (attached reference image), discover (find many real social candidates, visually choose 5 and create analytical comments), '
         'scripts (rewrite comments from real frames), research (YouTube ranking channel research with citations), render (export actual MP4). '
@@ -310,7 +310,7 @@ def run_assistant(job_id: str, body: Request):
                 state.clips = [m.Clip.model_validate(c) for c in m.jobs[child]['clips']]
                 apply_edits(state, plan)
             elif action == 'scripts':
-                output = m.scripts(m.ScriptRequest(clips=state.clips, language=state.language, ranking_criteria=state.ranking_criteria))
+                output = m.scripts(m.ScriptRequest(clips=state.clips, language=state.language, ranking_criteria=state.ranking_criteria, max_words=4))
                 state.clips = [m.Clip.model_validate({**clip.model_dump(), 'voiceover': line}) for clip, line in zip(state.clips, output['lines'])]
             elif action == 'research':
                 result['research'] = m.research(m.ResearchRequest(topic=state.topic or 'ranking Shorts'))

@@ -72,7 +72,8 @@ def test_free_provider_failure_is_clear_private_and_never_triggers_paid_fallback
     assert client.post('/api/voice-preview', json={'text': 'Test.', 'voice_settings': {'provider': 'edge', 'voice': 'echo'}}).status_code == 422
 
 
-def test_keyless_voice_is_actually_mixed_into_five_clip_mp4_export(isolated, monkeypatch):
+@pytest.mark.parametrize(('rank_style', 'effects'), [('outline', False), ('badge', True), ('plain', True)])
+def test_keyless_voice_is_actually_mixed_into_five_clip_mp4_export(isolated, monkeypatch, rank_style, effects):
     folder, calls = isolated
     monkeypatch.setenv('OPENAI_API_KEY', 'test-placeholder-never-used')
     source = folder/'source.mp4'
@@ -84,9 +85,9 @@ def test_keyless_voice_is_actually_mixed_into_five_clip_mp4_export(isolated, mon
         directory.mkdir()
         shutil.copyfile(source, directory/'source')
         m.register(directory/'source', identity, 'Timing')
-        clips.append({'id': identity, 'title': 'Timing', 'voiceover': 'That timing wins this round.', 'duration': 2})
+        clips.append({'id': identity, 'title': 'Timing', 'voiceover': '', 'narration_mode': 'rank', 'duration': 2})
     client = TestClient(m.app)
-    result = client.post('/api/render', json={'title': 'FREE VOICE TOP FIVE', 'clips': clips, 'voice': True, 'effects': False, 'resolution': '720', 'voice_settings': {'provider': 'edge', 'voice': 'free_male', 'speed': .95}})
+    result = client.post('/api/render', json={'title': 'FREE VOICE TOP FIVE', 'clips': clips, 'voice': True, 'effects': effects, 'resolution': '720', 'layout': {'rank_style': rank_style, 'rank_size': .18, 'rank_color': 'FFD84D'}, 'voice_settings': {'provider': 'edge', 'voice': 'free_male', 'speed': .95}})
     assert result.status_code == 202, result.text
     deadline = time.monotonic()+60
     while time.monotonic() < deadline:
@@ -96,7 +97,43 @@ def test_keyless_voice_is_actually_mixed_into_five_clip_mp4_export(isolated, mon
         time.sleep(.1)
     assert job['status'] == 'done', job
     assert len(calls) == 5
+    assert [call['text'] for call in calls] == m.rank_lines('en')
     output = folder/'jobs'/result.json()['id']/'ranking.mp4'
     raw = m.ffmpeg('-i', str(output), '-vn', '-ac', '1', '-f', 's16le', 'pipe:1')
     assert np.abs(np.frombuffer(raw, dtype='<i2').astype(float)).mean() > 50
+    samples = np.frombuffer(raw, dtype='<i2').astype(float)
+    for index in range(5):
+        # TTS fixture starts at 0.4 s. The beginning isolates the effect from
+        # narration; the later interval verifies the real mixed TTS fixture.
+        beginning = samples[int((index*2+.02)*44100):int((index*2+.17)*44100)]
+        speech = samples[int((index*2+.7)*44100):int((index*2+.85)*44100)]
+        assert np.abs(speech).mean() > 300
+        assert (np.abs(beginning).mean() > 100) == effects
+    # Inspect the actual encoded rank region, not a mocked FFmpeg command.
+    pixels = m.ffmpeg('-ss', '1', '-i', str(output), '-frames:v', '1', '-vf',
+                      'crop=250:150:20:215,format=rgb24', '-f', 'rawvideo', 'pipe:1')
+    rgb = np.frombuffer(pixels, dtype=np.uint8).reshape(-1, 3)
+    assert ((rgb[:, 0] > 200) & (rgb[:, 1] > 150) & (rgb[:, 2] < 130)).sum() > 300
+    black = (rgb.max(axis=1) < 35).sum()
+    assert black > 300 if rank_style != 'plain' else black < 100
     assert client.get(job['download']).headers['content-type'] == 'video/mp4'
+    preview = client.get(job['download'].replace('/download', '/preview'))
+    assert preview.status_code == 200 and preview.content == output.read_bytes()
+    assert preview.headers['content-disposition'].startswith('inline;')
+    ranged = client.get(job['download'].replace('/download', '/preview'), headers={'Range': 'bytes=0-255'})
+    assert ranged.status_code == 206 and ranged.content == output.read_bytes()[:256]
+
+
+@pytest.mark.parametrize('language', ['en', 'cs'])
+def test_free_rank_announcements_are_short_explicit_and_never_call_paid_ai(isolated, monkeypatch, language):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-placeholder-never-used')
+    monkeypatch.setattr(m, 'ai_request', lambda *a, **kw: pytest.fail('Rank announcement called AI'))
+    clips = [{'id': uuid.uuid4().hex, 'title': 'Winter fails', 'voiceover': ''} for _ in range(5)]
+    response = TestClient(m.app).post('/api/scripts', json={'clips': clips, 'language': language, 'mode': 'rank', 'max_words': 4})
+    assert response.status_code == 200, response.text
+    assert response.json() == {'mode': 'rank', 'lines': m.rank_lines(language)}
+    assert all(m.word_count(line) == 2 for line in response.json()['lines'])
+    for clip in clips:
+        clip.update(voiceover='Number one.', narration_mode='rank')
+    project = m.Project(title='Winter fails', clips=list(reversed(clips)), language=language)
+    assert [clip.voiceover for clip in project.clips] == m.rank_lines(language)

@@ -72,6 +72,26 @@ try {
   await page.getByRole('button', { name: /Vyzkoušet syntetickou ukázku/ }).click();
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor({ timeout: 120000 });
   assert.equal(await page.locator('.clip-thumb').count(), 5);
+  // Real free rank texts and explicit audio switches; no remote speech call here.
+  await page.getByRole('button',{name:'Uvedení pořadí zdarma',exact:true}).click();
+  await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).filter({visible:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('[aria-label="Voiceover klipu 5"]').value==='Number five.');
+  assert.equal(await page.getByRole('switch',{name:'AI voiceover',exact:true}).getAttribute('aria-checked'),'true');
+  assert.equal(await page.getByRole('switch',{name:'Zvukové efekty',exact:true}).getAttribute('aria-checked'),'true');
+  await page.getByRole('button',{name:'Posunout klip 5 dolů',exact:true}).click();
+  assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).inputValue(),'Number five.');
+  assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 4',exact:true}).inputValue(),'Number four.');
+  await page.getByLabel('JAZYK HLASU',{exact:true}).selectOption('cs');
+  assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).inputValue(),'Páté místo.');
+  await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).fill('Pád na ledu.');
+  await page.getByLabel('JAZYK HLASU',{exact:true}).selectOption('en');
+  assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).inputValue(),'Pád na ledu.');
+  await page.getByRole('button',{name:'Číslo v rámečku',exact:true}).click();
+  assert.equal(await page.locator('.phone-rank.rank-badge').count(),1);
+  assert.equal(await page.locator('.phone-criteria').count(),0);
+  assert.equal(await page.locator('.phone-clip-label').count(),0);
+  await page.getByRole('button',{name:'Výrazný ranking',exact:true}).click();
+  assert.equal(await page.locator('.phone-rank.rank-outline').count(),1);
   // Actual template upload, local OCR, manual adjustment and server-side save (no provider mocks).
   const templateFile='.runtime/screenshots/reference-fixture.png';
   const font='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
@@ -127,6 +147,14 @@ try {
   assert.equal(response.status(), 200);
   assert.match(response.headers()['content-type'], /video\/mp4/);
   assert.ok((await response.body()).length > 10000);
+  const finished=page.getByLabel('Přehrávač hotového Shortu',{exact:true});
+  await finished.waitFor();
+  assert.equal(await finished.getAttribute('controls'),'');
+  assert.match(await finished.getAttribute('src'),/\/preview$/);
+  await finished.evaluate(v=>v.play());
+  await page.waitForTimeout(800);
+  assert.ok(await finished.evaluate(v=>v.currentTime)>0);
+  await finished.evaluate(v=>v.pause());
   // UI integration test only: backend action execution is covered by pytest.
   const demo = await (await page.request.post(base+'/api/demo', {data:{}})).json();
   const completed = {id:'ui-assistant-test',kind:'assistant',status:'done',progress:100,message:'Příkaz dokončen.',assistant_reply:'Změny jsou hotové.',download:await download.getAttribute('href'),project:{topic:'timing',title:'AI DIRECTOR TEST',ranking_criteria:'Timing and skill',language:'en',resolution:'720',candidate_count:12,allow_youtube:true,voice:false,effects:true,captions:true,original_volume:.12,voice_volume:1,effects_volume:.55,voice_settings:{provider:'openai',voice:'echo',speed:1,delivery:'Natural male delivery.'},layout:{font:'bold',title_color:'FFFFFF',rank_color:'FF00AA',caption_color:'FFFFFF',title_y:.0615,title_size:.0454,rank_x:.0602,rank_y:.1719,rank_size:.1343,caption_y:.7708,caption_size:.0528,header_darkness:.5,show_label:true,show_criteria:true},clips:demo.clips.map(c=>({...c,sourceDuration:c.duration,duration:2,start:0}))}};
@@ -151,5 +179,5 @@ try {
   await page.screenshot({ path: '.runtime/screenshots/editor-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
+  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
 } finally { await browser.close(); }

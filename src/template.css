@@ -49,3 +49,5 @@
 .template-save { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-top:16px; }
 .template-save .button { padding:9px; font-size:10px; }
 @media(max-width:720px) { .template-panel { padding:14px; }.template-heading { flex-wrap:wrap; }.template-heading h2 { font-size:13px; }.template-heading>.button { margin-left:44px; }.template-method>label { width:100%; }.template-colors { grid-template-columns:1fr 1fr; }.template-sliders { grid-template-columns:1fr; gap:12px; }.template-reference img { width:60px; height:106px; } }
+
+.ranking-presets{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:14px 0}.ranking-presets .button{font-size:10px;padding:9px 11px}.ranking-presets>span{font-size:10px;color:#9bad8e}.rank-style-choice{display:flex;gap:10px;align-items:center;font-size:10px;color:#acbf9c;margin:14px 0}.rank-style-choice select{padding:8px;border:1px solid #415534;border-radius:5px;background:#162011;color:#c9d9bd;min-width:0}
