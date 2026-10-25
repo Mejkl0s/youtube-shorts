@@ -12,7 +12,7 @@ Pro další použití stačí znovu otevřít `SPUSTIT-WINDOWS.bat`. Render teď
 ## Dokončení videa po vyhledání klipů
 
 1. Klikni **Uložit projekt**, aby aktuální výběr zůstal uložený v tomto prohlížeči.
-2. Pro čistý vzhled zvol **Výrazný ranking** nebo **Číslo v rámečku**. Předloha zůstává volitelná; vybraný preset nastaví větší čísla a skryje názvy zdrojových souborů i kritéria ve videu.
+2. Pro seznam všech pěti čísel zvol **Žebříček 1–5**: jednička je nahoře, pětka dole a aktuální pozice se zvýrazní. Tato volba nepotřebuje OCR ani API klíč. Pro jedno velké aktuální číslo můžeš zvolit **Výrazný ranking** nebo **Číslo v rámečku**. Předloha zůstává volitelná; vybraný preset nastaví větší čísla a skryje názvy zdrojových souborů i kritéria ve videu.
 3. Zvol **Uvedení pořadí zdarma**: nastaví dvouslovná uvedení pořadí, mužský hlas bez klíče a zapne efekty i titulky. Místo uvedení můžeš napsat vlastní komentář, nejlépe 2–4 slova. Bezplatná uvedení nepopisují neověřený děj ve videu; AI komentáře podle obrazu jsou oddělená placená možnost.
 4. Klikni **Exportovat Short**. Výsledný mix a vzhled ověř v přehrávači **Hotové video se zvukem**. Horní pracovní náhled přehrává jen původní zvuk.
 

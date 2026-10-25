@@ -17,6 +17,7 @@ class Layout(BaseModel):
     rank_y: float = Field(default=0.1719, ge=0.05, le=0.65)
     rank_size: float = Field(default=0.1343, ge=0.05, le=0.24)
     rank_style: Literal['outline', 'badge', 'plain'] = 'outline'
+    rank_display: Literal['column', 'single'] = 'column'
     caption_y: float = Field(default=0.7708, ge=0.45, le=0.9)
     caption_size: float = Field(default=0.0528, ge=0.025, le=0.09)
     caption_align: Literal['left', 'center', 'right'] = 'center'
@@ -24,6 +25,18 @@ class Layout(BaseModel):
     header_darkness: float = Field(default=0.5, ge=0, le=0.9)
     show_label: bool = False
     show_criteria: bool = False
+
+    def rank_markers(self, active_rank: int):
+        if self.rank_display == 'single':
+            return [{'rank': active_rank, 'text': f'#{active_rank}', 'y': self.rank_y,
+                     'size': self.rank_size, 'color': self.rank_color, 'alpha': 1}]
+        # Fit all five rows even when a saved template moves the column down
+        # or requests an oversized number. Fractions match the browser preview.
+        gap = min(.12, (.88 - self.rank_y) / 4.8)
+        size = min(self.rank_size, .115, gap * 16 / 9 * .8)
+        return [{'rank': rank, 'text': f'{rank}.', 'y': self.rank_y + (rank-1)*gap,
+                 'size': size, 'color': self.rank_color if rank == active_rank else 'FFFFFF',
+                 'alpha': 1 if rank == active_rank else .72} for rank in range(1, 6)]
 
     @field_validator('title_color', 'rank_color', 'caption_color')
     @classmethod

@@ -18,6 +18,9 @@ try {
   assert.equal(await page.getByLabel('REŽIM HLEDÁNÍ', {exact:true}).inputValue(), 'free');
   assert.equal(await page.getByRole('switch', {name:'AI voiceover',exact:true}).getAttribute('aria-checked'), 'false');
   assert.equal(await page.locator('.clip-card').count(), 5);
+  assert.deepEqual(await page.locator('.phone-ranking-column .phone-rank').allTextContents(),['1.','2.','3.','4.','5.']);
+  assert.equal(await page.locator('.phone-rank[aria-current=true]').getAttribute('data-rank'),'5');
+
   assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'edge:free_male');
   await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).selectOption('openai:echo');
   assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'openai:echo');
@@ -72,6 +75,20 @@ try {
   await page.getByRole('button', { name: /Vyzkoušet syntetickou ukázku/ }).click();
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor({ timeout: 120000 });
   assert.equal(await page.locator('.clip-thumb').count(), 5);
+  await page.getByRole('button',{name:'Žebříček 1–5',exact:true}).click();
+  const column=page.locator('.phone-ranking-column .phone-rank');
+  assert.deepEqual(await column.allTextContents(),['1.','2.','3.','4.','5.']);
+  const positions=await column.evaluateAll(rows=>rows.map(row=>row.getBoundingClientRect().top));
+  assert.ok(positions.every((top,i)=>i===0||top>positions[i-1]));
+  await page.getByRole('button',{name:'Zobrazit klip 1',exact:true}).click();
+  assert.equal(await page.locator('.phone-rank[aria-current=true]').getAttribute('data-rank'),'1');
+  assert.deepEqual(await column.allTextContents(),['1.','2.','3.','4.','5.']);
+  // Save/restore the actual column setting before trying legacy single-number presets.
+  await page.locator('.save-button').click();
+  await page.reload();
+  await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
+  assert.deepEqual(await column.allTextContents(),['1.','2.','3.','4.','5.']);
+  await page.getByRole('button',{name:'Zobrazit klip 5',exact:true}).click();
   // Real free rank texts and explicit audio switches; no remote speech call here.
   await page.getByRole('button',{name:'Uvedení pořadí zdarma',exact:true}).click();
   await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).filter({visible:true}).waitFor();
@@ -140,6 +157,7 @@ try {
   if(await page.getByRole('switch', { name: 'AI voiceover', exact: true }).getAttribute('aria-checked')==='true')await page.getByRole('switch', { name: 'AI voiceover', exact: true }).click();
   await page.getByLabel('ROZLIŠENÍ', { exact: true }).selectOption('720');
   for (let i = 1; i <= 5; i++) await page.getByRole('spinbutton', { name: `Délka klipu ${i}`, exact: true }).fill('2');
+  await page.getByRole('button',{name:'Žebříček 1–5',exact:true}).click();
   await page.getByRole('button', { name: 'Exportovat Short' }).click();
   const download = page.getByRole('link', { name: 'Stáhnout Short' });
   await download.waitFor({ timeout: 120000 });
@@ -157,7 +175,7 @@ try {
   await finished.evaluate(v=>v.pause());
   // UI integration test only: backend action execution is covered by pytest.
   const demo = await (await page.request.post(base+'/api/demo', {data:{}})).json();
-  const completed = {id:'ui-assistant-test',kind:'assistant',status:'done',progress:100,message:'Příkaz dokončen.',assistant_reply:'Změny jsou hotové.',download:await download.getAttribute('href'),project:{topic:'timing',title:'AI DIRECTOR TEST',ranking_criteria:'Timing and skill',language:'en',resolution:'720',candidate_count:12,allow_youtube:true,voice:false,effects:true,captions:true,original_volume:.12,voice_volume:1,effects_volume:.55,voice_settings:{provider:'openai',voice:'echo',speed:1,delivery:'Natural male delivery.'},layout:{font:'bold',title_color:'FFFFFF',rank_color:'FF00AA',caption_color:'FFFFFF',title_y:.0615,title_size:.0454,rank_x:.0602,rank_y:.1719,rank_size:.1343,caption_y:.7708,caption_size:.0528,header_darkness:.5,show_label:true,show_criteria:true},clips:demo.clips.map(c=>({...c,sourceDuration:c.duration,duration:2,start:0}))}};
+  const completed = {id:'ui-assistant-test',kind:'assistant',status:'done',progress:100,message:'Příkaz dokončen.',assistant_reply:'Změny jsou hotové.',download:await download.getAttribute('href'),project:{topic:'timing',title:'AI DIRECTOR TEST',ranking_criteria:'Timing and skill',language:'en',resolution:'720',candidate_count:12,allow_youtube:true,voice:false,effects:true,captions:true,original_volume:.12,voice_volume:1,effects_volume:.55,voice_settings:{provider:'openai',voice:'echo',speed:1,delivery:'Natural male delivery.'},layout:{font:'bold',title_color:'FFFFFF',rank_color:'FF00AA',caption_color:'FFFFFF',title_y:.0615,title_size:.0454,rank_x:.0602,rank_y:.1719,rank_size:.1343,caption_y:.7708,caption_size:.0528,rank_display:'single',header_darkness:.5,show_label:true,show_criteria:true},clips:demo.clips.map(c=>({...c,sourceDuration:c.duration,duration:2,start:0}))}};
   await page.getByLabel('Pokyny k předloze',{exact:true}).fill('Keep the ranking marker pink.');
   await page.route('**/api/assistant', route=>{assert.equal(route.request().postDataJSON().reference_instructions,'Keep the ranking marker pink.');assert.ok(route.request().postDataJSON().reference_id);return route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:completed.id,kind:'assistant',status:'queued',progress:0,message:'Připravuji…'})});});
   await page.route('**/api/jobs/ui-assistant-test', route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(completed)}));
@@ -179,5 +197,5 @@ try {
   await page.screenshot({ path: '.runtime/screenshots/editor-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
+  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, persistent 1–5 column/order/highlight/save-restore, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
 } finally { await browser.close(); }

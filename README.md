@@ -10,6 +10,8 @@ Running locally is an alternative network location to test; it is not proof that
 
 ## Finish the ranking
 
+The default video overlay keeps all five positions visible in a vertical column: **1 at the top through 5 at the bottom**, with the currently playing rank highlighted. **Žebříček 1–5** applies the column preset without OCR or a paid API. The clip playback still counts down from #5 to #1. The layout setting `rank_display` can explicitly select `column` or the previous `single` counter; both browser preview and MP4 rendering use the selected mode. Column font size and spacing shrink automatically to keep all five rows on screen.
+
 After finding five clips, choose **Výrazný ranking** (large yellow number with a black outline) or **Číslo v rámečku**. These presets hide source filenames and ranking criteria from the video. Font, positions, colors and number treatment remain editable and apply to the live layout and real FFmpeg export; imported reference settings are preserved until a preset is explicitly chosen.
 
 **Uvedení pořadí zdarma** prepares two-word English/Czech position announcements, selects the keyless male voice and enables speech, effects and captions. These are position announcements, not invented descriptions of the scene. They follow reordering and language changes; manually edited text is preserved. Write a specific 2–4-word comment yourself, or use the optional paid **AI komentáře · 2–4 slova**, which checks the requested limit against real scene frames. The existing seven-word maximum remains available for manual comments.

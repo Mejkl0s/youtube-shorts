@@ -87,7 +87,7 @@ def test_keyless_voice_is_actually_mixed_into_five_clip_mp4_export(isolated, mon
         m.register(directory/'source', identity, 'Timing')
         clips.append({'id': identity, 'title': 'Timing', 'voiceover': '', 'narration_mode': 'rank', 'duration': 2})
     client = TestClient(m.app)
-    result = client.post('/api/render', json={'title': 'FREE VOICE TOP FIVE', 'clips': clips, 'voice': True, 'effects': effects, 'resolution': '720', 'layout': {'rank_style': rank_style, 'rank_size': .18, 'rank_color': 'FFD84D'}, 'voice_settings': {'provider': 'edge', 'voice': 'free_male', 'speed': .95}})
+    result = client.post('/api/render', json={'title': 'FREE VOICE TOP FIVE', 'clips': clips, 'voice': True, 'effects': effects, 'resolution': '720', 'layout': {'rank_display': 'single', 'rank_style': rank_style, 'rank_size': .18, 'rank_color': 'FFD84D'}, 'voice_settings': {'provider': 'edge', 'voice': 'free_male', 'speed': .95}})
     assert result.status_code == 202, result.text
     deadline = time.monotonic()+60
     while time.monotonic() < deadline:

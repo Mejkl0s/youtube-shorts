@@ -389,7 +389,8 @@ def render(job_id: str, project: Project):
                 rank_decoration = f':box=1:boxcolor=black@0.8:boxborderw={round(width*.025)}'
             elif layout.rank_style == 'outline':
                 rank_decoration = f':shadowcolor=black@0.65:shadowx={round(width*.003)}:shadowy={round(width*.005)}'
-            video += f",drawtext=fontfile={font}:text='#{rank}':fontsize={int(width*layout.rank_size)}:fontcolor=0x{layout.rank_color}:x={int(width*layout.rank_x)}:y={int(height*layout.rank_y)}:borderw={rank_border}:bordercolor=black{rank_decoration}"
+            for marker in layout.rank_markers(rank):
+                video += f",drawtext=fontfile={font}:text='{marker['text']}':fontsize={int(width*marker['size'])}:fontcolor=0x{marker['color']}@{marker['alpha']}:x={int(width*layout.rank_x)}:y={int(height*marker['y'])}:borderw={rank_border}:bordercolor=black{rank_decoration}"
             if layout.show_label:
                 video += ',' + draw_text(labelfile, int(34*scale), str(int(515*scale)), '0x'+layout.rank_color)
             if layout.show_criteria:

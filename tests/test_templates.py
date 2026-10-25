@@ -108,7 +108,7 @@ def test_template_position_color_and_alignment_are_used_in_actual_mp4(isolated):
         shutil.copyfile(source, folder / 'source')
         m.register(folder / 'source', asset_id, 'Moment')
         clips.append(m.Clip(id=asset_id, title='Moment', voiceover='Timing makes this moment stand out.', duration=2))
-    layout = Layout(rank_color='FF00AA', rank_x=.62, rank_y=.34, title_align='left', title_x=.12,
+    layout = Layout(rank_display='single', rank_color='FF00AA', rank_x=.62, rank_y=.34, title_align='left', title_x=.12,
                     caption_align='right', caption_x=.1, show_label=False, show_criteria=False)
     job_id = uuid.uuid4().hex
     m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
@@ -146,3 +146,40 @@ def test_updated_reference_preferences_reach_planner_and_vision_action(isolated,
         assert 'Keep the number pink and large.' in json.dumps(payload)
     assert a.reference(ref['id'])['instructions'] == 'Keep the number pink and large.'
     assert m.jobs[job_id]['project']['layout']['rank_color'] == 'FF00AA'
+
+
+@pytest.mark.parametrize(('resolution', 'rank_y', 'rank_size'), [('720', .2, .1), ('1080', .65, .24)])
+def test_final_mp4_keeps_five_rows_top_to_bottom_and_highlights_the_current_rank(isolated, resolution, rank_y, rank_size):
+    source = isolated/'blue.mp4'
+    m.ffmpeg('-f', 'lavfi', '-i', 'color=c=blue:s=180x320:r=15:d=3', '-c:v', 'libx264', str(source))
+    clips = []
+    for _ in range(5):
+        identity = uuid.uuid4().hex
+        folder = isolated/'media'/identity
+        folder.mkdir()
+        shutil.copyfile(source, folder/'source')
+        m.register(folder/'source', identity, 'Winter fails')
+        clips.append(m.Clip(id=identity, title='Winter fails', voiceover='', duration=2))
+    layout = Layout(rank_display='column', rank_color='FFD84D', rank_y=rank_y, rank_size=rank_size)
+    job_id = uuid.uuid4().hex
+    m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
+    m.render(job_id, m.Project(title='WINTER FAILS', clips=clips, layout=layout, voice=False, effects=False, resolution=resolution))
+    assert m.jobs[job_id]['status'] == 'done', m.jobs[job_id]
+    output = isolated/'jobs'/job_id/'ranking.mp4'
+    width, height = (720, 1280) if resolution == '720' else (1080, 1920)
+    for instant, active in ((1, 5), (9, 1)):
+        raw = m.ffmpeg('-ss', str(instant), '-i', str(output), '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1')
+        frame = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 3)
+        markers = layout.rank_markers(active)
+        assert [marker['text'] for marker in markers] == ['1.', '2.', '3.', '4.', '5.']
+        for marker in markers:
+            y, x = int(marker['y']*height), int(layout.rank_x*width)
+            size = int(marker['size']*width)
+            assert y+size <= height*.89
+            row = frame[y:y+size, x:x+size*2]
+            # All five rows survive encoding; the current rank is yellow and
+            # the other four stay neutral. Check the first AND last scene.
+            ink = (row[:,:,0] > 110) & (row[:,:,1] > 110)
+            gold = (row[:,:,0] > 200) & (row[:,:,1] > 130) & (row[:,:,2] < 150)
+            assert ink.sum() > 50, marker
+            assert (gold.sum() > 50) == (marker['rank'] == active), marker
