@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .style import FONTS, Layout, VoiceSettings, voice_available, filter_path
+from .title_render import render_title
 from .access import owner_access
 from .free_search import public_search, youtube_search, select_free
 from .social_sessions import download_session
@@ -322,6 +323,8 @@ def render(job_id: str, project: Project):
     width, height = (1080, 1920) if project.resolution == '1080' else (720, 1280)
     scale = width / 1080
     try:
+        title_layer = folder/'title.png'
+        render_title(project.title, project.layout, width, height, fonts=FONTS).save(title_layer)
         rendered = []
         for index, clip in enumerate(project.clips):
             rank = 5 - index
@@ -329,9 +332,9 @@ def render(job_id: str, project: Project):
             source = DATA / 'media' / clip.id / 'source'
             meta = asset(clip.id)
             duration = clip.duration
-            inputs = ['-ss', str(clip.start), '-i', str(source)]
+            inputs = ['-ss', str(clip.start), '-i', str(source), '-loop', '1', '-framerate', '30', '-i', str(title_layer)]
             filters, audio_inputs = [], []
-            next_input = 1
+            next_input = 2
             if meta['has_audio']:
                 filters.append(f'[0:a]atrim=duration={duration},asetpts=PTS-STARTPTS,volume={project.original_volume},apad,atrim=duration={duration}[original]')
                 audio_inputs.append('[original]')
@@ -375,15 +378,15 @@ def render(job_id: str, project: Project):
             criteriafile = folder / f'criteria-{rank}.txt'
             criteriafile.write_text(wrap(project.ranking_criteria.upper(), 50), encoding='utf-8')
             font = filter_path(FONTS[layout.font])
-            def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2', font_override: str | None = None):
-                return f'drawtext=fontfile={font_override or font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
+            def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2'):
+                return f'drawtext=fontfile={font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
             def aligned_x(name):
                 alignment = getattr(layout, name+'_align')
                 margin = int(width * getattr(layout, name+'_x'))
                 return str(margin) if alignment == 'left' else f'w-text_w-{margin}' if alignment == 'right' else '(w-text_w)/2'
             video = f'[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS,drawbox=x=0:y=0:w=iw:h={int(310*scale)}:color=black@{layout.header_darkness}:t=fill,'
-            title_font = layout.font if layout.title_font == 'inherit' else layout.title_font
-            video += draw_text(titlefile, int(width*layout.title_size), str(int(height*layout.title_y)), '0x'+layout.title_color, aligned_x('title'), filter_path(FONTS[title_font]))
+            filters.append(video.rstrip(',')+'[title_base]')
+            video = '[title_base][1:v]overlay=x=0:y=0:shortest=1:format=auto'
             rank_border = 0 if layout.rank_style == 'plain' else max(1, round(width * .008))
             rank_decoration = ''
             if layout.rank_style == 'badge':
@@ -391,7 +394,10 @@ def render(job_id: str, project: Project):
             elif layout.rank_style == 'outline':
                 rank_decoration = f':shadowcolor=black@0.65:shadowx={round(width*.003)}:shadowy={round(width*.005)}'
             for marker in layout.rank_markers(rank):
-                video += f",drawtext=fontfile={font}:text='{marker['text']}':fontsize={int(width*marker['size'])}:fontcolor=0x{marker['color']}@{marker['alpha']}:x={int(width*layout.rank_x)}:y={int(height*marker['y'])}:borderw={rank_border}:bordercolor=black{rank_decoration}"
+                marker_decoration = rank_decoration
+                if layout.rank_palette == 'medals' and marker['active'] and layout.rank_style != 'badge':
+                    marker_decoration += f':box=1:boxcolor=black@0.35:boxborderw={round(width*.012)}'
+                video += f",drawtext=fontfile={font}:text='{marker['text']}':fontsize={int(width*marker['size'])}:fontcolor=0x{marker['color']}@{marker['alpha']}:x={int(width*layout.rank_x)}:y={int(height*marker['y'])}:borderw={rank_border}:bordercolor=black{marker_decoration}"
             if layout.show_label:
                 video += ',' + draw_text(labelfile, int(34*scale), str(int(515*scale)), '0x'+layout.rank_color)
             if layout.show_criteria:

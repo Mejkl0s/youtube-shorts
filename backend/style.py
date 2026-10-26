@@ -4,11 +4,42 @@ from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 
 
+def color_hex(value):
+    import re
+    value = value.removeprefix('#').upper()
+    if not re.fullmatch(r'[A-F0-9]{6}', value):
+        raise ValueError('Barva musí být šestimístný HEX kód.')
+    return value
+
+
+MEDAL_COLORS = {1: 'FFD34E', 2: 'C5CBD3', 3: 'CD965D', 4: 'FFFFFF', 5: 'FFFFFF'}
+
+
+class TitleHighlight(BaseModel):
+    word: str = Field(min_length=1, max_length=100)
+    color: str = 'FFD84D'
+
+    @field_validator('word')
+    @classmethod
+    def one_word(cls, value):
+        if any(char.isspace() for char in value):
+            raise ValueError('Vyberte jedno slovo z nadpisu.')
+        return value
+
+    @field_validator('color')
+    @classmethod
+    def valid_color(cls, value):
+        return color_hex(value)
+
+
 class Layout(BaseModel):
     font: Literal['bold', 'condensed', 'serif'] = 'bold'
     title_font: Literal['inherit', 'bold', 'condensed', 'serif'] = 'inherit'
     title_color: str = 'FFFFFF'
+    title_style: Literal['outline', 'shadow', 'plain', 'box'] = 'outline'
+    title_highlights: list[TitleHighlight] = Field(default_factory=list, max_length=50)
     rank_color: str = 'CAFA63'
+    rank_palette: Literal['medals', 'custom'] = 'medals'
     caption_color: str = 'FFFFFF'
     title_y: float = Field(default=0.0615, ge=0.01, le=0.35)
     title_size: float = Field(default=0.0454, ge=0.02, le=0.085)
@@ -28,25 +59,26 @@ class Layout(BaseModel):
     show_criteria: bool = False
 
     def rank_markers(self, active_rank: int):
+        def paint(rank):
+            if self.rank_palette == 'medals':
+                return {'color': MEDAL_COLORS[rank], 'alpha': 1, 'active': rank == active_rank}
+            return {'color': self.rank_color if rank == active_rank else 'FFFFFF',
+                    'alpha': 1 if rank == active_rank else .72, 'active': rank == active_rank}
         if self.rank_display == 'single':
             return [{'rank': active_rank, 'text': f'#{active_rank}', 'y': self.rank_y,
-                     'size': self.rank_size, 'color': self.rank_color, 'alpha': 1}]
+                     'size': self.rank_size, 'color': MEDAL_COLORS[active_rank] if self.rank_palette == 'medals' else self.rank_color,
+                     'alpha': 1, 'active': True}]
         # Fit all five rows even when a saved template moves the column down
         # or requests an oversized number. Fractions match the browser preview.
         gap = min(.12, (.88 - self.rank_y) / 4.8)
         size = min(self.rank_size, .115, gap * 16 / 9 * .8)
         return [{'rank': rank, 'text': f'{rank}.', 'y': self.rank_y + (rank-1)*gap,
-                 'size': size, 'color': self.rank_color if rank == active_rank else 'FFFFFF',
-                 'alpha': 1 if rank == active_rank else .72} for rank in range(1, 6)]
+                 'size': size, **paint(rank)} for rank in range(1, 6)]
 
     @field_validator('title_color', 'rank_color', 'caption_color')
     @classmethod
     def hex_color(cls, value):
-        import re
-        value = value.removeprefix('#').upper()
-        if not re.fullmatch(r'[A-F0-9]{6}', value):
-            raise ValueError('Barva musí být šestimístný HEX kód.')
-        return value
+        return color_hex(value)
 
 
 class VoiceSettings(BaseModel):

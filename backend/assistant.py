@@ -277,6 +277,8 @@ def run_assistant(job_id: str, body: Request):
             return
         update = plan.changes.model_dump(exclude_none=True)
         if 'layout' in update:
+            if 'rank_color' in update['layout'] and 'rank_palette' not in update['layout']:
+                update['layout']['rank_palette'] = 'custom'
             update['layout'] = {**body.state.layout.model_dump(), **update['layout']}
         state = State.model_validate({**body.state.model_dump(), **update})
         if 'discover' not in plan.actions:

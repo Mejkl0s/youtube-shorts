@@ -19,6 +19,9 @@ try {
   assert.equal(await page.getByRole('switch', {name:'AI voiceover',exact:true}).getAttribute('aria-checked'), 'false');
   assert.equal(await page.locator('.clip-card').count(), 5);
   assert.deepEqual(await page.locator('.phone-ranking-column .phone-rank').allTextContents(),['1.','2.','3.','4.','5.']);
+  const medalColors=['rgb(255, 211, 78)','rgb(197, 203, 211)','rgb(205, 150, 93)','rgb(255, 255, 255)','rgb(255, 255, 255)'];
+  assert.deepEqual(await page.locator('.phone-ranking-column .phone-rank').evaluateAll(rows=>rows.map(el=>getComputedStyle(el).color)),medalColors);
+
   assert.equal(await page.locator('.phone-rank[aria-current=true]').getAttribute('data-rank'),'5');
 
   assert.equal(await page.getByLabel('MUŽSKÝ HLAS', {exact:true}).inputValue(), 'edge:free_male');
@@ -42,6 +45,13 @@ try {
   assert.equal(await titleInput.inputValue(),fullHeading);
   assert.equal(await page.locator('.phone-overlay h3').innerText(),fullHeading);
   assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).textTransform),'none');
+  await topicInput.fill('ranking funniest cat fails');
+  await page.getByRole('button',{name:'Obarvit slovo fails',exact:true}).click();
+  assert.equal(await page.locator('[data-title-word="fails"]').evaluate(el=>getComputedStyle(el).color),'rgb(255, 216, 77)');
+  assert.equal(await page.locator('[data-title-word="cat"]').evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
+  await page.getByLabel('Vzhled písma nadpisu',{exact:true}).selectOption('shadow');
+  assert.equal(await page.locator('.phone-overlay h3.title-theme-shadow').count(),1);
+
   await titleInput.fill('My own Cat Ranking');
   assert.equal(await followTitle.isChecked(),false);
   await topicInput.fill('funny cats');
@@ -98,6 +108,7 @@ try {
   assert.ok(positions.every((top,i)=>i===0||top>positions[i-1]));
   await page.getByRole('button',{name:'Zobrazit klip 1',exact:true}).click();
   assert.equal(await page.locator('.phone-rank[aria-current=true]').getAttribute('data-rank'),'1');
+  assert.deepEqual(await column.evaluateAll(rows=>rows.map(el=>getComputedStyle(el).color)),medalColors);
   assert.deepEqual(await column.allTextContents(),['1.','2.','3.','4.','5.']);
   // Save/restore the actual column setting before trying legacy single-number presets.
   await page.locator('.save-button').click();
@@ -142,7 +153,7 @@ try {
   assert.match(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).fontFamily),/RankSerif/);
   assert.equal(await page.locator('.phone-rank').evaluate(el=>getComputedStyle(el).fontFamily),numberFont);
   assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).color),'rgb(50, 212, 239)');
-  await inputValue(page.getByLabel('Barva čísel',{exact:true}),'#ff00aa');
+  await inputValue(page.getByLabel('Vlastní barva čísel',{exact:true}),'#ff00aa');
   await inputValue(page.getByLabel('Číslo · výška',{exact:true}),'38');
   await page.getByLabel('Zarovnání nadpisu',{exact:true}).selectOption('left');
   assert.equal(await page.locator('.phone-rank').evaluate(el=>getComputedStyle(el).color),'rgb(255, 0, 170)');
@@ -165,16 +176,18 @@ try {
   assert.equal(await page.locator('.voice-input.invalid').count(), 1);
   await voice.fill(voiceBefore);
   await page.getByRole('button', { name: 'Zavřít chybu' }).click();
-  await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).fill('ranking Funniest Cat Moments');
+  await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).fill('ranking Funniest Cat Fails');
   await page.locator('.save-button').click();
   await page.reload();
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor();
-  assert.equal(await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).inputValue(), 'ranking Funniest Cat Moments');
+  assert.equal(await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).inputValue(), 'ranking Funniest Cat Fails');
   assert.equal(await page.getByLabel('Pokyny k předloze',{exact:true}).inputValue(),'Keep the lime ranking number and white captions.');
   assert.equal(await page.getByLabel('Písmo nadpisu',{exact:true}).inputValue(),'serif');
   assert.equal(await page.getByLabel('Barva nadpisu ve videu',{exact:true}).inputValue(),'#32d4ef');
   assert.equal(await page.getByRole('slider',{name:'Velikost nadpisu',exact:true}).inputValue(),'58');
   assert.equal(await followTitle.isChecked(),false);
+  assert.equal(await page.getByLabel('Vzhled písma nadpisu',{exact:true}).inputValue(),'outline');
+
 
   assert.equal(await page.locator('.phone-rank').evaluate(el=>el.style.top),'38%');
   assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).textAlign),'left');
@@ -189,13 +202,25 @@ try {
   await page.getByLabel('Písmo nadpisu',{exact:true}).selectOption('serif');
   await inputValue(page.getByLabel('Barva nadpisu ve videu',{exact:true}),'#32d4ef');
   await inputValue(page.getByRole('slider',{name:'Velikost nadpisu',exact:true}),'38');
+  await page.getByRole('button',{name:'Obarvit slovo Fails',exact:true}).click();
+  await inputValue(page.getByLabel('Barva vybraného slova',{exact:true}),'#ffcc22');
+  await page.getByLabel('Vzhled písma nadpisu',{exact:true}).selectOption('shadow');
+  await page.locator('.save-button').click();
+  await page.reload();
+  await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Vzhled písma nadpisu',{exact:true}).inputValue(),'shadow');
+  assert.equal(await page.locator('[data-title-word="Fails"]').evaluate(el=>getComputedStyle(el).color),'rgb(255, 204, 34)');
+  assert.equal(await page.locator('[data-title-word="Cat"]').evaluate(el=>getComputedStyle(el).color),'rgb(50, 212, 239)');
   const renderRequest=page.waitForRequest(request=>request.url().endsWith('/api/render')&&request.method()==='POST');
   await page.getByRole('button', { name: 'Exportovat Short' }).click();
   const renderedPayload=(await renderRequest).postDataJSON();
-  assert.equal(renderedPayload.title,'ranking Funniest Cat Moments');
+  assert.equal(renderedPayload.title,'ranking Funniest Cat Fails');
   assert.equal(renderedPayload.layout.title_font,'serif');
   assert.equal(renderedPayload.layout.title_color,'32D4EF');
   assert.equal(renderedPayload.layout.title_size,38/720);
+  assert.equal(renderedPayload.layout.title_style,'shadow');
+  assert.deepEqual(renderedPayload.layout.title_highlights,[{word:'Fails',color:'FFCC22'}]);
+  assert.equal(renderedPayload.layout.rank_palette,'medals');
   const download = page.getByRole('link', { name: 'Stáhnout Short' });
   await download.waitFor({ timeout: 120000 });
   const response = await page.request.get(new URL(await download.getAttribute('href'), base).href);
@@ -212,7 +237,7 @@ try {
   await finished.evaluate(v=>v.pause());
   // UI integration test only: backend action execution is covered by pytest.
   const demo = await (await page.request.post(base+'/api/demo', {data:{}})).json();
-  const completed = {id:'ui-assistant-test',kind:'assistant',status:'done',progress:100,message:'Příkaz dokončen.',assistant_reply:'Změny jsou hotové.',download:await download.getAttribute('href'),project:{topic:'timing',title:'AI DIRECTOR TEST',ranking_criteria:'Timing and skill',language:'en',resolution:'720',candidate_count:12,allow_youtube:true,voice:false,effects:true,captions:true,original_volume:.12,voice_volume:1,effects_volume:.55,voice_settings:{provider:'openai',voice:'echo',speed:1,delivery:'Natural male delivery.'},layout:{font:'bold',title_color:'FFFFFF',rank_color:'FF00AA',caption_color:'FFFFFF',title_y:.0615,title_size:.0454,rank_x:.0602,rank_y:.1719,rank_size:.1343,caption_y:.7708,caption_size:.0528,rank_display:'single',header_darkness:.5,show_label:true,show_criteria:true},clips:demo.clips.map(c=>({...c,sourceDuration:c.duration,duration:2,start:0}))}};
+  const completed = {id:'ui-assistant-test',kind:'assistant',status:'done',progress:100,message:'Příkaz dokončen.',assistant_reply:'Změny jsou hotové.',download:await download.getAttribute('href'),project:{topic:'timing',title:'AI DIRECTOR TEST',ranking_criteria:'Timing and skill',language:'en',resolution:'720',candidate_count:12,allow_youtube:true,voice:false,effects:true,captions:true,original_volume:.12,voice_volume:1,effects_volume:.55,voice_settings:{provider:'openai',voice:'echo',speed:1,delivery:'Natural male delivery.'},layout:{font:'bold',title_color:'FFFFFF',rank_color:'FF00AA',caption_color:'FFFFFF',title_y:.0615,title_size:.0454,rank_x:.0602,rank_y:.1719,rank_size:.1343,caption_y:.7708,caption_size:.0528,rank_palette:'custom',rank_display:'single',header_darkness:.5,show_label:true,show_criteria:true},clips:demo.clips.map(c=>({...c,sourceDuration:c.duration,duration:2,start:0}))}};
   await page.getByLabel('Pokyny k předloze',{exact:true}).fill('Keep the ranking marker pink.');
   await page.route('**/api/assistant', route=>{assert.equal(route.request().postDataJSON().reference_instructions,'Keep the ranking marker pink.');assert.ok(route.request().postDataJSON().reference_id);return route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:completed.id,kind:'assistant',status:'queued',progress:0,message:'Připravuji…'})});});
   await page.route('**/api/jobs/ui-assistant-test', route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(completed)}));
@@ -234,5 +259,5 @@ try {
   await page.screenshot({ path: '.runtime/screenshots/editor-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, persistent 1–5 column/order/highlight/save-restore, full mixed-case title sync/custom override/independent font-color-size/restore/render payload, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
+  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, persistent 1–5 column/order/highlight/save-restore, full mixed-case title sync/custom override/independent font-color-size/word colors/themes/restore/render payload, stable gold-silver-bronze-white medal palette, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
 } finally { await browser.close(); }

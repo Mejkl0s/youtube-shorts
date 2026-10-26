@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from backend import main as m
 from backend import assistant as a
-from backend.style import Layout
+from backend.style import Layout, MEDAL_COLORS
 
 
 @pytest.fixture
@@ -108,7 +108,7 @@ def test_template_position_color_and_alignment_are_used_in_actual_mp4(isolated):
         shutil.copyfile(source, folder / 'source')
         m.register(folder / 'source', asset_id, 'Moment')
         clips.append(m.Clip(id=asset_id, title='Moment', voiceover='Timing makes this moment stand out.', duration=2))
-    layout = Layout(rank_display='single', rank_color='FF00AA', rank_x=.62, rank_y=.34, title_align='left', title_x=.12,
+    layout = Layout(rank_display='single', rank_palette='custom', rank_color='FF00AA', rank_x=.62, rank_y=.34, title_align='left', title_x=.12,
                     caption_align='right', caption_x=.1, show_label=False, show_criteria=False)
     job_id = uuid.uuid4().hex
     m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
@@ -160,10 +160,10 @@ def test_final_mp4_keeps_five_rows_top_to_bottom_and_highlights_the_current_rank
         shutil.copyfile(source, folder/'source')
         m.register(folder/'source', identity, 'Winter fails')
         clips.append(m.Clip(id=identity, title='Winter fails', voiceover='', duration=2))
-    layout = Layout(rank_display='column', rank_color='FFD84D', rank_y=rank_y, rank_size=rank_size)
+    layout = Layout(rank_display='column', rank_y=rank_y, rank_size=rank_size, title_highlights=[{'word':'fails','color':'FFD84D'}])
     job_id = uuid.uuid4().hex
     m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
-    m.render(job_id, m.Project(title='WINTER FAILS', clips=clips, layout=layout, voice=False, effects=False, resolution=resolution))
+    m.render(job_id, m.Project(title='Winter FAILS', clips=clips, layout=layout, voice=False, effects=False, resolution=resolution))
     assert m.jobs[job_id]['status'] == 'done', m.jobs[job_id]
     output = isolated/'jobs'/job_id/'ranking.mp4'
     width, height = (720, 1280) if resolution == '720' else (1080, 1920)
@@ -177,12 +177,15 @@ def test_final_mp4_keeps_five_rows_top_to_bottom_and_highlights_the_current_rank
             size = int(marker['size']*width)
             assert y+size <= height*.89
             row = frame[y:y+size, x:x+size*2]
-            # All five rows survive encoding; the current rank is yellow and
-            # the other four stay neutral. Check the first AND last scene.
-            ink = (row[:,:,0] > 110) & (row[:,:,1] > 110)
-            gold = (row[:,:,0] > 200) & (row[:,:,1] > 130) & (row[:,:,2] < 150)
-            assert ink.sum() > 50, marker
-            assert (gold.sum() > 50) == (marker['rank'] == active), marker
+            # Medal colors stay attached to the position in the first AND
+            # last scene: gold, silver, bronze, then two white numbers.
+            expected = np.array([int(MEDAL_COLORS[marker['rank']][i:i+2],16) for i in (0,2,4)])
+            matches = (np.abs(row.astype(int)-expected).max(axis=2)<35)
+            assert matches.sum() > 50, marker
+        top = frame[:int(height*.17)]
+        white = (top.min(axis=2)>200)
+        yellow = (top[:,:,0]>200)&(top[:,:,1]>150)&(top[:,:,2]<140)
+        assert white.sum()>100 and yellow.sum()>100, 'Only FAILS should be yellow; Winter stays white.'
 
 
 def test_full_mixed_case_title_and_independent_font_reach_real_mp4(isolated):

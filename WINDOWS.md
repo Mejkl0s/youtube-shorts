@@ -13,6 +13,10 @@ Pro další použití stačí znovu otevřít `SPUSTIT-WINDOWS.bat`. Render teď
 
 Do **Co dnes rankujeme?** můžeš napsat celý název, například `ranking funniest cat moments`. Nadpis ve videu se mění už při psaní, zachová malá a velká písmena a nepřidává vlastní „TOP 5“. Limit je 100 znaků. Vpravo pod **NÁZEV VE VIDEU** upravíš písmo, velikost a barvu nadpisu; stejné nastavení se použije při exportu.
 
+Pro obarvení samotného slova (například `fails`) na něj klikni v seznamu slov pod ovladači nadpisu. Zežloutne; jinou barvu vybereš v **Barva vybraného slova**. **Vrátit základní barvu** zvýraznění odstraní. Stejná slova v nadpisu mají stejnou barvu. Ve **Vzhled písma** zvolíš konturu, stín, čisté písmo nebo tmavý podklad. To vše funguje bez AI a API klíčů a přenáší se i do MP4.
+
+Čísla ve výchozím režimu používají medailové barvy: **1 zlatá, 2 stříbrná, 3 světle bronzová, 4 a 5 bílé**. Tyto barvy se při přehrávání klipů nemění. V části doladění šablony můžeš přepnout **Barvy pořadí** na vlastní barvu aktivní pozice.
+
 Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Zaškrtnutím **Přebírat nadpis z „Co dnes rankujeme?“** propojení zase zapneš. Volba i vzhled nadpisu se uloží spolu s projektem. Písmo nadpisu může být jiné než písmo čísel a titulků.
 
 ## Dokončení videa po vyhledání klipů

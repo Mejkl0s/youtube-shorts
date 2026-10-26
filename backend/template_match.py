@@ -61,6 +61,7 @@ def local_match(path, base: Layout):
         layout.rank_y = min(.65, max(.05, rank['top'] / height))
         layout.rank_size = min(.24, max(.05, rank['height'] / width / .75))
         layout.rank_color = color_for_box(image, rank)
+        layout.rank_palette = 'custom'
         detected.append('číslo')
     lines = {}
     for word in words:
