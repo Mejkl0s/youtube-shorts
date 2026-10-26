@@ -1,6 +1,9 @@
+import FONT_CATALOG from '../backend/fonts/catalog.json';
+export {FONT_CATALOG};
+export type FontKey='bold'|'condensed'|'serif'|'arial-compatible'|'times-compatible'|'calibri-compatible'|'anton'|'bebas-neue'|'poppins'|'lato'|'archivo-black'|'barlow-condensed';
 export type TitleHighlight={word:string;color:string};
 export type Layout = {
-  font:'bold'|'condensed'|'serif'; title_font:'inherit'|'bold'|'condensed'|'serif'; title_color:string; title_style:'outline'|'shadow'|'plain'|'box'; title_highlights:TitleHighlight[]; rank_color:string; rank_palette:'medals'|'custom'; caption_color:string;
+  font:FontKey; title_font:'inherit'|FontKey; title_color:string; title_style:'outline'|'shadow'|'plain'|'box'; title_highlights:TitleHighlight[]; rank_color:string; rank_palette:'medals'|'custom'; caption_color:string;
   title_y:number; title_size:number; title_align:'left'|'center'|'right'; title_x:number;
   rank_x:number; rank_y:number; rank_size:number; rank_style:'outline'|'badge'|'plain'; rank_display:'column'|'single'; caption_y:number; caption_size:number;
   caption_align:'left'|'center'|'right'; caption_x:number; header_darkness:number; show_label:boolean; show_criteria:boolean;
@@ -10,7 +13,7 @@ export const DEFAULT_LAYOUT:Layout = {font:'bold',title_font:'inherit',title_col
 export const RANKING_LAYOUT:Layout = {...DEFAULT_LAYOUT,font:'condensed',rank_color:'FFD84D',rank_size:.18,rank_x:.05,title_y:.045,title_size:.062,caption_size:.063,caption_y:.79,header_darkness:.65,rank_display:'single'};
 export const COLUMN_LAYOUT:Layout = {...RANKING_LAYOUT,rank_display:'column',rank_size:.1,rank_y:.2};
 
-export const fontFamily=(font:Layout['font'])=>font==='serif'?'RankSerif,Georgia,serif':font==='condensed'?'RankCondensed,Arial,sans-serif':'RankBold,Arial,sans-serif';
+export const fontFamily=(font:FontKey)=>{const entry=FONT_CATALOG.find(item=>item.id===font)??FONT_CATALOG[0];return `${entry.css_family},${entry.category==='serif'?'Georgia,serif':'Arial,sans-serif'}`;};
 
 export const MEDAL_COLORS:Record<number,string>={1:'FFD34E',2:'C5CBD3',3:'CD965D',4:'FFFFFF',5:'FFFFFF'};
 

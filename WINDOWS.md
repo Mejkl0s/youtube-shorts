@@ -13,6 +13,8 @@ Pro další použití stačí znovu otevřít `SPUSTIT-WINDOWS.bat`. Render teď
 
 Do **Co dnes rankujeme?** můžeš napsat celý název, například `ranking funniest cat moments`. Nadpis ve videu se mění už při psaní, zachová malá a velká písmena a nepřidává vlastní „TOP 5“. Limit je 100 znaků. Vpravo pod **NÁZEV VE VIDEU** upravíš písmo, velikost a barvu nadpisu; stejné nastavení se použije při exportu.
 
+V **Písmo nadpisu** vybíráš konkrétní písmo podle názvu, podobně jako ve Wordu. Nabídka má 12 písem, vyhledávání a živé ukázky. Najdeš například Anton, Bebas Neue, Poppins, Lato nebo DejaVu. Hledání „Arial“ nabídne **Liberation Sans** (podobné Arialu), „Times New Roman“ nabídne **Liberation Serif** a „Calibri“ nabídne **Carlito**. Vybraná písma jsou přibalená, takže se stejně vykreslí v náhledu i v MP4 a nic se neinstaluje do Windows. Stejná nabídka je také u **Písmo šablony**.
+
 Pro obarvení samotného slova (například `fails`) na něj klikni v seznamu slov pod ovladači nadpisu. Zežloutne; jinou barvu vybereš v **Barva vybraného slova**. **Vrátit základní barvu** zvýraznění odstraní. Stejná slova v nadpisu mají stejnou barvu. Ve **Vzhled písma** zvolíš konturu, stín, čisté písmo nebo tmavý podklad. To vše funguje bez AI a API klíčů a přenáší se i do MP4.
 
 Čísla ve výchozím režimu používají medailové barvy: **1 zlatá, 2 stříbrná, 3 světle bronzová, 4 a 5 bílé**. Tyto barvy se při přehrávání klipů nemění. V části doladění šablony můžeš přepnout **Barvy pořadí** na vlastní barvu aktivní pozice.
@@ -43,7 +45,7 @@ Spouštěč je určen pro **Windows 10/11 x64** s Windows PowerShell 5.1 nebo no
 
 Pokud chybí `winget`, nainstaluj nebo aktualizuj [App Installer od Microsoftu](https://apps.microsoft.com/detail/9nblggh4nns1), zavři okno a spusť studio znovu. Při chybě instalace se spouštěč zastaví a nechá výsledek viditelný. Nástroje lze také nainstalovat předem ručně z jejich oficiálních distribucí; musí být dostupné v `PATH`.
 
-Písma DejaVu a jejich licence jsou přibalené v `backend/fonts`, takže Windows a Render používají stejná písma. Export počítá s mezerami, diakritikou i běžnými speciálními znaky v cestách. Windows nepotřebuje linuxový `uvloop`; použije standardní smyčku Pythonu.
+Všech 12 písem v nabídce a jejich licence jsou přibalené v `backend/fonts`, takže Windows a Render používají stejná písma. Export počítá s mezerami, diakritikou i běžnými speciálními znaky v cestách. Windows nepotřebuje linuxový `uvloop`; použije standardní smyčku Pythonu.
 
 ## Klipy, přihlášení a hlas
 

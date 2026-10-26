@@ -1,0 +1,110 @@
+[
+  {
+    "id": "bold",
+    "file": "DejaVuSans-Bold.ttf",
+    "label": "DejaVu Sans Bold",
+    "css_family": "RankBold",
+    "category": "sans",
+    "note": "",
+    "license": "LICENSE.txt"
+  },
+  {
+    "id": "condensed",
+    "file": "DejaVuSansCondensed-Bold.ttf",
+    "label": "DejaVu Sans Condensed Bold",
+    "css_family": "RankCondensed",
+    "category": "sans",
+    "note": "",
+    "license": "LICENSE.txt"
+  },
+  {
+    "id": "serif",
+    "file": "DejaVuSerif-Bold.ttf",
+    "label": "DejaVu Serif Bold",
+    "css_family": "RankSerif",
+    "category": "serif",
+    "note": "",
+    "license": "LICENSE.txt"
+  },
+  {
+    "id": "arial-compatible",
+    "file": "LiberationSans-Bold.ttf",
+    "label": "Liberation Sans",
+    "css_family": "RankArialLike",
+    "category": "sans",
+    "note": "Podobné Arialu",
+    "license": "licenses/liberation.txt"
+  },
+  {
+    "id": "times-compatible",
+    "file": "LiberationSerif-Bold.ttf",
+    "label": "Liberation Serif",
+    "css_family": "RankTimesLike",
+    "category": "serif",
+    "note": "Podobné Times New Roman",
+    "license": "licenses/liberation.txt"
+  },
+  {
+    "id": "calibri-compatible",
+    "file": "Carlito-Bold.ttf",
+    "label": "Carlito",
+    "css_family": "RankCalibriLike",
+    "category": "sans",
+    "note": "Podobné Calibri",
+    "license": "licenses/calibri-compatible.txt"
+  },
+  {
+    "id": "anton",
+    "file": "Anton-Regular.ttf",
+    "label": "Anton",
+    "css_family": "RankAnton",
+    "category": "sans",
+    "note": "Výrazné úzké písmo",
+    "license": "licenses/anton.txt"
+  },
+  {
+    "id": "bebas-neue",
+    "file": "BebasNeue-Regular.ttf",
+    "label": "Bebas Neue",
+    "css_family": "RankBebas",
+    "category": "sans",
+    "note": "Vysoké titulkové písmo",
+    "license": "licenses/bebas-neue.txt"
+  },
+  {
+    "id": "poppins",
+    "file": "Poppins-Bold.ttf",
+    "label": "Poppins Bold",
+    "css_family": "RankPoppins",
+    "category": "sans",
+    "note": "Geometrické písmo",
+    "license": "licenses/poppins.txt"
+  },
+  {
+    "id": "lato",
+    "file": "Lato-Bold.ttf",
+    "label": "Lato Bold",
+    "css_family": "RankLato",
+    "category": "sans",
+    "note": "Čitelné zaoblené písmo",
+    "license": "licenses/lato.txt"
+  },
+  {
+    "id": "archivo-black",
+    "file": "ArchivoBlack-Regular.ttf",
+    "label": "Archivo Black",
+    "css_family": "RankArchivo",
+    "category": "sans",
+    "note": "Velmi silné písmo",
+    "license": "licenses/archivo-black.txt"
+  },
+  {
+    "id": "barlow-condensed",
+    "file": "BarlowCondensed-Bold.ttf",
+    "label": "Barlow Condensed Bold",
+    "css_family": "RankBarlow",
+    "category": "sans",
+    "note": "Úzké přehledné písmo",
+    "license": "licenses/barlow-condensed.txt"
+  }
+]

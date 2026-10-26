@@ -70,7 +70,7 @@ def prepare(skip_setup=False):
         if not (ROOT/'node_modules/.package-lock.json').is_file() or not stamp.is_file() or stamp.read_text() != dependency_hash:
             command([npm, 'ci'])
             stamp.write_text(dependency_hash, encoding='utf-8')
-        build_hash = fingerprint([ROOT/name for name in ('src', 'public', 'index.html', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts')])
+        build_hash = fingerprint([ROOT/name for name in ('src', 'public', 'backend/fonts/catalog.json', 'index.html', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts')])
         stamp = cache/'frontend.sha256'
         if not (ROOT/'dist/index.html').is_file() or not stamp.is_file() or stamp.read_text() != build_hash:
             command([npm, 'run', 'build'])

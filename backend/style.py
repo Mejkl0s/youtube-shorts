@@ -1,7 +1,15 @@
 """Bounded template and narration settings shared by the assistant and renderer."""
+import json
 from typing import Literal
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
+
+
+FONT_DIR = Path(__file__).resolve().parent / 'fonts'
+FONT_CATALOG = json.loads((FONT_DIR/'catalog.json').read_text(encoding='utf-8'))
+FONTS = {entry['id']: str(FONT_DIR/entry['file']) for entry in FONT_CATALOG}
+FontName = Literal[tuple(FONTS)]
+TitleFontName = Literal[tuple(['inherit', *FONTS])]
 
 
 def color_hex(value):
@@ -33,8 +41,8 @@ class TitleHighlight(BaseModel):
 
 
 class Layout(BaseModel):
-    font: Literal['bold', 'condensed', 'serif'] = 'bold'
-    title_font: Literal['inherit', 'bold', 'condensed', 'serif'] = 'inherit'
+    font: FontName = 'bold'
+    title_font: TitleFontName = 'inherit'
     title_color: str = 'FFFFFF'
     title_style: Literal['outline', 'shadow', 'plain', 'box'] = 'outline'
     title_highlights: list[TitleHighlight] = Field(default_factory=list, max_length=50)
@@ -95,14 +103,6 @@ class VoiceSettings(BaseModel):
         if value not in valid[provider]:
             raise ValueError('Hlas nepatří vybranému poskytovateli.')
         return value
-
-
-FONT_DIR = Path(__file__).resolve().parent / 'fonts'
-FONTS = {name: str(FONT_DIR / filename) for name, filename in {
-    'bold': 'DejaVuSans-Bold.ttf',
-    'condensed': 'DejaVuSansCondensed-Bold.ttf',
-    'serif': 'DejaVuSerif-Bold.ttf',
-}.items()}
 
 
 def filter_path(path):

@@ -202,7 +202,7 @@ def test_full_mixed_case_title_and_independent_font_reach_real_mp4(isolated):
         m.register(folder/'source', identity, 'Cats')
         clips.append(m.Clip(id=identity, title='Cats', voiceover='', duration=2))
     frames = []
-    for font in ('serif', 'condensed'):
+    for font in ('serif', 'condensed', 'anton'):
         layout = Layout(font='bold', title_font=font, title_color='32D4EF', title_size=.035, title_y=.02)
         job_id = uuid.uuid4().hex
         m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
@@ -217,4 +217,5 @@ def test_full_mixed_case_title_and_independent_font_reach_real_mp4(isolated):
         assert cyan.sum() > 200
         frames.append(top)
     # If the per-title font is ignored, these decoded title regions are equal.
-    assert (np.abs(frames[0].astype(int)-frames[1].astype(int)).max(axis=2) > 30).sum() > 300
+    for frame in frames[1:]:
+        assert (np.abs(frames[0].astype(int)-frame.astype(int)).max(axis=2) > 30).sum() > 300

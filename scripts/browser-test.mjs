@@ -10,6 +10,11 @@ const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('dialog', d => d.accept());
 await mkdir('.runtime/screenshots', { recursive: true });
+async function chooseFont(label,name){
+  await page.getByRole('combobox',{name:label,exact:true}).click();
+  await page.getByRole('listbox',{name:'Dostupná písma',exact:true}).getByRole('option',{name,exact:true}).click();
+}
+
 try {
   await page.goto(base);
   await page.getByRole('heading', { name: 'Najdi momenty. Vytvoř svůj Short.' }).waitFor();
@@ -45,6 +50,31 @@ try {
   assert.equal(await titleInput.inputValue(),fullHeading);
   assert.equal(await page.locator('.phone-overlay h3').innerText(),fullHeading);
   assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).textTransform),'none');
+  await page.getByRole('combobox',{name:'Písmo nadpisu',exact:true}).click();
+  assert.equal(await page.getByRole('listbox',{name:'Dostupná písma',exact:true}).getByRole('option').count(),13);
+  await page.evaluate(async()=>{
+    for(const family of ['RankBold','RankCondensed','RankSerif','RankArialLike','RankTimesLike','RankCalibriLike','RankAnton','RankBebas','RankPoppins','RankLato','RankArchivo','RankBarlow']){
+      const loaded=await document.fonts.load(`700 24px ${family}`);
+      if(!loaded.length||loaded.some(face=>face.status!=='loaded'))throw new Error('Font failed to load: '+family);
+    }
+  });
+  await page.locator('.font-picker-popup').screenshot({path:'.runtime/screenshots/font-picker.png'});
+
+  await page.getByRole('textbox',{name:'Hledat písmo',exact:true}).fill('Arial');
+  assert.equal(await page.getByRole('listbox',{name:'Dostupná písma',exact:true}).getByRole('option').count(),1);
+  await page.getByRole('listbox',{name:'Dostupná písma',exact:true}).getByRole('option',{name:'Liberation Sans',exact:true}).click();
+  assert.equal(await page.getByRole('combobox',{name:'Písmo nadpisu',exact:true}).getAttribute('data-font'),'arial-compatible');
+  assert.match(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).fontFamily),/RankArialLike/);
+  await page.getByRole('combobox',{name:'Písmo nadpisu',exact:true}).click();
+  await page.getByRole('textbox',{name:'Hledat písmo',exact:true}).fill('Anton');
+  await page.getByRole('textbox',{name:'Hledat písmo',exact:true}).press('Enter');
+  assert.equal(await page.getByRole('combobox',{name:'Písmo nadpisu',exact:true}).getAttribute('data-font'),'anton');
+  assert.match(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).fontFamily),/RankAnton/);
+  await page.evaluate(()=>document.fonts.load('700 24px RankAnton'));
+  const fontResponse=await page.request.get(base+'/api/fonts/anton');
+  assert.equal(fontResponse.status(),200);
+  assert.ok((await fontResponse.body()).length>1000);
+
   await topicInput.fill('ranking funniest cat fails');
   await page.getByRole('button',{name:'Obarvit slovo fails',exact:true}).click();
   assert.equal(await page.locator('[data-title-word="fails"]').evaluate(el=>getComputedStyle(el).color),'rgb(255, 216, 77)');
@@ -147,7 +177,7 @@ try {
   await page.locator('.template-controls > summary').click();
   async function inputValue(locator,value){await locator.evaluate((el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));},value);}
   const numberFont=await page.locator('.phone-rank').evaluate(el=>getComputedStyle(el).fontFamily);
-  await page.getByLabel('Písmo nadpisu',{exact:true}).selectOption('serif');
+  await chooseFont('Písmo nadpisu','DejaVu Serif Bold');
   await inputValue(page.getByLabel('Barva nadpisu ve videu',{exact:true}),'#32d4ef');
   await inputValue(page.getByRole('slider',{name:'Velikost nadpisu',exact:true}),'58');
   assert.match(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).fontFamily),/RankSerif/);
@@ -182,7 +212,7 @@ try {
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).inputValue(), 'ranking Funniest Cat Fails');
   assert.equal(await page.getByLabel('Pokyny k předloze',{exact:true}).inputValue(),'Keep the lime ranking number and white captions.');
-  assert.equal(await page.getByLabel('Písmo nadpisu',{exact:true}).inputValue(),'serif');
+  assert.equal(await page.getByRole('combobox',{name:'Písmo nadpisu',exact:true}).getAttribute('data-font'),'serif');
   assert.equal(await page.getByLabel('Barva nadpisu ve videu',{exact:true}).inputValue(),'#32d4ef');
   assert.equal(await page.getByRole('slider',{name:'Velikost nadpisu',exact:true}).inputValue(),'58');
   assert.equal(await followTitle.isChecked(),false);
@@ -199,7 +229,7 @@ try {
   await page.getByLabel('ROZLIŠENÍ', { exact: true }).selectOption('720');
   for (let i = 1; i <= 5; i++) await page.getByRole('spinbutton', { name: `Délka klipu ${i}`, exact: true }).fill('2');
   await page.getByRole('button',{name:'Žebříček 1–5',exact:true}).click();
-  await page.getByLabel('Písmo nadpisu',{exact:true}).selectOption('serif');
+  await chooseFont('Písmo nadpisu','Anton');
   await inputValue(page.getByLabel('Barva nadpisu ve videu',{exact:true}),'#32d4ef');
   await inputValue(page.getByRole('slider',{name:'Velikost nadpisu',exact:true}),'38');
   await page.getByRole('button',{name:'Obarvit slovo Fails',exact:true}).click();
@@ -209,13 +239,14 @@ try {
   await page.reload();
   await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
   assert.equal(await page.getByLabel('Vzhled písma nadpisu',{exact:true}).inputValue(),'shadow');
+  assert.equal(await page.getByRole('combobox',{name:'Písmo nadpisu',exact:true}).getAttribute('data-font'),'anton');
   assert.equal(await page.locator('[data-title-word="Fails"]').evaluate(el=>getComputedStyle(el).color),'rgb(255, 204, 34)');
   assert.equal(await page.locator('[data-title-word="Cat"]').evaluate(el=>getComputedStyle(el).color),'rgb(50, 212, 239)');
   const renderRequest=page.waitForRequest(request=>request.url().endsWith('/api/render')&&request.method()==='POST');
   await page.getByRole('button', { name: 'Exportovat Short' }).click();
   const renderedPayload=(await renderRequest).postDataJSON();
   assert.equal(renderedPayload.title,'ranking Funniest Cat Fails');
-  assert.equal(renderedPayload.layout.title_font,'serif');
+  assert.equal(renderedPayload.layout.title_font,'anton');
   assert.equal(renderedPayload.layout.title_color,'32D4EF');
   assert.equal(renderedPayload.layout.title_size,38/720);
   assert.equal(renderedPayload.layout.title_style,'shadow');
@@ -259,5 +290,5 @@ try {
   await page.screenshot({ path: '.runtime/screenshots/editor-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, persistent 1–5 column/order/highlight/save-restore, full mixed-case title sync/custom override/independent font-color-size/word colors/themes/restore/render payload, stable gold-silver-bronze-white medal palette, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
+  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, persistent 1–5 column/order/highlight/save-restore, named fonts/search/keyboard selection/restore/real font fetch/export, full mixed-case title sync/custom override/independent font-color-size/word colors/themes/restore/render payload, stable gold-silver-bronze-white medal palette, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
 } finally { await browser.close(); }
