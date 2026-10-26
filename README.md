@@ -8,6 +8,12 @@ Download and extract the [repository ZIP](https://github.com/Mejkl0s/youtube-sho
 
 Running locally is an alternative network location to test; it is not proof that TikTok, Instagram, YouTube, search engines or online speech will allow requests. Native Windows installation and live source access must be verified on that PC. Common launcher, editor and export behavior can be tested in Linux without claiming Windows execution.
 
+## Video title
+
+Typing the full heading into **Co dnes rankujeme?** updates the video title immediately, with the same capitalization and without adding “TOP 5”. Topic and title both support up to 100 characters. Under **NÁZEV VE VIDEU**, choose the title's font, size and color; these settings apply to the preview and actual MP4. The title font is independent of numbers/captions, with an option to inherit the template font. Text case is preserved in exported title files.
+
+Editing the title directly makes it a custom heading, so later search-topic changes do not overwrite it. Re-enable **Přebírat nadpis z „Co dnes rankujeme?“** to copy the current topic and resume automatic updates. Saving a project retains that choice and the title styling.
+
 ## Finish the ranking
 
 The default video overlay keeps all five positions visible in a vertical column: **1 at the top through 5 at the bottom**, with the currently playing rank highlighted. **Žebříček 1–5** applies the column preset without OCR or a paid API. The clip playback still counts down from #5 to #1. The layout setting `rank_display` can explicitly select `column` or the previous `single` counter; both browser preview and MP4 rendering use the selected mode. Column font size and spacing shrink automatically to keep all five rows on screen.

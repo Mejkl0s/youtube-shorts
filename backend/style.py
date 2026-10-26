@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class Layout(BaseModel):
     font: Literal['bold', 'condensed', 'serif'] = 'bold'
+    title_font: Literal['inherit', 'bold', 'condensed', 'serif'] = 'inherit'
     title_color: str = 'FFFFFF'
     rank_color: str = 'CAFA63'
     caption_color: str = 'FFFFFF'

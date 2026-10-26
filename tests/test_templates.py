@@ -183,3 +183,35 @@ def test_final_mp4_keeps_five_rows_top_to_bottom_and_highlights_the_current_rank
             gold = (row[:,:,0] > 200) & (row[:,:,1] > 130) & (row[:,:,2] < 150)
             assert ink.sum() > 50, marker
             assert (gold.sum() > 50) == (marker['rank'] == active), marker
+
+
+def test_full_mixed_case_title_and_independent_font_reach_real_mp4(isolated):
+    title = 'ranking Funniest Cat Moments - little jumps, big surprises and perfectly timed cat reactions'
+    assert 70 < len(title) <= 100
+    source = isolated/'black.mp4'
+    m.ffmpeg('-f', 'lavfi', '-i', 'color=c=black:s=180x320:r=15:d=3', '-c:v', 'libx264', str(source))
+    clips = []
+    for _ in range(5):
+        identity = uuid.uuid4().hex
+        folder = isolated/'media'/identity
+        folder.mkdir()
+        shutil.copyfile(source, folder/'source')
+        m.register(folder/'source', identity, 'Cats')
+        clips.append(m.Clip(id=identity, title='Cats', voiceover='', duration=2))
+    frames = []
+    for font in ('serif', 'condensed'):
+        layout = Layout(font='bold', title_font=font, title_color='32D4EF', title_size=.035, title_y=.02)
+        job_id = uuid.uuid4().hex
+        m.jobs[job_id] = {'id': job_id, 'status': 'queued'}
+        m.render(job_id, m.Project(title=title, clips=clips, layout=layout, voice=False, effects=False, resolution='720'))
+        assert m.jobs[job_id]['status'] == 'done', m.jobs[job_id]
+        folder = isolated/'jobs'/job_id
+        for rank in range(1, 6):
+            assert ' '.join((folder/f'title-{rank}.txt').read_text(encoding='utf-8').split()) == title
+        raw = m.ffmpeg('-ss', '1', '-i', str(folder/'ranking.mp4'), '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1')
+        top = np.frombuffer(raw, dtype=np.uint8).reshape(1280, 720, 3)[:200].copy()
+        cyan = (top[:,:,0] < 100) & (top[:,:,1] > 130) & (top[:,:,2] > 160)
+        assert cyan.sum() > 200
+        frames.append(top)
+    # If the per-title font is ignored, these decoded title regions are equal.
+    assert (np.abs(frames[0].astype(int)-frames[1].astype(int)).max(axis=2) > 30).sum() > 300

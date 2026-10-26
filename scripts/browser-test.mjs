@@ -34,6 +34,21 @@ try {
   await page.unroute('**/api/assistant');
   await page.getByRole('button', {name:'Zavřít chybu'}).click();
   assert.match(await page.locator('.social-sources').innerText(), /TikTok \+ Instagram/);
+  const topicInput=page.getByRole('textbox',{name:'Co dnes rankujeme?',exact:true});
+  const titleInput=page.getByRole('textbox',{name:'NÁZEV VE VIDEU',exact:true});
+  const followTitle=page.getByRole('checkbox',{name:/Přebírat nadpis z/});
+  const fullHeading='ranking Funniest Cat Moments - little jumps, big surprises and perfectly timed cat reactions';
+  await topicInput.fill(fullHeading);
+  assert.equal(await titleInput.inputValue(),fullHeading);
+  assert.equal(await page.locator('.phone-overlay h3').innerText(),fullHeading);
+  assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).textTransform),'none');
+  await titleInput.fill('My own Cat Ranking');
+  assert.equal(await followTitle.isChecked(),false);
+  await topicInput.fill('funny cats');
+  assert.equal(await titleInput.inputValue(),'My own Cat Ranking');
+  await followTitle.check();
+  assert.equal(await titleInput.inputValue(),'funny cats');
+
   await page.screenshot({ path: '.runtime/screenshots/editor-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Exportovat Short' }).click();
   await page.getByRole('alert').filter({ hasText: 'Zatím máte 0/5' }).waitFor();
@@ -43,11 +58,12 @@ try {
   const searchComplete = {id:'ui-free-search',kind:'discover',mode:'free',status:'done',progress:100,message:'Pět momentů je připravených.',candidate_count:8,youtube_fallback:true,source_stats:{TikTok:{found:8,downloaded:0,failed:8},YouTube:{found:5,downloaded:5,failed:0}},download_failures:[{source:'TikTok',url:'https://www.tiktok.com/@example/video/123456',kind:'login_required',reason:'Zdroj vyžaduje platnou přihlášenou relaci.'}],clips:searchDemo.clips.map(c=>({...c,voiceover:'',sourceDuration:c.duration,start:0,duration:3})),search_results:[{url:'https://www.tiktok.com/@example/video/123456',title:'Funny cats source'}]};
   await page.route('**/api/discover', route=>{assert.equal(route.request().postDataJSON().mode,'free');return route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:searchComplete.id,status:'queued',progress:0,message:'Hledám…'})});});
   await page.route('**/api/jobs/ui-free-search', route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(searchComplete)}));
-  await page.getByLabel('Co dnes rankujeme?').fill('funny cats');
+  await page.getByRole('textbox',{name:'Co dnes rankujeme?',exact:true}).fill('funny cats');
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
   await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
   assert.equal(await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).inputValue(),'');
   assert.equal(await page.getByRole('switch',{name:'AI voiceover',exact:true}).getAttribute('aria-checked'),'false');
+  assert.equal(await titleInput.inputValue(),'funny cats');
   await page.locator('.source-diagnostics > summary').click();
   assert.match(await page.locator('.source-stats').innerText(),/YouTube · 5\/5 načteno/);
   await page.getByText('Zdroj vyžaduje platnou přihlášenou relaci.',{exact:false}).waitFor();
@@ -119,6 +135,13 @@ try {
   assert.equal(await page.locator('.template-reference img').count(),1);
   await page.locator('.template-controls > summary').click();
   async function inputValue(locator,value){await locator.evaluate((el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));},value);}
+  const numberFont=await page.locator('.phone-rank').evaluate(el=>getComputedStyle(el).fontFamily);
+  await page.getByLabel('Písmo nadpisu',{exact:true}).selectOption('serif');
+  await inputValue(page.getByLabel('Barva nadpisu ve videu',{exact:true}),'#32d4ef');
+  await inputValue(page.getByRole('slider',{name:'Velikost nadpisu',exact:true}),'58');
+  assert.match(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).fontFamily),/RankSerif/);
+  assert.equal(await page.locator('.phone-rank').evaluate(el=>getComputedStyle(el).fontFamily),numberFont);
+  assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).color),'rgb(50, 212, 239)');
   await inputValue(page.getByLabel('Barva čísel',{exact:true}),'#ff00aa');
   await inputValue(page.getByLabel('Číslo · výška',{exact:true}),'38');
   await page.getByLabel('Zarovnání nadpisu',{exact:true}).selectOption('left');
@@ -142,12 +165,17 @@ try {
   assert.equal(await page.locator('.voice-input.invalid').count(), 1);
   await voice.fill(voiceBefore);
   await page.getByRole('button', { name: 'Zavřít chybu' }).click();
-  await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).fill('TOP 5 TEST MOMENTS');
+  await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).fill('ranking Funniest Cat Moments');
   await page.locator('.save-button').click();
   await page.reload();
   await page.getByRole('textbox', { name: 'Voiceover klipu 5', exact: true }).waitFor();
-  assert.equal(await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).inputValue(), 'TOP 5 TEST MOMENTS');
+  assert.equal(await page.getByRole('textbox', { name: 'NÁZEV VE VIDEU' }).inputValue(), 'ranking Funniest Cat Moments');
   assert.equal(await page.getByLabel('Pokyny k předloze',{exact:true}).inputValue(),'Keep the lime ranking number and white captions.');
+  assert.equal(await page.getByLabel('Písmo nadpisu',{exact:true}).inputValue(),'serif');
+  assert.equal(await page.getByLabel('Barva nadpisu ve videu',{exact:true}).inputValue(),'#32d4ef');
+  assert.equal(await page.getByRole('slider',{name:'Velikost nadpisu',exact:true}).inputValue(),'58');
+  assert.equal(await followTitle.isChecked(),false);
+
   assert.equal(await page.locator('.phone-rank').evaluate(el=>el.style.top),'38%');
   assert.equal(await page.locator('.phone-overlay h3').evaluate(el=>getComputedStyle(el).textAlign),'left');
   await page.getByRole('button', { name: 'Přehrát náhled' }).click();
@@ -158,7 +186,16 @@ try {
   await page.getByLabel('ROZLIŠENÍ', { exact: true }).selectOption('720');
   for (let i = 1; i <= 5; i++) await page.getByRole('spinbutton', { name: `Délka klipu ${i}`, exact: true }).fill('2');
   await page.getByRole('button',{name:'Žebříček 1–5',exact:true}).click();
+  await page.getByLabel('Písmo nadpisu',{exact:true}).selectOption('serif');
+  await inputValue(page.getByLabel('Barva nadpisu ve videu',{exact:true}),'#32d4ef');
+  await inputValue(page.getByRole('slider',{name:'Velikost nadpisu',exact:true}),'38');
+  const renderRequest=page.waitForRequest(request=>request.url().endsWith('/api/render')&&request.method()==='POST');
   await page.getByRole('button', { name: 'Exportovat Short' }).click();
+  const renderedPayload=(await renderRequest).postDataJSON();
+  assert.equal(renderedPayload.title,'ranking Funniest Cat Moments');
+  assert.equal(renderedPayload.layout.title_font,'serif');
+  assert.equal(renderedPayload.layout.title_color,'32D4EF');
+  assert.equal(renderedPayload.layout.title_size,38/720);
   const download = page.getByRole('link', { name: 'Stáhnout Short' });
   await download.waitFor({ timeout: 120000 });
   const response = await page.request.get(new URL(await download.getAttribute('href'), base).href);
@@ -197,5 +234,5 @@ try {
   await page.screenshot({ path: '.runtime/screenshots/editor-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, persistent 1–5 column/order/highlight/save-restore, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
+  console.log('Browser checks passed: real template upload/OCR/manual adjustments/save/restore, free discovery mode/payload/results (mocked), real short rank texts/reorder/manual edits/language, persistent 1–5 column/order/highlight/save-restore, full mixed-case title sync/custom override/independent font-color-size/restore/render payload, outlined and badge presets, inline final MP4 playback, chat/voice controls, assistant result application (mocked), editor, sources, demo, reorder, word limit, save/restore, playback, real MP4 export, audio dialog, mobile layout.');
 } finally { await browser.close(); }

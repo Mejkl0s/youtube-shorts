@@ -9,6 +9,12 @@
 
 Pro další použití stačí znovu otevřít `SPUSTIT-WINDOWS.bat`. Render teď pro lokální studio nepotřebuješ. Pokud se prohlížeč sám neotevře, spouštěč vypíše lokální adresu, kterou můžeš zadat ručně. Toto studio je přístupné jen na tvém počítači.
 
+## Název ve videu
+
+Do **Co dnes rankujeme?** můžeš napsat celý název, například `ranking funniest cat moments`. Nadpis ve videu se mění už při psaní, zachová malá a velká písmena a nepřidává vlastní „TOP 5“. Limit je 100 znaků. Vpravo pod **NÁZEV VE VIDEU** upravíš písmo, velikost a barvu nadpisu; stejné nastavení se použije při exportu.
+
+Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Zaškrtnutím **Přebírat nadpis z „Co dnes rankujeme?“** propojení zase zapneš. Volba i vzhled nadpisu se uloží spolu s projektem. Písmo nadpisu může být jiné než písmo čísel a titulků.
+
 ## Dokončení videa po vyhledání klipů
 
 1. Klikni **Uložit projekt**, aby aktuální výběr zůstal uložený v tomto prohlížeči.

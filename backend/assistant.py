@@ -19,7 +19,7 @@ router = APIRouter(prefix='/api')
 
 class State(BaseModel):
     topic: str = Field(default='', max_length=100)
-    title: str = Field(default='TOP 5 UNEXPECTED MOMENTS', min_length=1, max_length=70)
+    title: str = Field(default='TOP 5 UNEXPECTED MOMENTS', min_length=1, max_length=100)
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
     language: Literal['en', 'cs'] = 'en'
     resolution: Literal['720', '1080'] = '1080'
@@ -51,7 +51,7 @@ class Request(BaseModel):
 
 class Changes(BaseModel):
     topic: str | None = Field(default=None, min_length=3, max_length=100)
-    title: str | None = Field(default=None, min_length=1, max_length=70)
+    title: str | None = Field(default=None, min_length=1, max_length=100)
     ranking_criteria: str | None = Field(default=None, min_length=3, max_length=100)
     language: Literal['en', 'cs'] | None = None
     resolution: Literal['720', '1080'] | None = None

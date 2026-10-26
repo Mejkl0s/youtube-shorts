@@ -107,7 +107,7 @@ class Clip(BaseModel):
 
 
 class Project(BaseModel):
-    title: str = Field(min_length=1, max_length=70)
+    title: str = Field(min_length=1, max_length=100)
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
     clips: list[Clip] = Field(min_length=5, max_length=5)
     language: str = 'en'
@@ -367,7 +367,7 @@ def render(job_id: str, project: Project):
                 filters.append(f'anullsrc=r=44100:cl=stereo,atrim=duration={duration}[audio]')
             layout = project.layout
             titlefile = folder / f'title-{rank}.txt'
-            titlefile.write_text(wrap(project.title.upper(), max(10, int(26*0.0454/layout.title_size))), encoding='utf-8')
+            titlefile.write_text(wrap(project.title, max(10, int(26*0.0454/layout.title_size))), encoding='utf-8')
             captionfile = folder / f'caption-{rank}.txt'
             captionfile.write_text(wrap(clip.voiceover, max(12, int(25*0.0528/layout.caption_size))), encoding='utf-8')
             labelfile = folder / f'label-{rank}.txt'
@@ -375,14 +375,15 @@ def render(job_id: str, project: Project):
             criteriafile = folder / f'criteria-{rank}.txt'
             criteriafile.write_text(wrap(project.ranking_criteria.upper(), 50), encoding='utf-8')
             font = filter_path(FONTS[layout.font])
-            def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2'):
-                return f'drawtext=fontfile={font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
+            def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2', font_override: str | None = None):
+                return f'drawtext=fontfile={font_override or font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
             def aligned_x(name):
                 alignment = getattr(layout, name+'_align')
                 margin = int(width * getattr(layout, name+'_x'))
                 return str(margin) if alignment == 'left' else f'w-text_w-{margin}' if alignment == 'right' else '(w-text_w)/2'
             video = f'[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS,drawbox=x=0:y=0:w=iw:h={int(310*scale)}:color=black@{layout.header_darkness}:t=fill,'
-            video += draw_text(titlefile, int(width*layout.title_size), str(int(height*layout.title_y)), '0x'+layout.title_color, aligned_x('title'))
+            title_font = layout.font if layout.title_font == 'inherit' else layout.title_font
+            video += draw_text(titlefile, int(width*layout.title_size), str(int(height*layout.title_y)), '0x'+layout.title_color, aligned_x('title'), filter_path(FONTS[title_font]))
             rank_border = 0 if layout.rank_style == 'plain' else max(1, round(width * .008))
             rank_decoration = ''
             if layout.rank_style == 'badge':
