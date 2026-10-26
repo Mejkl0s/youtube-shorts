@@ -1,0 +1,73 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+
+const base=process.env.TEST_BASE_URL||'http://127.0.0.1:8000';
+await mkdir('.runtime/screenshots',{recursive:true});
+const fixture='.runtime/screenshots/compilation-fixture.mp4';
+const colors=['red','blue','yellow','purple','cyan'];
+const inputs=colors.flatMap(color=>['-f','lavfi','-i',`color=c=${color}:s=360x640:r=24:d=3`]);
+const font='backend/fonts/DejaVuSans-Bold.ttf';
+const chains=colors.map((_,i)=>`[${i}:v]drawbox=x=20:y=130:w=320:h=75:color=black:t=fill,drawtext=fontfile=${font}:text='WINTER FAILS':fontsize=28:fontcolor=white:bordercolor=black:borderw=2:x=40:y=150[v${i}]`);
+execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y',...inputs,'-filter_complex',chains.join(';')+';'+colors.map((_,i)=>`[v${i}]`).join('')+'concat=n=5:v=1:a=0[v]','-map','[v]','-c:v','libx264',fixture]);
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
+const page=await browser.newPage({viewport:{width:1440,height:1100}});
+const errors=[];
+page.on('pageerror',error=>errors.push(error.message));
+page.on('dialog',dialog=>dialog.accept());
+try{
+  await page.goto(base);
+  await page.getByRole('textbox',{name:'Co dnes rankujeme?',exact:true}).fill('ranking funniest winter fails');
+  assert.equal(await page.getByRole('checkbox',{name:'Automaticky rozmazat nalezený text ve zdrojových klipech'}).isChecked(),true);
+  const chooser=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Nahrát a rozstříhat kompilaci',exact:true}).click();
+  await (await chooser).setFiles(fixture);
+  await page.waitForFunction(()=>document.querySelectorAll('.clip-thumb').length===5,{},{timeout:120000});
+  await page.locator('.clip-card').first().getByRole('button',{name:/Rozmazání/}).click();
+  const dialog=page.getByRole('dialog',{name:'Rozmazání klipu 5',exact:true});
+  await dialog.waitFor();
+  assert.ok(await dialog.locator('.cleanup-region').count()>=1);
+  await dialog.getByRole('button',{name:'Odebrat všechna rozmazání',exact:true}).click();
+  const rect=await dialog.locator('.cleanup-screen').boundingBox();
+  await page.mouse.move(rect.x+rect.width*.12,rect.y+rect.height*.2);
+  await page.mouse.down();
+  await page.mouse.move(rect.x+rect.width*.85,rect.y+rect.height*.36,{steps:8});
+  await page.mouse.up();
+  assert.equal(await dialog.locator('.cleanup-region').count(),1);
+  await dialog.screenshot({path:'.runtime/screenshots/compilation-cleanup.png'});
+  await dialog.getByRole('button',{name:'Použít rozmazání',exact:true}).click();
+  assert.equal(await page.locator('.phone .source-cleanup-masks>span').count(),1);
+  const layers=await page.locator('.phone').evaluate(phone=>({
+    blur:Number(getComputedStyle(phone.querySelector('.source-cleanup-masks')).zIndex),
+    title:Number(getComputedStyle(phone.querySelector('.phone-overlay')).zIndex),
+  }));
+  assert.ok(layers.title>layers.blur);
+  await page.locator('.save-button').click();
+  await page.reload();
+  await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
+  assert.equal(await page.locator('.phone .source-cleanup-masks>span').count(),1);
+  await page.getByLabel('ROZLIŠENÍ',{exact:true}).selectOption('720');
+  let payload;
+  page.on('request',request=>{if(request.url().endsWith('/api/render'))payload=request.postDataJSON();});
+  await page.getByRole('button',{name:'Exportovat Short',exact:true}).click();
+  const download=page.getByRole('link',{name:'Stáhnout Short',exact:true});
+  await download.waitFor({timeout:120000});
+  assert.equal(payload.clips[0].blur_regions.length,1);
+  assert.ok(payload.clips.every(clip=>clip.start===0&&clip.sourceDuration<3.1));
+  assert.equal(new Set(payload.clips.map(clip=>clip.id)).size,5);
+  const video=await page.request.get(base+await download.getAttribute('href'));
+  assert.equal(video.status(),200);
+  assert.ok((await video.body()).length>10000);
+  await page.locator('.clip-card').first().getByRole('button',{name:/Rozmazání/}).click();
+  await page.getByRole('button',{name:'Najít text automaticky',exact:true}).click();
+  await page.getByRole('button',{name:'Použít rozmazání',exact:true}).waitFor();
+  await page.waitForFunction(()=>!document.querySelector('.cleanup-controls .primary-button')?.disabled,{},{timeout:30000});
+  assert.ok(await page.locator('.cleanup-region').count()>=1);
+  await page.getByRole('button',{name:'Zavřít rozmazání',exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('.clip-card').first().getByRole('button',{name:/Rozmazání/}).click();
+  await page.getByRole('dialog').screenshot({path:'.runtime/screenshots/compilation-cleanup-mobile.png'});
+  assert.deepEqual(errors,[]);
+  console.log('Compilation browser checks passed: actual upload, five independent shots, local OCR masks, manual rectangle, preview layering, save/restore, real MP4 export, re-detection and mobile dialog.');
+}finally{await browser.close();}

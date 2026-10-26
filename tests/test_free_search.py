@@ -167,12 +167,12 @@ def test_failed_video_preparation_is_not_reported_as_download_block(isolated, mo
 
 
 @pytest.mark.parametrize(('output', 'expected'), [
-    (b'[download] Winter fails does not pass filter (duration <= 120), skipping ..', 'duration'),
+    (b'[download] Winter fails does not pass filter (duration <= 600), skipping ..', 'duration'),
     (b'[download] File is larger than max-filesize (400000000 bytes > 314572800 bytes). Aborting.', 'size'),
 ])
 def test_downloader_skip_reports_actual_limit_instead_of_generic_unavailable(isolated, monkeypatch, output, expected):
     def download(args, timeout):
-        assert args[args.index('--match-filter')+1] == 'duration <= 120'
+        assert args[args.index('--match-filter')+1] == 'duration <= 600'
         assert args[args.index('--max-filesize')+1] == '300M'
         return output+b' private-session-token-do-not-echo'
     monkeypatch.setattr(m, 'run', download)
@@ -251,7 +251,8 @@ def test_free_search_to_real_scene_selection_and_export_never_calls_paid_api(iso
     assert job['status'] == 'done', job
     assert len(job['clips']) == len({clip['id'] for clip in job['clips']}) == 5
     assert len(downloads) == 6
-    assert all(clip['start'] >= 2.9 and clip['start'] + clip['duration'] <= 6.05 for clip in job['clips'])
+    assert all(clip['source_start'] >= 2.9 and clip['source_start'] + clip['duration'] <= 6.05 for clip in job['clips'])
+    assert all(clip['start'] == 0 and abs(clip['sourceDuration']-3) < .1 for clip in job['clips'])
     assert all(clip['voiceover'] == '' and clip['source_url'] in downloads for clip in job['clips'])
     render_id = uuid.uuid4().hex
     m.jobs[render_id] = {'id': render_id, 'status': 'queued'}
@@ -342,7 +343,7 @@ def test_direct_youtube_search_filters_long_live_unrelated_and_duplicate_results
     import json
     rows = [{'id': 'CATCLIP0000', 'title': 'Funny cats jumping', 'duration': 30},
             {'id': 'CATCLIP0000', 'title': 'Funny cats duplicate', 'duration': 30},
-            {'id': 'CATCLIP0001', 'title': 'Funny cats long', 'duration': 200},
+            {'id': 'CATCLIP0001', 'title': 'Funny cats long', 'duration': 601},
             {'id': 'CATCLIP0002', 'title': 'Funny cats live', 'live_status': 'is_live'},
             {'id': 'CATCLIP0003', 'title': 'Football skills', 'duration': 20},
             {'id': '../../bad', 'title': 'Funny cats', 'duration': 20}]
@@ -355,7 +356,7 @@ def test_direct_youtube_search_filters_long_live_unrelated_and_duplicate_results
     entries, warnings = f.youtube_search('funny cats', 8)
     assert len(entries) == 2 and not warnings
     assert entries[0]['url'] == 'https://www.youtube.com/watch?v=CATCLIP0000'
-    assert '--flat-playlist' in commands[0] and commands[0][-1] == 'ytsearch8:funny cats shorts'
+    assert '--flat-playlist' in commands[0] and commands[0][-1] == 'ytsearch8:funny cats'
 
 
 @pytest.mark.parametrize('unusable_extra', [False, True])

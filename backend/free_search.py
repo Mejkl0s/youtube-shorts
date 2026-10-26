@@ -145,11 +145,19 @@ def relevance(topic, title, description=''):
     return 1.0
 
 
+def search_topic(topic):
+    """Keep the video title intact; search for its concrete topic instead."""
+    words = re.findall(r"[^\W_]+", topic.casefold())
+    ignored = {'ranking', 'rank', 'top', 'clip', 'clips', 'video', 'videos', 'moment', 'moments', 'compilation', 'compilations'}
+    clean = ['funny' if word == 'funniest' else word for word in words if word not in ignored and not word.isdigit()]
+    return ' '.join(clean) or topic
+
+
 def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False):
     from .main import canonical_url, social_url
     sources = [('TikTok', 'site:tiktok.com inurl:video'), ('Instagram', 'site:instagram.com/reel/')]
     if allow_youtube:
-        sources.append(('YouTube', 'site:youtube.com/shorts/'))
+        sources.append(('YouTube', 'site:youtube.com'))
     if only_youtube:
         sources = [source for source in sources if source[0] == 'YouTube']
     pools, seen, warnings = [], set(), []
@@ -158,7 +166,7 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
         for suffix in ('', ' moments'):
             if len(entries) >= limit:
                 break
-            query = topic + suffix + ' ' + restriction
+            query = search_topic(topic) + suffix + ' ' + restriction
             for engine in ('bing', 'duckduckgo'):
                 added = 0
                 try:
@@ -209,14 +217,14 @@ def youtube_search(topic: str, limit: int):
         raw = m.run([sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir',
                      '--no-warnings', '--no-remote-components', '--flat-playlist', '--skip-download',
                      '--dump-single-json', '--socket-timeout', '10', '--retries', '0',
-                     '--playlist-end', str(limit), '--', f'ytsearch{limit}:{topic} shorts'], 40)
+                     '--playlist-end', str(limit), '--', f'ytsearch{limit}:{search_topic(topic)}'], 40)
         if len(raw) > 4 * 1024 * 1024:
             raise ValueError('Too many search results')
         for index, row in enumerate(json.loads(raw).get('entries', [])[:limit]):
             if not isinstance(row, dict) or not re.fullmatch(r'[\w-]{11}', str(row.get('id', ''))):
                 continue
             duration = row.get('duration')
-            if (isinstance(duration, (int, float)) and not 2 <= duration <= 120) or row.get('live_status') in ('is_live', 'is_upcoming'):
+            if (isinstance(duration, (int, float)) and not 2 <= duration <= m.MAX_SOURCE_SECONDS) or row.get('live_status') in ('is_live', 'is_upcoming'):
                 continue
             title = plain(row.get('title', ''))
             score = relevance(topic, title, plain(row.get('description', '')))
@@ -260,32 +268,43 @@ def select_free(candidates, topic, *, require_five=True):
     selected = []
     for candidate in candidates:
         path = m.DATA / 'media' / candidate['id'] / 'source'
-        best = None
+        best_by_shot = {}
         try:
-            for scene_start, scene_duration in m.scene_windows(path):
+            windows = m.scene_windows(path)
+            for window in windows:
+                scene_start, scene_duration = window
+                shot = getattr(window, 'shot', 0)
                 duration = min(4.0, scene_duration)
                 start = scene_start + max(0, (scene_duration - duration) / 2)
                 raw = m.ffmpeg('-ss', str(start), '-i', str(path), '-t', str(duration), '-an',
                                '-vf', 'fps=3,scale=64:64,format=gray', '-f', 'rawvideo', 'pipe:1')
                 score = window_score(raw)
+                best = best_by_shot.get(shot)
                 if score is not None and (best is None or score > best[0]):
-                    best = (score, start, duration)
-            if best is None:
-                continue
-            technical, start, duration = best
-            selected.append((float(candidate.get('search_score', 0)) * .8 + technical * .2, candidate, start, duration))
+                    best_by_shot[shot] = (score, start, duration)
+            compilation = len({getattr(window, 'shot', 0) for window in windows}) > 1
+            for technical, start, duration in best_by_shot.values():
+                selected.append((float(candidate.get('search_score', 0)) * .8 + technical * .2, candidate, start, duration, compilation))
         except Exception:
             continue
-    # TikTok/Instagram remain primary. YouTube only fills missing positions.
-    social = [row for row in selected if row[1].get('source') != 'YouTube']
-    supplement = [row for row in selected if row[1].get('source') == 'YouTube']
-    chosen = sorted(social, key=lambda row: row[0], reverse=True)[:5]
-    chosen += sorted(supplement, key=lambda row: row[0], reverse=True)[:5-len(chosen)]
+    # Prefer one scene per source; only fill the remaining slots with distinct
+    # shots from compilations. Multiple windows of one continuous shot never count.
+    ordered = sorted(selected, key=lambda row: (row[1].get('source') == 'YouTube', -row[0]))
+    chosen, seen = [], set()
+    for row in ordered:
+        if row[1]['id'] not in seen and len(chosen) < 5:
+            chosen.append(row)
+            seen.add(row[1]['id'])
+    for row in ordered:
+        if len(chosen) == 5:
+            break
+        if row not in chosen:
+            chosen.append(row)
     if require_five and len(chosen) < 5:
-        raise ValueError(f'Pouze {len(chosen)} dostupných videí obsahuje použitelnou souvislou scénu. Zkuste jiné téma nebo nahrajte vlastní klipy.')
+        raise ValueError(f'Pouze {len(chosen)} různých scén je použitelných. Zkuste jiné téma nebo nahrajte vlastní klipy či kompilaci.')
     result = []
-    for _, candidate, start, duration in sorted(chosen, key=lambda row: row[0]):
+    for _, candidate, start, duration, compilation in sorted(chosen, key=lambda row: row[0]):
         result.append({**candidate, 'title': candidate['name'][:60], 'voiceover': '', 'start': start, 'duration': duration,
-                       'sourceDuration': candidate['duration'],
-                       'reason': 'Předběžný výběr podle shody textu s tématem, ostrosti a pohybu. Souvislý úsek bez detekovaného střihu; obsah a pořadí zkontroluj.'})
-    return result
+                       'sourceDuration': candidate['duration'], '_cut_scene': compilation,
+                       'reason': 'Výběr podle shody tématu, ostrosti a pohybu. Samostatný úsek bez detekovaného střihu; obsah a pořadí zkontroluj.'})
+    return m.materialize_scenes(result)
