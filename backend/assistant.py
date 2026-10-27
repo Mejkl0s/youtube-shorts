@@ -71,6 +71,7 @@ class Edit(BaseModel):
     index: int = Field(ge=0, le=4)
     title: str | None = Field(default=None, min_length=1, max_length=60)
     voiceover: str | None = Field(default=None, max_length=180)
+    rank_note: str | None = Field(default=None, max_length=40)
     start: float | None = Field(default=None, ge=0, le=120)
     duration: float | None = Field(default=None, ge=2, le=8)
 

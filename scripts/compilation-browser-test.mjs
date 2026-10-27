@@ -43,6 +43,10 @@ try{
     title:Number(getComputedStyle(phone.querySelector('.phone-overlay')).zIndex),
   }));
   assert.ok(layers.title>layers.blur);
+  await page.getByRole('textbox',{name:'Poznámka u čísla 5',exact:true}).fill('Ice wins!');
+  assert.equal(await page.locator('.phone-rank-row').last().locator('.phone-rank-note').innerText(),'Ice wins!');
+  for(const selector of ['.phone-clip-label','.phone-criteria','.phone-watermark','.phone-bottom','.phone-caption'])assert.equal(await page.locator(selector).count(),0);
+  assert.equal(await page.locator('.phone-rank.active').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
   await page.locator('.save-button').click();
   await page.reload();
   await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
@@ -54,6 +58,7 @@ try{
   const download=page.getByRole('link',{name:'Stáhnout Short',exact:true});
   await download.waitFor({timeout:120000});
   assert.equal(payload.clips[0].blur_regions.length,1);
+  assert.equal(payload.clips[0].rank_note,'Ice wins!');
   assert.ok(payload.clips.every(clip=>clip.start===0&&clip.sourceDuration<3.1));
   assert.equal(new Set(payload.clips.map(clip=>clip.id)).size,5);
   const video=await page.request.get(base+await download.getAttribute('href'));

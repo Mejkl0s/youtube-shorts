@@ -291,7 +291,6 @@ def test_assistant_shortens_long_narration_instead_of_rushing_voice(isolated, mo
     m.render(job_id, project)
     assert m.jobs[job_id]['status'] == 'done', m.jobs[job_id]
     assert all(c.voiceover == 'Perfect timing.' for c in project.clips)
-    assert (isolated / 'jobs' / job_id / 'caption-5.txt').read_text() == 'Perfect timing.'
 
 
 def test_visual_scripts_enforce_requested_short_length(isolated, monkeypatch):

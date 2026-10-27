@@ -21,6 +21,10 @@ Pro obarvení samotného slova (například `fails`) na něj klikni v seznamu sl
 
 Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Zaškrtnutím **Přebírat nadpis z „Co dnes rankujeme?“** propojení zase zapneš. Volba i vzhled nadpisu se uloží spolu s projektem. Písmo nadpisu může být jiné než písmo čísel a titulků.
 
+## Krátké poznámky u čísel
+
+U každého klipu je pole **Poznámka u čísla** pro nejvýše čtyři slova. Výchozí krátké reakce můžeš přepsat podle skutečného momentu. Ve sloupci se poznámky zobrazí vedle čísel 1–5. Při přesunu klipu jde poznámka s ním; voiceover je zvlášť. Vpravo je přepínač **Poznámky u čísel**. Zelený název zdroje, spodní kritéria, nápis Rank Studio a automatický šedý podklad aktivního čísla se už do náhledu ani výsledku nepřidávají. Platí to i pro obnovené projekty. Nápisy přímo ve zdrojovém videu řeší tlačítko **Rozmazání**.
+
 ## Dokončení videa po vyhledání klipů
 
 1. Klikni **Uložit projekt**, aby aktuální výběr zůstal uložený v tomto prohlížeči.

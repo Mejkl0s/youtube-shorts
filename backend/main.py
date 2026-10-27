@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .style import FONTS, Layout, VoiceSettings, voice_available, filter_path
 from .title_render import render_title
 from .cleanup import BlurRegion, blur_filters, detect_text
+from .rank_notes import DEFAULT_NOTES, note_geometry
 from .access import owner_access
 from .free_search import public_search, youtube_search, select_free
 from .social_sessions import download_session
@@ -101,6 +102,14 @@ class Clip(BaseModel):
     reason: str = Field(default='', max_length=300)
     source_url: str = Field(default='', max_length=500)
     blur_regions: list[BlurRegion] = Field(default_factory=list, max_length=8)
+    rank_note: str | None = Field(default=None, max_length=40)
+
+    @field_validator('rank_note')
+    @classmethod
+    def short_rank_note(cls, value):
+        if value is not None and (word_count(value) > 4 or any(ord(c)<32 for c in value)):
+            raise ValueError('Poznámka u čísla smí mít nejvýše 4 slova na jednom řádku.')
+        return value.strip() if value is not None else None
 
     @field_validator('voiceover')
     @classmethod
@@ -133,6 +142,8 @@ class Project(BaseModel):
         if len({c.id for c in self.clips}) != 5:
             raise ValueError('Nahrajte pět různých klipů.')
         for index, clip in enumerate(self.clips):
+            if clip.rank_note is None:
+                clip.rank_note = DEFAULT_NOTES[index]
             if clip.narration_mode == 'rank':
                 clip.voiceover = rank_lines(self.language)[index]
         if self.voice and any(not c.voiceover.strip() or not word_count(c.voiceover) for c in self.clips):
@@ -372,21 +383,9 @@ def render(job_id: str, project: Project):
             else:
                 filters.append(f'anullsrc=r=44100:cl=stereo,atrim=duration={duration}[audio]')
             layout = project.layout
-            titlefile = folder / f'title-{rank}.txt'
-            titlefile.write_text(wrap(project.title, max(10, int(26*0.0454/layout.title_size))), encoding='utf-8')
-            captionfile = folder / f'caption-{rank}.txt'
-            captionfile.write_text(wrap(clip.voiceover, max(12, int(25*0.0528/layout.caption_size))), encoding='utf-8')
-            labelfile = folder / f'label-{rank}.txt'
-            labelfile.write_text(wrap(clip.title, 32), encoding='utf-8')
-            criteriafile = folder / f'criteria-{rank}.txt'
-            criteriafile.write_text(wrap(project.ranking_criteria.upper(), 50), encoding='utf-8')
             font = filter_path(FONTS[layout.font])
             def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2'):
                 return f'drawtext=fontfile={font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
-            def aligned_x(name):
-                alignment = getattr(layout, name+'_align')
-                margin = int(width * getattr(layout, name+'_x'))
-                return str(margin) if alignment == 'left' else f'w-text_w-{margin}' if alignment == 'right' else '(w-text_w)/2'
             video = f'[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS[source_clean]'
             filters.append(video)
             cleanup_filters, clean = blur_filters(clip.blur_regions, width, height)
@@ -401,15 +400,13 @@ def render(job_id: str, project: Project):
                 rank_decoration = f':shadowcolor=black@0.65:shadowx={round(width*.003)}:shadowy={round(width*.005)}'
             for marker in layout.rank_markers(rank):
                 marker_decoration = rank_decoration
-                if layout.rank_palette == 'medals' and marker['active'] and layout.rank_style != 'badge':
-                    marker_decoration += f':box=1:boxcolor=black@0.35:boxborderw={round(width*.012)}'
                 video += f",drawtext=fontfile={font}:text='{marker['text']}':fontsize={int(width*marker['size'])}:fontcolor=0x{marker['color']}@{marker['alpha']}:x={int(width*layout.rank_x)}:y={int(height*marker['y'])}:borderw={rank_border}:bordercolor=black{marker_decoration}"
-            if layout.show_label:
-                video += ',' + draw_text(labelfile, int(34*scale), str(int(515*scale)), '0x'+layout.rank_color)
-            if layout.show_criteria:
-                video += ',' + draw_text(criteriafile, int(24*scale), f'h-{int(210*scale)}', 'white@0.7')
-            if project.captions and clip.voiceover:
-                video += ',' + draw_text(captionfile, int(width*layout.caption_size), str(int(height*layout.caption_y)), '0x'+layout.caption_color, aligned_x('caption'))
+                note = project.clips[5-marker['rank']].rank_note
+                if project.captions and note:
+                    notefile = folder / f"note-{marker['rank']}.txt"
+                    notefile.write_text(note, encoding='utf-8')
+                    note_x, note_y, note_size = note_geometry(note, FONTS[layout.font], marker, width, height, layout.rank_x)
+                    video += ',' + draw_text(notefile, note_size, str(note_y), 'white', str(note_x))
             filters.append(video + '[video]')
             out = folder / f'clip-{rank}.mp4'
             ffmpeg(*inputs, '-filter_complex_threads', '2', '-filter_complex', ';'.join(filters), '-map', '[video]', '-map', '[audio]', '-t', str(duration), '-c:v', 'libx264', '-threads', '2', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2', '-movflags', '+faststart', str(out))

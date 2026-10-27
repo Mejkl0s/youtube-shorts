@@ -122,8 +122,8 @@ def test_template_position_color_and_alignment_are_used_in_actual_mp4(isolated):
     white = np.all(image > 190, axis=2)
     top_y, top_x = np.where(white[:250])
     assert abs(top_x.min() - .12*720) < 15
-    bottom_y, bottom_x = np.where(white[900:])
-    assert abs(bottom_x.max() - .9*720) < 15
+    assert not white[900:].any(), 'Legacy captions must not appear at the bottom.'
+    assert white[400:550,550:].sum()>20, 'The short note belongs beside the number.'
 
 
 def test_updated_reference_preferences_reach_planner_and_vision_action(isolated, monkeypatch):
@@ -209,8 +209,6 @@ def test_full_mixed_case_title_and_independent_font_reach_real_mp4(isolated):
         m.render(job_id, m.Project(title=title, clips=clips, layout=layout, voice=False, effects=False, resolution='720'))
         assert m.jobs[job_id]['status'] == 'done', m.jobs[job_id]
         folder = isolated/'jobs'/job_id
-        for rank in range(1, 6):
-            assert ' '.join((folder/f'title-{rank}.txt').read_text(encoding='utf-8').split()) == title
         raw = m.ffmpeg('-ss', '1', '-i', str(folder/'ranking.mp4'), '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1')
         top = np.frombuffer(raw, dtype=np.uint8).reshape(1280, 720, 3)[:200].copy()
         cyan = (top[:,:,0] < 100) & (top[:,:,1] > 130) & (top[:,:,2] > 160)
