@@ -21,9 +21,15 @@ Pro obarvení samotného slova (například `fails`) na něj klikni v seznamu sl
 
 Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Zaškrtnutím **Přebírat nadpis z „Co dnes rankujeme?“** propojení zase zapneš. Volba i vzhled nadpisu se uloží spolu s projektem. Písmo nadpisu může být jiné než písmo čísel a titulků.
 
+## Pointa, obraz a zvuk
+
+Po aktualizaci klikni pod pěti klipy na **Znovu vybrat celé scény**, pokud byly uložené ještě jako čtyřsekundové výřezy. Původní videa musí zůstat ve stejné složce `.runtime`. Krátká scéna se zachová celá až do 30 sekund. U delších záběrů jde o odhad podle pohybu, proto pointu zkontroluj přes **Upravit střih**. V tomto okně můžeš přehrát původní záběr, posunout začátek/konec a vybrat **Celý obraz**, aby nebyl děj u okraje uříznutý. **Celý původní zdroj** ukáže i části za detekovaným střihem. Změna vytvoří nový výřez a nechá původní soubory zachované.
+
+Hlasitost **Původní zvuk** je přímo pod náhledem. Nový výchozí mix je 80 %. U souboru bez audio stopy je **Zdroj bez zvuku**; chybějící původní zvuk nelze obnovit zvýšením hlasitosti. Přímý přehrávač klipu přehrává původní stopu. Voiceover a SFX se přimíchají při vytvoření videa: klikni **Připravit voiceover zdarma**, nech zapnuté požadované zvuky a potom **Vytvořit náhled se zvukem**. Hotový přehrávač je hned pod původním náhledem. Nemusíš soubor stahovat, abys zvuky slyšel. Online hlas vyžaduje dostupnou službu na tvém připojení.
+
 ## Krátké poznámky u čísel
 
-U každého klipu je pole **Poznámka u čísla** pro nejvýše čtyři slova. Výchozí krátké reakce můžeš přepsat podle skutečného momentu. Ve sloupci se poznámky zobrazí vedle čísel 1–5. Při přesunu klipu jde poznámka s ním; voiceover je zvlášť. Vpravo je přepínač **Poznámky u čísel**. Zelený název zdroje, spodní kritéria, nápis Rank Studio a automatický šedý podklad aktivního čísla se už do náhledu ani výsledku nepřidávají. Platí to i pro obnovené projekty. Nápisy přímo ve zdrojovém videu řeší tlačítko **Rozmazání**.
+U každého klipu je pole **Poznámka u čísla** pro nejvýše čtyři slova. Nový výběr střídá krátké české/anglické reakce; v jedné sadě se neopakují. **Obměnit poznámky** připraví jinou sadu. Text můžeš přepsat podle skutečného momentu a při obnovení projektu zůstane zachovaný. Ve sloupci se poznámky zobrazí vedle čísel 1–5. Při přesunu klipu jde poznámka s ním; voiceover je zvlášť. Vpravo je přepínač **Poznámky u čísel**. Zelený název zdroje, spodní kritéria, nápis Rank Studio a automatický šedý podklad aktivního čísla se už do náhledu ani výsledku nepřidávají. Platí to i pro obnovené projekty. Nápisy přímo ve zdrojovém videu řeší tlačítko **Rozmazání**.
 
 ## Dokončení videa po vyhledání klipů
 

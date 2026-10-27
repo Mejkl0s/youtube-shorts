@@ -148,12 +148,12 @@ def test_visual_ai_selection_preserves_source_length_and_rejects_duplicate(isola
         candidate['source_url'] = 'https://www.instagram.com/reel/ABC/'
         candidates.append(candidate)
     # Real frame extraction and scene analysis; only the remote response is mocked.
-    selection = {'clips': [{'scene': i * 4, 'title': f'Moment {i}', 'voiceover': 'Great timing wins this round.', 'reason': 'A clearly visible moment with good timing.'} for i in range(5)]}
+    selection = {'clips': [{'scene': i, 'title': f'Moment {i}', 'voiceover': 'Great timing wins this round.', 'reason': 'A clearly visible moment with good timing.'} for i in range(5)]}
     monkeypatch.setattr(m, 'ai_request', lambda *a, **kw: selection)
     result = m.select_candidates(candidates, 'timing', 'en')
     assert len({c['id'] for c in result}) == 5
     assert all(c['sourceDuration'] == 9 for c in result)
-    assert all(c['duration'] == 5 for c in result)
+    assert all(c['duration'] == 9 for c in result)
     selection['clips'][1]['scene'] = 0
     with pytest.raises(ValueError, match='stejné video'):
         m.select_candidates(candidates, 'timing', 'en')

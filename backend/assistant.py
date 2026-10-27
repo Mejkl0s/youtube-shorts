@@ -28,7 +28,7 @@ class State(BaseModel):
     voice: bool = True
     effects: bool = True
     captions: bool = True
-    original_volume: float = Field(default=0.12, ge=0, le=1)
+    original_volume: float = Field(default=0.8, ge=0, le=1.5)
     voice_volume: float = Field(default=1, ge=0, le=1.5)
     effects_volume: float = Field(default=0.55, ge=0, le=1)
     layout: Layout = Field(default_factory=Layout)
@@ -60,7 +60,7 @@ class Changes(BaseModel):
     voice: bool | None = None
     effects: bool | None = None
     captions: bool | None = None
-    original_volume: float | None = Field(default=None, ge=0, le=1)
+    original_volume: float | None = Field(default=None, ge=0, le=1.5)
     voice_volume: float | None = Field(default=None, ge=0, le=1.5)
     effects_volume: float | None = Field(default=None, ge=0, le=1)
     layout: dict | None = None
@@ -73,7 +73,7 @@ class Edit(BaseModel):
     voiceover: str | None = Field(default=None, max_length=180)
     rank_note: str | None = Field(default=None, max_length=40)
     start: float | None = Field(default=None, ge=0, le=120)
-    duration: float | None = Field(default=None, ge=2, le=8)
+    duration: float | None = Field(default=None, ge=2, le=30)
 
 
 class Plan(BaseModel):

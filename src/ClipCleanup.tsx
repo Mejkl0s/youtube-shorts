@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 
 export type BlurRegion={x:number;y:number;w:number;h:number;origin?:'auto'|'manual'};
-type Source={id:string;url:string;start:number;duration:number;blur_regions?:BlurRegion[]};
+type Source={framing?:'fit'|'fill';id:string;url:string;start:number;duration:number;blur_regions?:BlurRegion[]};
 
 export function BlurMasks({regions=[]}:{regions?:BlurRegion[]}){
   return <div className="source-cleanup-masks" aria-hidden="true">{regions.map((r,i)=><span key={i} style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.w*100}%`,height:`${r.h*100}%`}}/>)}</div>;
@@ -34,7 +34,7 @@ export default function ClipCleanup({clip,rank,onClose,onApply,detect}:{clip:Sou
       onPointerMove={e=>{if(anchor.current)setDraft(rectangle(e));}}
       onPointerUp={e=>{if(!anchor.current)return;const box=rectangle(e);anchor.current=null;setDraft(null);if(box.w>=.01&&box.h>=.01)setRegions(old=>[...old,box].slice(0,8));}}
       onPointerCancel={()=>{anchor.current=null;setDraft(null);}}>
-      <video ref={video} src={clip.url} muted playsInline onLoadedMetadata={()=>{if(video.current)video.current.currentTime=clip.start+Math.min(.2,clip.duration/2);}}/>
+      <video ref={video} src={clip.url} style={{objectFit:clip.framing==='fit'?'contain':'cover'}} muted playsInline onLoadedMetadata={()=>{if(video.current)video.current.currentTime=clip.start+Math.min(.2,clip.duration/2);}}/>
       <BlurMasks regions={regions}/>
       {regions.map((r,i)=><button className="cleanup-region" key={i} aria-label={`Odebrat rozmazání ${i+1}`} disabled={busy} style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.w*100}%`,height:`${r.h*100}%`}} onPointerDown={e=>e.stopPropagation()} onClick={()=>setRegions(old=>old.filter((_,index)=>index!==i))}><span>{i+1} ×</span></button>)}
       {draft&&<div className="cleanup-draft" style={{left:`${draft.x*100}%`,top:`${draft.y*100}%`,width:`${draft.w*100}%`,height:`${draft.h*100}%`}}/>}

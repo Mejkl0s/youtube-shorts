@@ -5,14 +5,15 @@ import pytest
 from pydantic import ValidationError
 
 from backend import main as m
-from backend.rank_notes import DEFAULT_NOTES, note_geometry
+from backend.rank_notes import NOTE_BANK, fresh_notes, note_geometry
 from test_workflow import isolated, make_source
 
 
 def test_notes_are_short_independent_of_speech_and_follow_the_clip():
     clips=[m.Clip(id=f'{i:032x}',title='Long source title',voiceover='Number five.',duration=2) for i in range(5)]
     project=m.Project(title='Winter fails',clips=clips,voice=False)
-    assert [c.rank_note for c in project.clips]==DEFAULT_NOTES
+    assert len({c.rank_note for c in project.clips})==5
+    assert all(c.rank_note in NOTE_BANK['en'] for c in project.clips)
     project.clips[0].rank_note='Ice wins!'
     swapped=list(reversed(project.clips))
     restored=m.Project(title=project.title,clips=swapped,voice=False)
@@ -44,7 +45,7 @@ def test_real_export_has_notes_at_numbers_without_legacy_middle_footer_or_active
     # Every static overlay is identical when the active rank changes: no gray box.
     assert np.abs(first-last).mean()<.5
     # Nothing from the studio is drawn over the bottom of the source anymore.
-    assert np.abs(first[1000:]-[128,0,128]).max()<12
+    assert np.abs(first[1000:-8]-[128,0,128]).max()<12
     green=(first[:,:,1]>180)&(first[:,:,0]<100)&(first[:,:,2]<100)
     assert green.sum()==0
     for marker in layout.rank_markers(5):

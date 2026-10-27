@@ -274,17 +274,17 @@ def select_free(candidates, topic, *, require_five=True):
             for window in windows:
                 scene_start, scene_duration = window
                 shot = getattr(window, 'shot', 0)
-                duration = min(4.0, scene_duration)
-                start = scene_start + max(0, (scene_duration - duration) / 2)
+                duration = scene_duration
+                start = scene_start
                 raw = m.ffmpeg('-ss', str(start), '-i', str(path), '-t', str(duration), '-an',
                                '-vf', 'fps=3,scale=64:64,format=gray', '-f', 'rawvideo', 'pipe:1')
                 score = window_score(raw)
                 best = best_by_shot.get(shot)
                 if score is not None and (best is None or score > best[0]):
-                    best_by_shot[shot] = (score, start, duration)
+                    best_by_shot[shot] = (score, start, duration, window)
             compilation = len({getattr(window, 'shot', 0) for window in windows}) > 1
-            for technical, start, duration in best_by_shot.values():
-                selected.append((float(candidate.get('search_score', 0)) * .8 + technical * .2, candidate, start, duration, compilation))
+            for technical, start, duration, window in best_by_shot.values():
+                selected.append((float(candidate.get('search_score', 0)) * .8 + technical * .2, candidate, start, duration, compilation, window))
         except Exception:
             continue
     # Prefer one scene per source; only fill the remaining slots with distinct
@@ -303,8 +303,10 @@ def select_free(candidates, topic, *, require_five=True):
     if require_five and len(chosen) < 5:
         raise ValueError(f'Pouze {len(chosen)} různých scén je použitelných. Zkuste jiné téma nebo nahrajte vlastní klipy či kompilaci.')
     result = []
-    for _, candidate, start, duration, compilation in sorted(chosen, key=lambda row: row[0]):
+    for _, candidate, start, duration, compilation, window in sorted(chosen, key=lambda row: row[0]):
         result.append({**candidate, 'title': candidate['name'][:60], 'voiceover': '', 'start': start, 'duration': duration,
                        'sourceDuration': candidate['duration'], '_cut_scene': compilation,
+                       'scene_start': getattr(window,'scene_start',start), 'scene_end': getattr(window,'scene_end',start+duration),
+                       'review_required': getattr(window,'scene_end',start+duration)-getattr(window,'scene_start',start)>m.MAX_CLIP_SECONDS,
                        'reason': 'Výběr podle shody tématu, ostrosti a pohybu. Samostatný úsek bez detekovaného střihu; obsah a pořadí zkontroluj.'})
     return m.materialize_scenes(result)

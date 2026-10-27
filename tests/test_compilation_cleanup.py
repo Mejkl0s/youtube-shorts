@@ -55,7 +55,7 @@ def test_one_compilation_produces_five_real_independent_cuts_and_exports(isolate
 
 def test_long_single_shot_is_never_reused_to_fill_five(isolated):
     candidate = make_source(isolated/'media'/uuid.uuid4().hex,'red',duration=12)
-    assert len(m.scene_windows(isolated/'media'/candidate['id']/'source')) == 4
+    assert len(m.scene_windows(isolated/'media'/candidate['id']/'source')) == 1
     partial = f.select_free([candidate],'winter fails',require_five=False)
     assert len(partial)==1
     with pytest.raises(ValueError,match='Pouze 1'):
@@ -74,7 +74,7 @@ def test_compilation_past_old_two_minute_limit_has_complete_preview_and_tail_cut
     clips=f.select_free([candidate],'winter fails',require_five=False)
     assert len(clips)==2
     tail=next(clip for clip in clips if clip['source_start']>=125)
-    assert tail['start']==0 and abs(tail['sourceDuration']-4)<.05  # one encoded frame
+    assert tail['start']==0 and abs(tail['sourceDuration']-5)<.05  # one encoded frame
     assert np.abs(pixels(isolated/'media'/tail['id']/'source').astype(float).mean(axis=(0,1))-[0,0,255]).max()<10
 
 

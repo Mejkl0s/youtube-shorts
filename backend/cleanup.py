@@ -57,13 +57,14 @@ def text_lines(frame):
     return {}
 
 
-def detect_text(path: Path, start: float, duration: float):
+def detect_text(path: Path, start: float, duration: float, framing='fill'):
     """Find text lines on three real portrait frames. Masks cover the whole clip.
 
     OCR is an editable suggestion, not a guarantee of identifying every overlay.
     Returned text itself is deliberately discarded.
     """
     from . import main as m
+    from .scene_context import portrait_filter
     if not shutil.which('tesseract'):
         return [], 'Rozpoznání textu není dostupné. Označ rušivé oblasti ručně.'
     boxes = []
@@ -71,7 +72,7 @@ def detect_text(path: Path, start: float, duration: float):
         frame = Path(temporary)/'frame.png'
         for offset in (.15, .5, .85):
             m.ffmpeg('-ss', str(start+duration*offset), '-i', str(path), '-frames:v', '1',
-                     '-vf', 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1,format=gray', str(frame))
+                     '-vf', portrait_filter(720,1280,framing)+',format=gray', str(frame))
             for words in text_lines(frame).values():
                 x = max(0, min(r[0] for r in words)-10)
                 y = max(0, min(r[1] for r in words)-8)

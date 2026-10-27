@@ -25,7 +25,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .style import FONTS, Layout, VoiceSettings, voice_available, filter_path
 from .title_render import render_title
 from .cleanup import BlurRegion, blur_filters, detect_text
-from .rank_notes import DEFAULT_NOTES, note_geometry
+from .rank_notes import fresh_notes, note_geometry
+from .scene_context import MAX_CLIP_SECONDS, portrait_filter, action_window
 from .access import owner_access
 from .free_search import public_search, youtube_search, select_free
 from .social_sessions import download_session
@@ -86,8 +87,8 @@ def register(path: Path, asset_id: str, name: str):
     folder = path.parent
     ffmpeg('-ss', str(min(0.5, duration / 2)), '-i', str(path), '-frames:v', '1', '-vf', 'scale=480:-2', str(folder / 'thumb.jpg'))
     # Browser playback is reliable even for MOV, HEVC and other uploaded codecs.
-    ffmpeg('-i', str(path), '-t', str(MAX_SOURCE_SECONDS), '-vf', 'scale=480:854:force_original_aspect_ratio=increase,crop=480:854,setsar=1', '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(folder / 'preview.mp4'), timeout=360)
-    result = {'id': asset_id, 'name': name, 'duration': duration, 'has_audio': any(s['codec_type'] == 'audio' for s in metadata['streams']), 'url': f'/media/{asset_id}/preview.mp4', 'thumbnail': f'/media/{asset_id}/thumb.jpg'}
+    ffmpeg('-i', str(path), '-t', str(MAX_SOURCE_SECONDS), '-vf', 'scale=640:1138:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1', '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(folder / 'preview.mp4'), timeout=360)
+    result = {'id': asset_id, 'name': name, 'duration': duration, 'framing': 'fit', 'preview_framing': 'original', 'rank_note': fresh_notes(1)[0], 'has_audio': any(s['codec_type'] == 'audio' for s in metadata['streams']), 'url': f'/media/{asset_id}/preview.mp4', 'thumbnail': f'/media/{asset_id}/thumb.jpg'}
     (folder / 'metadata.json').write_text(json.dumps(result))
     return result
 
@@ -98,9 +99,10 @@ class Clip(BaseModel):
     voiceover: str = Field(max_length=180)
     narration_mode: Literal['custom', 'rank'] = 'custom'
     start: float = Field(default=0, ge=0, le=36000)
-    duration: float = Field(default=4, ge=2, le=8)
+    duration: float = Field(default=4, ge=2, le=MAX_CLIP_SECONDS, allow_inf_nan=False)
     reason: str = Field(default='', max_length=300)
     source_url: str = Field(default='', max_length=500)
+    framing: Literal['fit','fill'] = 'fill'
     blur_regions: list[BlurRegion] = Field(default_factory=list, max_length=8)
     rank_note: str | None = Field(default=None, max_length=40)
 
@@ -127,7 +129,7 @@ class Project(BaseModel):
     voice: bool = True
     effects: bool = True
     captions: bool = True
-    original_volume: float = Field(default=0.15, ge=0, le=1)
+    original_volume: float = Field(default=0.8, ge=0, le=1.5)
     voice_volume: float = Field(default=1, ge=0, le=1.5)
     effects_volume: float = Field(default=0.55, ge=0, le=1)
     resolution: str = '1080'
@@ -141,9 +143,10 @@ class Project(BaseModel):
             raise ValueError('Neplatný jazyk nebo rozlišení.')
         if len({c.id for c in self.clips}) != 5:
             raise ValueError('Nahrajte pět různých klipů.')
+        missing = fresh_notes(sum(c.rank_note is None for c in self.clips), self.language, [c.rank_note for c in self.clips])
         for index, clip in enumerate(self.clips):
             if clip.rank_note is None:
-                clip.rank_note = DEFAULT_NOTES[index]
+                clip.rank_note = missing.pop()
             if clip.narration_mode == 'rank':
                 clip.voiceover = rank_lines(self.language)[index]
         if self.voice and any(not c.voiceover.strip() or not word_count(c.voiceover) for c in self.clips):
@@ -386,7 +389,7 @@ def render(job_id: str, project: Project):
             font = filter_path(FONTS[layout.font])
             def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2'):
                 return f'drawtext=fontfile={font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
-            video = f'[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS[source_clean]'
+            video = f'[0:v]{portrait_filter(width,height,clip.framing)},fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS[source_clean]'
             filters.append(video)
             cleanup_filters, clean = blur_filters(clip.blur_regions, width, height)
             filters.extend(cleanup_filters)
@@ -541,9 +544,11 @@ def social_url(url: str, allow_youtube: bool):
 
 class SceneWindow(tuple):
     # Keep the familiar (start, duration) pair while tracking physical shot identity.
-    def __new__(cls, start, duration, shot):
+    def __new__(cls, start, duration, shot, scene_start=None, scene_end=None):
         obj = super().__new__(cls, (start, duration))
         obj.shot = shot
+        obj.scene_start = start if scene_start is None else scene_start
+        obj.scene_end = start+duration if scene_end is None else scene_end
         return obj
 
 
@@ -568,9 +573,13 @@ def materialize_scenes(clips):
                    '-crf', '20', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', str(folder/'source'))
             meta = register(folder/'source', asset_id, row['name'])
             clean = {key: value for key,value in row.items() if key != '_cut_scene'}
+            origin = {'source_asset_id': row['id'], 'source_start': row['start'],
+                      'scene_start': row.get('scene_start', 0), 'scene_end': row.get('scene_end', row['sourceDuration']),
+                      'source_url': row.get('source_url',''), 'review_required': row.get('review_required', False)}
+            meta.update(origin)
+            (folder/'metadata.json').write_text(json.dumps(meta))
             result.append({**clean, **meta, 'title': row['title'], 'start': 0,
-                           'duration': min(row['duration'], meta['duration']), 'sourceDuration': meta['duration'],
-                           'source_asset_id': row['id'], 'source_start': row['start']})
+                           'duration': min(row['duration'], meta['duration']), 'sourceDuration': meta['duration']})
         return result
     except Exception:
         for folder in created:
@@ -578,10 +587,26 @@ def materialize_scenes(clips):
         raise
 
 
+def assign_notes(clips, language='en', exclude=()):
+    for clip,note in zip(clips,fresh_notes(len(clips),language,exclude)):
+        clip['rank_note']=note
+
+
+class NotesRequest(BaseModel):
+    language: Literal['en','cs'] = 'en'
+    count: int = Field(default=5,ge=1,le=5)
+    exclude: list[str] = Field(default_factory=list,max_length=30)
+
+
+@app.post('/api/rank-notes')
+def new_notes(body: NotesRequest):
+    return {'notes': fresh_notes(body.count,body.language,body.exclude)}
+
+
 def add_cleanup(clips, warnings):
     for clip in clips:
         try:
-            regions, note = detect_text(DATA/'media'/clip['id']/'source', clip['start'], clip['duration'])
+            regions, note = detect_text(DATA/'media'/clip['id']/'source', clip['start'], clip['duration'], clip.get('framing','fill'))
             clip['blur_regions'] = regions
             if regions:
                 note = 'Automatické rozmazání textu je připravené. Zkontroluj oblasti tlačítkem Rozmazání u každého klipu.'
@@ -592,6 +617,7 @@ def add_cleanup(clips, warnings):
 
 class CleanupRequest(BaseModel):
     id: str
+    framing: Literal['fit','fill'] = 'fill'
     start: float = Field(default=0, ge=0, le=600, allow_inf_nan=False)
     duration: float = Field(default=4, ge=2, le=8, allow_inf_nan=False)
 
@@ -602,7 +628,7 @@ def blur_suggestions(body: CleanupRequest):
     if body.start + body.duration > meta['duration'] + .05:
         raise HTTPException(400, 'Vybraný úsek přesahuje délku videa.')
     try:
-        regions, message = detect_text(DATA/'media'/body.id/'source', body.start, body.duration)
+        regions, message = detect_text(DATA/'media'/body.id/'source', body.start, body.duration, body.framing)
         return {'regions': regions, 'message': message}
     except Exception:
         raise HTTPException(400, 'Rozpoznání textu selhalo. Označ oblasti ručně.') from None
@@ -610,6 +636,8 @@ def blur_suggestions(body: CleanupRequest):
 
 class CompilationRequest(BaseModel):
     id: str
+    exclude_notes: list[str] = Field(default_factory=list,max_length=5)
+    language: Literal['en','cs'] = 'en'
     topic: str = Field(default='Vlastní kompilace', min_length=1, max_length=100)
     blur_text: bool = True
 
@@ -619,6 +647,7 @@ def split_compilation(job_id, body):
         meta = asset(body.id)
         set_job(job_id, status='working', progress=10, message='Hledám samostatné scény v kompilaci…')
         clips = select_free([meta], body.topic, require_five=False)
+        assign_notes(clips,body.language,body.exclude_notes)
         warnings = ['Výběr z nahrané kompilace používá detekci střihů, pohyb a ostrost. Obsah a pořadí zkontroluj.']
         if body.blur_text:
             set_job(job_id, progress=70, message='Rozpoznávám původní text k rozmazání…')
@@ -655,18 +684,12 @@ def scene_windows(path: Path):
     cuts = sorted({0.0, duration, *(float(t) for t in re.findall(r'pts_time:([\d.]+)', result.stderr.decode(errors='replace')))})
     windows = []
     for shot, (a, b) in enumerate(zip(cuts, cuts[1:])):
-        length = b - a
-        if length < 2:
+        if b-a < 2:
             continue
-        if length > 8:
-            windows.extend(SceneWindow(a + offset * (length - 5) / 2, 5.0, shot) for offset in range(3))
-        else:
-            windows.append(SceneWindow(a, min(5.0, length), shot))
-    # Sample across the whole candidate, including the middle of long continuous shots.
-    if len(cuts) == 2 and duration > 8:
-        windows = [SceneWindow(i * (duration - 5) / 3, 5.0, 0) for i in range(4)]
-    if len(windows) > 24:
-        windows = [windows[index] for index in np.linspace(0, len(windows) - 1, 24).astype(int)]
+        start,length = action_window(path,a,b)
+        windows.append(SceneWindow(start,length,shot,a,b))
+    if len(windows)>24:
+        windows = [windows[index] for index in np.linspace(0,len(windows)-1,24).astype(int)]
     return windows
 
 
@@ -677,15 +700,15 @@ def select_candidates(candidates: list[dict], topic: str, language: str, ranking
         path = DATA / 'media' / candidate['id'] / 'source'
         windows = scene_windows(path)
         # Bound paid image samples as compilations expand the number of shots.
-        budget = max(4, 80 // max(1, len(candidates)))
+        budget = max(1, 40 // max(1, len(candidates)))
         if len(windows) > budget:
             windows = [windows[i] for i in np.linspace(0, len(windows)-1, budget).astype(int)]
         for window in windows:
             start, duration = window
             scene_id = len(scenes)
-            scenes.append({'candidate': candidate, 'start': start, 'duration': duration, 'shot': getattr(window, 'shot', 0)})
-            content.append({'type': 'text', 'text': f'Scene {scene_id}. Source {candidate["id"]}, physical shot {getattr(window, "shot", 0)}. Title: {candidate.get("name", "")}. Start {start:.2f}s, duration {duration:.2f}s. Two frames follow.'})
-            for offset in (0.25, duration - 0.25):
+            scenes.append({'candidate': candidate, 'start': start, 'duration': duration, 'shot': getattr(window, 'shot', 0), 'scene_start': getattr(window,'scene_start',start), 'scene_end': getattr(window,'scene_end',start+duration)})
+            content.append({'type': 'text', 'text': f'Scene {scene_id}. Source {candidate["id"]}, physical shot {getattr(window, "shot", 0)}. Title: {candidate.get("name", "")}. Start {start:.2f}s, duration {duration:.2f}s. Four chronological frames follow. Preserve the setup, action and aftermath; a mid-action crop is unacceptable.'})
+            for offset in (duration*.08,duration*.35,duration*.65,duration*.92):
                 frame = ffmpeg('-ss', str(start + offset), '-i', str(path), '-frames:v', '1', '-vf', 'scale=384:-2', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1')
                 content.append({'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(frame).decode(), 'detail': 'low'}})
     if len({(s['candidate']['id'], s['shot']) for s in scenes}) < 5:
@@ -704,10 +727,10 @@ def select_candidates(candidates: list[dict], topic: str, language: str, ranking
         if key in seen:
             raise ValueError('AI vybrala stejné video ve stejné scéně vícekrát. Zkuste hledání znovu.')
         seen.add(key)
-        clip = Clip(id=candidate['id'], title=selection['title'], voiceover=selection['voiceover'], start=scene['start'], duration=scene['duration'], reason=selection['reason'], source_url=candidate.get('source_url', ''))
+        clip = Clip(id=candidate['id'], title=selection['title'], voiceover=selection['voiceover'], start=scene['start'], duration=scene['duration'], reason=selection['reason'], source_url=candidate.get('source_url', ''), framing=candidate.get('framing','fill'))
         if not 1 <= word_count(clip.voiceover) <= 7:
             raise ValueError('AI nedodržela limit sedmi slov.')
-        selected.append({**candidate, **clip.model_dump(), 'sourceDuration': candidate['duration'],
+        selected.append({**candidate, **clip.model_dump(), 'sourceDuration': candidate['duration'], 'scene_start': scene['scene_start'], 'scene_end': scene['scene_end'], 'review_required': scene['scene_end']-scene['scene_start']>MAX_CLIP_SECONDS,
                          '_cut_scene': len({s['shot'] for s in scenes if s['candidate']['id'] == candidate['id']}) > 1})
     if len(selected) != 5:
         raise ValueError('AI nevybrala přesně pět vhodných klipů.')
@@ -715,6 +738,7 @@ def select_candidates(candidates: list[dict], topic: str, language: str, ranking
 
 
 class DiscoverRequest(BaseModel):
+    exclude_notes: list[str] = Field(default_factory=list,max_length=5)
     topic: str = Field(min_length=3, max_length=100)
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
     source: str = 'social'
@@ -889,6 +913,7 @@ def discover(job_id: str, body: DiscoverRequest):
             # A failed search still owns real downloaded media. Keep usable scenes
             # visible, without presenting an incomplete ranking as a successful job.
             partial = select_free(candidates, body.topic, require_five=False) if candidates else []
+            assign_notes(partial,body.language,body.exclude_notes)
             if body.blur_text:
                 add_cleanup(partial, warnings)
             message = (f'Podařilo se načíst jen {len(candidates)} videí. {summary or "Nenalezeny odpovídající zdroje."}. '
@@ -901,6 +926,7 @@ def discover(job_id: str, body: DiscoverRequest):
             publish(status='failed', progress=100, message=message, partial_clips=partial,
                     candidate_count=len(candidates), rejected_count=len(failures))
             return
+        assign_notes(selected,body.language,body.exclude_notes)
         if body.blur_text:
             add_cleanup(selected, warnings)
         publish(status='done', progress=100, message='Pět momentů je připravených. Zkontroluj obsah a pořadí.' if body.mode == 'free' else 'Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=len(failures))
@@ -965,6 +991,9 @@ def preview_render(job_id: str):
         raise HTTPException(409, 'Náhled zatím není hotový.')
     return FileResponse(path, media_type='video/mp4', filename='rank-studio-short.mp4', content_disposition_type='inline')
 
+
+from .clip_editor import router as clip_editor_router
+app.include_router(clip_editor_router)
 
 # Production build and API are served together. During development Vite proxies API.
 from .assistant import router as assistant_router
