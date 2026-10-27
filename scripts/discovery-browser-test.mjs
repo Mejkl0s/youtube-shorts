@@ -71,7 +71,7 @@ try{
   await page.waitForFunction(()=>!document.querySelector('.finished-preview'));
   await player.waitFor({timeout:120000});
   assert.equal(renders.length,2);assert.equal(renders[1].voice,false);assert.equal(renders[1].effects,false);
-  assert.ok(searches[1].exclude_urls.length>=5);
+  assert.ok(searches[1].exclude_urls.length>=5);assert.ok(searches[1].exclude_asset_ids.length>=5);
   assert.ok(renders[1].clips.every(c=>!oldSources.includes(c.source_url)&&!oldIds.includes(c.id)));
   const secondFile=root+'/original-only.mp4';await writeFile(secondFile,await (await page.request.get(new URL(await player.getAttribute('src'),base).href)).body());
   const spectral=`import sys,numpy as np,subprocess
@@ -83,15 +83,18 @@ for p in sys.argv[1:]:
   assert.ok(ratios[0]>.5&&ratios[1]<.01,JSON.stringify(ratios));
   // A full editor must not make a failed repeat search look successful.
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
-  await page.getByRole('alert').filter({hasText:'Dole zůstává předchozí projekt'}).waitFor({timeout:120000});
+  await page.getByRole('alert').filter({hasText:'Předchozí klipy jsou uložené zvlášť'}).waitFor({timeout:120000});
   assert.equal(renders.length,2);
   const secondIds=renders[1].clips.map(c=>c.id);
+  assert.equal(await page.locator('.ready-label').count(),0);
+  assert.equal(await page.getByRole('button',{name:'Exportovat Short',exact:true}).isDisabled(),true);
+  await page.getByRole('button',{name:'Vrátit předchozí klipy',exact:true}).click();
   await page.locator('.save-button').click();
   assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('rank-studio-project')).clips.map(c=>c.id)),secondIds);
   await page.reload();
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
-  await page.getByRole('alert').filter({hasText:'Dole zůstává předchozí projekt'}).waitFor({timeout:120000});
-  assert.ok(searches.at(-1).exclude_urls.length>=10);assert.equal(renders.length,2);
+  await page.getByRole('alert').filter({hasText:'Předchozí klipy jsou uložené zvlášť'}).waitFor({timeout:120000});
+  assert.ok(searches.at(-1).exclude_urls.length>=10);assert.equal(await page.locator('.ready-label').count(),0);assert.equal(renders.length,2);
   await page.getByLabel('Vynechat dříve použité zdroje').uncheck();
   await page.getByLabel('Po hledání vytvořit hotový náhled').uncheck();
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
@@ -109,5 +112,5 @@ for p in sys.argv[1:]:
   await mkdir('.runtime/screenshots',{recursive:true});
   await page.locator('.topic-box').screenshot({path:'.runtime/screenshots/discovery-options.png'});
   assert.deepEqual(errors,[]);
-  console.log('Discovery browser passed: actual scene lengths 3–12s, automatic mixed MP4, real voice frequency present/absent, independent voice/SFX/preview switches, 10 unique source clips, persistent exclusions, opt-in reuse and honest zero-result preservation. External search and speech were replaced by local fixtures.');
+  console.log('Discovery browser passed: actual scene lengths 3–12s, automatic mixed MP4, real voice frequency present/absent, independent voice/SFX/preview switches, 10 unique source clips, persistent exclusions, opt-in reuse and a separate recoverable backup on zero results. External search and speech were replaced by local fixtures.');
 }catch(error){console.error(logs);throw error;}finally{if(browser)await browser.close();server.kill('SIGTERM');}

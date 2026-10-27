@@ -234,7 +234,7 @@ def test_free_search_to_real_scene_selection_and_export_never_calls_paid_api(iso
         if 'yt_dlp' in args:
             downloads.append(args[-1])
             output = args[args.index('-o') + 1].replace('%(ext)s', 'mp4')
-            shutil.copyfile(source, output)
+            m.ffmpeg('-i',str(source),'-vf',f'hue=h={len(downloads)*40}','-c:v','libx264',output)
             return b''
         return original(args, timeout)
     monkeypatch.setattr(m, 'run', download)
@@ -372,7 +372,8 @@ def test_partial_search_preserves_real_scenes_for_upload_completion_and_export(i
     def download(args, timeout=180):
         if 'yt_dlp' in args:
             output = args[args.index('-o')+1].replace('%(ext)s', 'mp4')
-            shutil.copyfile(black if args[-1] == 'https://www.instagram.com/reel/cats3/' else source, output)
+            index=int(args[-1].rsplit('cats',1)[1].strip('/'))
+            m.ffmpeg('-i',str(black if index==3 else source),'-vf',f'hue=h={index*40}','-c:v','libx264',output)
             return b''
         return original(args, timeout)
     monkeypatch.setattr(m, 'run', download)

@@ -339,6 +339,6 @@ def select_free(candidates, topic, *, require_five=True):
         result.append({**candidate, 'title': candidate['name'][:60], 'voiceover': '', 'start': start, 'duration': duration,
                        'sourceDuration': candidate['duration'], '_cut_scene': compilation,
                        'scene_start': getattr(window,'scene_start',start), 'scene_end': getattr(window,'scene_end',start+duration),
-                       'review_required': getattr(window,'scene_end',start+duration)-getattr(window,'scene_start',start)>m.MAX_CLIP_SECONDS,
-                       'reason': 'Výběr podle shody tématu, ostrosti a pohybu. Samostatný úsek bez detekovaného střihu; obsah a pořadí zkontroluj.'})
+                       'selection_version': 'whole-scene-v1', 'review_required': True,
+                       'reason': 'Technický výběr podle názvu, ostrosti a pohybu. Pád ani pointa nejsou obsahově ověřené; zkontroluj je v původním záběru.'})
     return m.materialize_scenes(result)

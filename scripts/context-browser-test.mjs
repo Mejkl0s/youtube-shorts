@@ -21,11 +21,12 @@ try{
     const source=await upload.json();
     const response=await page.request.post(base+'/api/clip-cut',{data:{id:source.id,start:0,duration:4,cut_start:2,cut_end:6,framing:'fill'}});
     assert.equal(response.status(),200);
-    clips.push({...await response.json(),start:0,sourceDuration:4,duration:4,title:'My moment',rank_note:'My custom note',voiceover:''});
+    clips.push({...await response.json(),start:0,sourceDuration:4,duration:4,selection_version:null,title:'My moment',rank_note:'My custom note',voiceover:''});
   }
   await page.evaluate(clips=>localStorage.setItem('rank-studio-project',JSON.stringify({clips,title:'WINTER FAILS',voice:false,effects:true,captions:true,originalVolume:.12})),clips);
   await page.reload();
   await page.getByRole('textbox',{name:'Voiceover klipu 5',exact:true}).waitFor();
+  await page.getByText('Tento projekt stále používá pět čtyřsekundových výřezů.',{exact:true}).waitFor();
   const original=page.locator('label.volume-slider').filter({hasText:'Původní zvuk'}).locator('input');
   assert.equal(await original.inputValue(),'0.8');
   await original.focus();await original.press('End');

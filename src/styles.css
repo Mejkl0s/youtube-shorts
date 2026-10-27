@@ -52,3 +52,5 @@
 
 .clip-meta{flex-wrap:wrap}.trim-dialog .source-silent{display:block;margin:8px 0}
 .discovery-options{display:flex;flex-wrap:wrap;gap:12px 18px;margin:16px 0}.discovery-options label{display:flex;align-items:center;gap:7px;font-size:11px;color:#c9d0b5}.discovery-options input{accent-color:var(--lime)}
+
+.previous-clips-note,.legacy-cuts-note{margin:12px 0;padding:14px;border:1px solid #64543d;border-radius:9px;color:#d9c39a;font-size:12px;line-height:1.6}.previous-clips-note{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.legacy-cuts-note strong{display:block}.legacy-cuts-note p{margin:4px 0 10px}

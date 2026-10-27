@@ -31,6 +31,7 @@ from .access import owner_access
 from .free_search import public_search, youtube_search, select_free
 from .social_sessions import download_session
 from .free_voice import available as free_voice_available
+from .source_identity import file_hash, original_hash
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('RANK_DATA_DIR', str(ROOT / '.runtime'))).resolve()
@@ -89,6 +90,7 @@ def register(path: Path, asset_id: str, name: str):
     # Browser playback is reliable even for MOV, HEVC and other uploaded codecs.
     ffmpeg('-i', str(path), '-t', str(MAX_SOURCE_SECONDS), '-vf', 'scale=640:1138:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1', '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(folder / 'preview.mp4'), timeout=360)
     result = {'id': asset_id, 'name': name, 'duration': duration, 'framing': 'fit', 'preview_framing': 'original', 'rank_note': fresh_notes(1)[0], 'has_audio': any(s['codec_type'] == 'audio' for s in metadata['streams']), 'url': f'/media/{asset_id}/preview.mp4', 'thumbnail': f'/media/{asset_id}/thumb.jpg'}
+    result['content_sha256'] = file_hash(path)
     (folder / 'metadata.json').write_text(json.dumps(result))
     return result
 
@@ -102,6 +104,7 @@ class Clip(BaseModel):
     duration: float = Field(default=4, ge=2, le=MAX_CLIP_SECONDS, allow_inf_nan=False)
     reason: str = Field(default='', max_length=300)
     source_url: str = Field(default='', max_length=500)
+    selection_version: Literal['whole-scene-v1', 'manual-v1'] | None = None
     framing: Literal['fit','fill'] = 'fill'
     blur_regions: list[BlurRegion] = Field(default_factory=list, max_length=8)
     rank_note: str | None = Field(default=None, max_length=40)
@@ -575,6 +578,7 @@ def materialize_scenes(clips):
             clean = {key: value for key,value in row.items() if key != '_cut_scene'}
             origin = {'source_asset_id': row['id'], 'source_start': row['start'],
                       'scene_start': row.get('scene_start', 0), 'scene_end': row.get('scene_end', row['sourceDuration']),
+                      'selection_version': row.get('selection_version'),
                       'source_url': row.get('source_url',''), 'review_required': row.get('review_required', False)}
             meta.update(origin)
             (folder/'metadata.json').write_text(json.dumps(meta))
@@ -619,7 +623,7 @@ class CleanupRequest(BaseModel):
     id: str
     framing: Literal['fit','fill'] = 'fill'
     start: float = Field(default=0, ge=0, le=600, allow_inf_nan=False)
-    duration: float = Field(default=4, ge=2, le=8, allow_inf_nan=False)
+    duration: float = Field(default=4, ge=2, le=MAX_CLIP_SECONDS, allow_inf_nan=False)
 
 
 @app.post('/api/blur-suggestions')
@@ -731,6 +735,7 @@ def select_candidates(candidates: list[dict], topic: str, language: str, ranking
         if not 1 <= word_count(clip.voiceover) <= 7:
             raise ValueError('AI nedodržela limit sedmi slov.')
         selected.append({**candidate, **clip.model_dump(), 'sourceDuration': candidate['duration'], 'scene_start': scene['scene_start'], 'scene_end': scene['scene_end'], 'review_required': scene['scene_end']-scene['scene_start']>MAX_CLIP_SECONDS,
+                         'selection_version': 'whole-scene-v1',
                          '_cut_scene': len({s['shot'] for s in scenes if s['candidate']['id'] == candidate['id']}) > 1})
     if len(selected) != 5:
         raise ValueError('AI nevybrala přesně pět vhodných klipů.')
@@ -740,6 +745,7 @@ def select_candidates(candidates: list[dict], topic: str, language: str, ranking
 class DiscoverRequest(BaseModel):
     exclude_notes: list[str] = Field(default_factory=list,max_length=5)
     exclude_urls: list[str] = Field(default_factory=list, max_length=200)
+    exclude_asset_ids: list[str] = Field(default_factory=list, max_length=200)
     topic: str = Field(min_length=3, max_length=100)
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
     source: str = 'social'
@@ -763,6 +769,8 @@ class DiscoverRequest(BaseModel):
             raise ValueError('Neplatný zdroj nebo jazyk.')
         if any(len(url) > 500 or not social_url(url, True) for url in self.exclude_urls):
             raise ValueError('Historie smí obsahovat pouze adresy podporovaných videí.')
+        if any(not re.fullmatch(r'[a-f0-9]{32}', identity) for identity in self.exclude_asset_ids):
+            raise ValueError('Neplatný identifikátor dřívějšího klipu.')
         return self
 
 
@@ -813,12 +821,15 @@ def download_candidate(item: dict):
         if files[0].stat().st_size > MAX_UPLOAD:
             raise ValueError('Video překračuje limit 300 MB.')
         files[0].rename(folder / 'source')
+        if file_hash(folder/'source') in item.get('_excluded_content', ()):
+            raise CandidateDownloadError('duplicate', 'Stejný soubor videa už byl použitý, i když má jiný odkaz. Přeskakuji ho.')
         try:
             candidate = register(folder / 'source', asset_id, item['title'])
         except Exception:
             raise CandidateDownloadError('processing', 'Video se stáhlo, ale kontrola formátu nebo příprava náhledu selhala. Zkus jiný klip.') from None
         candidate.update({key: item[key] for key in ('search_score', 'source', 'provider') if key in item})
         candidate['source_url'] = item.get('source_url', item['url'])
+        (folder/'metadata.json').write_text(json.dumps(candidate))
         return candidate
     except Exception:
         shutil.rmtree(folder, ignore_errors=True)
@@ -853,6 +864,14 @@ def discover(job_id: str, body: DiscoverRequest):
     try:
         set_job(job_id, status='searching', progress=3, message=f'Hledám {body.candidate_count} kandidátů podle tématu…')
         warnings = []
+        excluded_content = set()
+        for identity in body.exclude_asset_ids:
+            try:
+                excluded_content.add(original_hash(identity))
+            except (HTTPException, OSError, ValueError):
+                # Media may have expired after a hosting restart. URL exclusions
+                # still apply; never pretend missing files were compared.
+                continue
         if body.mode == 'free':
             entries, warnings = public_search(body.topic, body.allow_youtube, body.candidate_count, False, body.exclude_urls)
         else:
@@ -878,7 +897,9 @@ def discover(job_id: str, body: DiscoverRequest):
                     kind, reason = 'paused', 'Další pokusy z této sítě byly pozastavené po opakovaném odmítnutí nebo vypršení času.'
                 else:
                     try:
-                        candidate = download_candidate({**item, 'source': source})
+                        candidate = download_candidate({**item, 'source': source, '_excluded_content': excluded_content})
+                        if candidate.get('content_sha256'):
+                            excluded_content.add(candidate['content_sha256'])
                         candidates.append(candidate)
                         stats[source]['downloaded'] += 1
                         blocked[source] = 0

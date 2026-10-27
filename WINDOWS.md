@@ -63,7 +63,7 @@ Pod **Najít klipy** jsou volby **Vynechat dříve použité zdroje**, **Po hled
 
 Po nalezení všech pěti klipů se při zapnutém automatickém náhledu vytvoří skutečné MP4 s vybraným mixem. Zapnutý bezplatný voiceover doplní chybějící texty krátkým uvedením pořadí (např. „Number five.“); nepopisuje neověřený děj. Vyhledávání už hlas samo nevypíná a zachová uložené přepínače. Vlastní komentáře můžeš upravit u klipů a vytvořit náhled znovu. Vypnutí hlasu nemění přepínač efektů a naopak. Pokud hlasová služba odmítne požadavek, klipy zůstanou v editoru a chyba náhledu se zobrazí; aplikace nepřechází na placenou službu.
 
-Nulový výsledek ponechá předchozí projekt a výslovně to oznámí. Údaj 5/5 se vztahuje k obsazeným místům editoru, nikoli k úspěchu nového hledání. Více dotazů ani kandidátů nezaručí přístup k odmítajícím veřejným zdrojům.
+Po přijetí nového hledání se editor vyprázdní a původní klipy jsou uložené odděleně. Nulový výsledek ponechá 0/5 nových klipů; staré vrátíš pouze výslovně tlačítkem **Vrátit předchozí klipy**. Záloha zůstává i po obnovení stránky. Export neúplného editoru je vypnutý. U obnoveného starého projektu s pěti čtyřsekundovými střihy se zobrazí výrazná poznámka s tlačítkem **Obnovit střihy z originálů**; uložené časy se aktualizací samy nepřepsaly. Více dotazů ani kandidátů nezaručí přístup k odmítajícím veřejným zdrojům.
 
 ## Klipy, přihlášení a hlas
 
@@ -95,3 +95,9 @@ Soubory `.env`, `.runtime` a `.venv` nepřidávej do veřejného ZIPu ani do Git
 ## Rozsah ověření
 
 Cloudové kontroly mohou ověřit společný Python spouštěč, skutečné vytvoření MP4 a webový editor na Linuxu. Nejsou potvrzením běhu instalátoru `winget` nebo přístupu k TikToku na tvém Windows PC. Tyto dva kroky se ověří až spuštěním u tebe. Spouštěč rozlišuje úspěšné sestavení aplikace od skutečné dostupnosti klipů.
+
+## Co je a není ověřené při automatickém výběru
+
+Bezplatný režim neověřuje, zda ve scéně opravdu nastal pád nebo jiná pointa. Výsledky jsou označené **Pointa neověřená**, včetně automatické obnovy střihů. Název zdroje a naměřený pohyb nejsou důkaz děje. **Upravit střih** přehrává zachovaný původní záběr; z už exportovaných čtyř sekund nelze dopočítat chybějící konec. Před dalším nasazením na Render si potřebný původní záznam stáhni pravým tlačítkem na video v tomto okně → **Uložit video jako…**, protože data bez trvalého disku mohou při novém nasazení zmizet.
+
+Vynechávání dřívějších zdrojů navíc porovnává SHA-256 celého původního videosouboru z dostupných uložených médií; rozpozná stejný soubor i pod jiným odkazem a při kontrolách následuje originál použitý pro dřívější výřez. Nejde o vizuální rozpoznávání přehraného nebo jinak zakódovaného repostu. Při chybějícím originálu zůstává pouze kontrola dostupných adres.

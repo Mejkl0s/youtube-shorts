@@ -25,6 +25,7 @@ class State(BaseModel):
     resolution: Literal['720', '1080'] = '1080'
     candidate_count: int = Field(default=24, ge=8, le=40)
     allow_youtube: bool = True
+    avoid_repeats: bool = True
     voice: bool = True
     effects: bool = True
     captions: bool = True
@@ -57,6 +58,7 @@ class Changes(BaseModel):
     resolution: Literal['720', '1080'] | None = None
     candidate_count: int | None = Field(default=None, ge=8, le=40)
     allow_youtube: bool | None = None
+    avoid_repeats: bool | None = None
     voice: bool | None = None
     effects: bool | None = None
     captions: bool | None = None
@@ -302,7 +304,7 @@ def run_assistant(job_id: str, body: Request):
                 with m.job_lock:
                     m.jobs[child] = {'id': child, 'status': 'queued', 'kind': 'discover', 'progress': 0, 'message': 'Hledám…'}
                 m.set_job(job_id, child_job=child, child_base=progress, child_span=int(85/max(1,len(plan.actions))))
-                m.discover(child, m.DiscoverRequest(topic=state.topic, ranking_criteria=state.ranking_criteria, language=state.language, candidate_count=state.candidate_count, allow_youtube=state.allow_youtube, mode='ai'))
+                m.discover(child, m.DiscoverRequest(topic=state.topic, ranking_criteria=state.ranking_criteria, language=state.language, candidate_count=state.candidate_count, allow_youtube=state.allow_youtube, mode='ai', exclude_urls=[c.source_url for c in state.clips if m.social_url(c.source_url,True)] if state.avoid_repeats else [], exclude_asset_ids=[c.id for c in state.clips] if state.avoid_repeats else []))
                 if m.jobs[child]['status'] != 'done':
                     partial = m.jobs[child].get('partial_clips')
                     if partial:

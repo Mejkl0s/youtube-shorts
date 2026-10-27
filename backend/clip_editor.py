@@ -74,6 +74,7 @@ def cut_clip(body:CutRequest):
     parent=ctx['source']
     old=m.asset(body.id)
     row={**parent,'title':old['name'][:60],'voiceover':'','start':body.cut_start,'duration':length,
+         'selection_version':'manual-v1',
          'sourceDuration':parent['duration'],'scene_start':lower,'scene_end':upper,'_cut_scene':True,
          'source_url':old.get('source_url',''),'framing':body.framing}
     try:
@@ -115,9 +116,10 @@ def recut_all(job_id, rows):
                 raise ValueError('Dva klipy vedou na stejnou scénu. Zkontroluj je přes Upravit střih.')
             seen.add(identity)
             item={**parent,**old.model_dump(),'id':parent['id'],'name':parent['name'],
+                  'selection_version':'whole-scene-v1',
                   'start':window[0],'duration':window[1],'sourceDuration':parent['duration'],
                   'scene_start':window.scene_start,'scene_end':window.scene_end,'_cut_scene':True,
-                  'review_required':window.scene_end-window.scene_start>30,'framing':'fit'}
+                  'review_required':True,'framing':'fit'}
             cut=m.materialize_scenes([item])[0]
             created.append(m.DATA/'media'/cut['id'])
             video=next(s for s in m.probe(path)['streams'] if s['codec_type']=='video')
