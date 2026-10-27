@@ -739,12 +739,13 @@ def select_candidates(candidates: list[dict], topic: str, language: str, ranking
 
 class DiscoverRequest(BaseModel):
     exclude_notes: list[str] = Field(default_factory=list,max_length=5)
+    exclude_urls: list[str] = Field(default_factory=list, max_length=200)
     topic: str = Field(min_length=3, max_length=100)
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
     source: str = 'social'
     allow_youtube: bool = True
     language: str = 'en'
-    candidate_count: int = Field(default=12, ge=8, le=20)
+    candidate_count: int = Field(default=24, ge=8, le=40)
     mode: Literal['free', 'ai'] = 'free'
     blur_text: bool = True
 
@@ -760,13 +761,15 @@ class DiscoverRequest(BaseModel):
     def valid(self):
         if self.source != 'social' or self.language not in VOICE_NAMES:
             raise ValueError('Neplatný zdroj nebo jazyk.')
+        if any(len(url) > 500 or not social_url(url, True) for url in self.exclude_urls):
+            raise ValueError('Historie smí obsahovat pouze adresy podporovaných videí.')
         return self
 
 
 def ai_search(body: DiscoverRequest):
     domains = ['tiktok.com', 'instagram.com'] + (['youtube.com', 'youtu.be'] if body.allow_youtube else [])
     found = ai_request({'model': 'gpt-4.1', 'tools': [{'type': 'web_search', 'filters': {'allowed_domains': domains}}], 'include': ['web_search_call.action.sources'], 'input': f'Find up to {body.candidate_count} distinct publicly discoverable short videos that fit {body.topic!r} for a ranking Short. Primary sources MUST be TikTok and Instagram Reels. {"YouTube Shorts may supplement these sources only if particularly relevant; prefer TikTok and Instagram." if body.allow_youtube else "Do not use YouTube."} Use web search, do not invent URLs. URLs must match actual search source URLs. Prefer short videos of individual clear moments. Return ONLY JSON {{"videos":[{{"url":"https://www.tiktok.com/@creator/video/numeric-id or https://www.instagram.com/reel/ID/ or a YouTube Shorts URL","title":"brief grounded title"}}]}}. Exclude profile pages. Search evidence is not permission to reuse content.', 'max_output_tokens': 2500}, responses=True)
-    entries, seen = [], set()
+    entries, seen = [], {canonical_url(url) for url in body.exclude_urls}
     evidence = {canonical_url(u) for u in found.get('_evidence_urls', [])}
     for item in found.get('videos', []):
         url = item.get('url', '')
@@ -851,10 +854,10 @@ def discover(job_id: str, body: DiscoverRequest):
         set_job(job_id, status='searching', progress=3, message=f'Hledám {body.candidate_count} kandidátů podle tématu…')
         warnings = []
         if body.mode == 'free':
-            entries, warnings = public_search(body.topic, body.allow_youtube, body.candidate_count)
+            entries, warnings = public_search(body.topic, body.allow_youtube, body.candidate_count, False, body.exclude_urls)
         else:
             entries = ai_search(body)
-        candidates, attempted, found, failures, blocked = [], set(), [], [], {}
+        candidates, attempted, found, failures, blocked = [], {canonical_url(url) for url in body.exclude_urls}, [], [], {}
         stats = {name: {'found': 0, 'downloaded': 0, 'failed': 0} for name in ('TikTok', 'Instagram', 'YouTube')}
         def publish(**updates):
             set_job(job_id, mode=body.mode, search_results=list(found), download_failures=list(failures),
@@ -903,7 +906,8 @@ def discover(job_id: str, body: DiscoverRequest):
         selected, selection_error = choose(55)
         if selected is None and body.allow_youtube:
             publish(progress=60, youtube_fallback=True, message='Ze sociálních sítí není pět použitelných klipů. Hledám další přímo na YouTube…')
-            extra, more_warnings = youtube_search(body.topic, body.candidate_count)
+            extra, more_warnings = (youtube_search(body.topic, body.candidate_count, body.exclude_urls)
+                                    if body.exclude_urls else youtube_search(body.topic, body.candidate_count))
             warnings.extend(more_warnings)
             # A separate budget ensures a full social result list cannot starve YouTube.
             load([row for row in extra if source_name(row.get('url', '')) == 'YouTube'], 62, 20)
@@ -920,6 +924,7 @@ def discover(job_id: str, body: DiscoverRequest):
                        + (selection_error+' ' if selection_error else '')
                        + ('Bylo vyzkoušeno i samostatné hledání na YouTube. ' if body.allow_youtube else 'Doplňování z YouTube je vypnuté. ')
                        + (f'V editoru je zachováno {len(partial)}/5 použitelných klipů. Nahraj zbývající klipy do prázdných míst. ' if partial else '')
+                       + ('Dříve použité zdroje byly vynechány. ' if body.exclude_urls else '')
                        + 'Důvody odmítnutí jsou v přehledu zdrojů.')
             if partial and body.mode == 'ai':
                 warnings.append('Zachované klipy mají pouze technický výběr scény bez AI hodnocení a komentářů. Obsah a pořadí zkontroluj.')

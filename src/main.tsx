@@ -55,13 +55,17 @@ function App() {
   const [allowYoutube, setAllowYoutube] = useState(true);
   const [language, setLanguage] = useState('en');
   const [resolution, setResolution] = useState('1080');
-  const [voice, setVoice] = useState(false);
+  const [voice, setVoice] = useState(true);
   const [effects, setEffects] = useState(true);
   const [captions, setCaptions] = useState(true);
   const [originalVolume, setOriginalVolume] = useState(0.8);
   const [voiceVolume, setVoiceVolume] = useState(1);
   const [effectsVolume, setEffectsVolume] = useState(0.55);
-  const [candidateCount, setCandidateCount] = useState(12);
+  const [candidateCount, setCandidateCount] = useState(24);
+  const [autoPreview,setAutoPreview]=useState(true);
+  const [avoidRepeats,setAvoidRepeats]=useState(true);
+  const sourceHistory=useRef<string[]>([]);
+  const pendingSearchPreview=useRef<((clips:Clip[])=>Promise<Job>)|null>(null);
   const [blurText,setBlurText]=useState(true);
   const [trim,setTrim]=useState<{index:number;context:{full_source?:boolean;source:{url:string;duration?:number};bounds:{start:number;end:number};current:{start:number;end:number};message:string}}|null>(null);
   const [cleanupIndex,setCleanupIndex]=useState<number|null>(null);
@@ -102,11 +106,12 @@ function App() {
       const savedProject = JSON.parse(localStorage.getItem('rank-studio-project') ?? 'null');
       if (savedProject?.clips?.length === 5) {
         setClips(savedProject.clips.map((c:Record<string,unknown>|null,i:number)=>c?normalize(c,i):null)); setTitle(savedProject.title || 'TOP 5 MOMENTS'); setTopic(savedProject.topic || '');setTitleFollowsTopic(savedProject.titleFollowsTopic??true); setCriteria(savedProject.criteria || 'Surprise, timing and skill'); setLanguage(savedProject.language || 'en');
-        setVoice(savedProject.voice ?? false); setEffects(savedProject.effects ?? true); setCaptions(savedProject.captions ?? true); setResolution(savedProject.resolution || '1080'); setDiscoveryMode(savedProject.discoveryMode==='ai'?'ai':'free');
-        setBlurText(savedProject.blurText??true);setAllowYoutube(savedProject.allowYoutube ?? true); setCandidateCount(savedProject.candidateCount || 12); setOriginalVolume(savedProject.originalVolume===.12||savedProject.originalVolume===.15?.8:savedProject.originalVolume??.8); setVoiceVolume(savedProject.voiceVolume ?? 1); setEffectsVolume(savedProject.effectsVolume ?? 0.55);
+        setVoice(savedProject.voice ?? true);setAutoPreview(savedProject.autoPreview??true);setAvoidRepeats(savedProject.avoidRepeats??true); setEffects(savedProject.effects ?? true); setCaptions(savedProject.captions ?? true); setResolution(savedProject.resolution || '1080'); setDiscoveryMode(savedProject.discoveryMode==='ai'?'ai':'free');
+        setBlurText(savedProject.blurText??true);setAllowYoutube(savedProject.allowYoutube ?? true); setCandidateCount(savedProject.candidateCount===12?24:savedProject.candidateCount||24); setOriginalVolume(savedProject.originalVolume===.12||savedProject.originalVolume===.15?.8:savedProject.originalVolume??.8); setVoiceVolume(savedProject.voiceVolume ?? 1); setEffectsVolume(savedProject.effectsVolume ?? 0.55);
         setLayout({...DEFAULT_LAYOUT,...savedProject.layout}); setVoiceSettings(savedProject.voiceSettings || DEFAULT_VOICE); setReference(savedProject.reference || null);setTemplateInstructions(savedProject.templateInstructions??savedProject.reference?.instructions??'');setTemplateFrame(savedProject.reference?.frame_time??0);setTemplateMethod(savedProject.templateMethod==='ai'?'ai':'free'); setRestored(true); setToast('Uložený projekt byl obnoven.');
       }
     } catch { localStorage.removeItem('rank-studio-project'); }
+    try{const history=JSON.parse(localStorage.getItem('rank-studio-sources')||'[]');if(Array.isArray(history))sourceHistory.current=history.filter((url:unknown)=>typeof url==='string'&&/^https:\/\/(www\.)?(tiktok\.com|instagram\.com|youtube\.com|youtu\.be)\//.test(url)&&url.length<=500).slice(-180);}catch{}
     try { const history=JSON.parse(localStorage.getItem('rank-studio-chat') || '[]'); if(Array.isArray(history))setMessages(history.slice(-30).filter(m=>['user','assistant'].includes(m.role)).map(m=>m.pending?{...m,pending:false,content:'Po obnovení nebyl výsledek tohoto příkazu ověřen. Zkontroluj projekt.'}:m)); } catch {}
     return () => { voiceAudio.current?.pause(); };
   }, []);
@@ -115,26 +120,38 @@ function App() {
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 5000); return () => clearTimeout(t); }, [toast]);
   useEffect(() => {
     if (!job || ['done', 'failed'].includes(job.status)) return;
+    let inFlight=false;
     const interval = setInterval(async () => {
+      if(inFlight)return;inFlight=true;
       try {
         const next = await api<Job>(`/jobs/${job.id}`);
         setJob(next);
         if(next.kind==='assistant' && next.assistant_reply && assistantTurn.current){setMessages(old=>old.map(m=>m.id===assistantTurn.current?{...m,content:next.assistant_reply!,pending:!['done','failed'].includes(next.status)}:m));}
         if(next.kind==='assistant' && ['done','failed'].includes(next.status)){if(next.project){pendingDownload.current=next.download || null;applyProject(next.project);}else if(next.download)setExported(next.download);if(next.reference){setReference(next.reference);setTemplateInstructions(next.reference.instructions??'');setTemplateFrame(next.reference.frame_time??0);}if(next.research){setResearch(next.research);setModal('research');}}
         if (next.status === 'failed') {
-          setError(next.message);
+          pendingSearchPreview.current=null;
+          setError(next.message+(next.kind==='discover'&&!next.partial_clips?.length&&ready?' Nové hledání nepřidalo žádné klipy. Dole zůstává předchozí projekt.':''));
           if (next.kind==='discover' && next.partial_clips?.length) {
             const recovered:(Clip|null)[]=next.partial_clips.slice(0,5).map(normalize);
             while(recovered.length<5)recovered.push(null);
-            setClips(recovered);setSelected(0);setPlaying(false);setVoice(false);
+            rememberSources(recovered);setClips(recovered);setSelected(0);setPlaying(false);
             setToast(`Zachováno ${next.partial_clips.length}/5 klipů. Zbývající nahraj do prázdných míst.`);
           }
         }
         if (next.status === 'done') {
-          if (next.clips) { setClips(next.clips.map(normalize)); setSelected(0); if(next.mode==='free')setVoice(false); setToast(next.kind==='recut'?next.message:next.mode==='free'?`Vybráno pět scén z ${next.candidate_count} videí bez placeného API. Zkontroluj obsah a pořadí.`:`AI vybrala pět momentů z ${next.candidate_count} videí.`); }
-          if (next.download && next.kind!=='assistant') { setExported(next.download); setToast('Export dokončen. Váš Short je připravený!'); }
+          if (next.clips) {
+            const fresh=next.clips.map(normalize).map((c,i)=>next.kind==='discover'&&voice&&!c.voiceover.trim()?{...c,voiceover:rankLine(i,language),narration_mode:'rank' as const}:c);
+            rememberSources(fresh);setClips(fresh);setSelected(0);setPlaying(false);
+            setToast(next.kind==='recut'?next.message:'Klipy jsou připravené. Zkontroluj obsah, pointu a pořadí.');
+            if(next.kind==='discover'&&pendingSearchPreview.current){
+              const createPreview=pendingSearchPreview.current;pendingSearchPreview.current=null;
+              setBusy('Připravuji hotový náhled s vybraným zvukem…');
+              try{setJob(await createPreview(fresh));}catch(e){setError(`Klipy jsou připravené, ale zvukový náhled se nepodařilo vytvořit: ${(e as Error).message}`);}finally{setBusy('');}
+            }
+          }
+          if (next.download && next.kind!=='assistant') { if(next.clips)pendingDownload.current=next.download;setExported(next.download); setToast('Export dokončen. Váš Short je připravený!'); }
         }
-      } catch (e) { setError((e as Error).message); setJob(null); }
+      } catch (e) { pendingSearchPreview.current=null;setError((e as Error).message); setJob(null); }finally{inFlight=false;}
     }, 1000);
     return () => clearInterval(interval);
   }, [job?.id, job?.status]);
@@ -154,6 +171,14 @@ function App() {
     return () => document.removeEventListener('keydown', onKey);
   }, [modal]);
 
+  function rememberSources(items:(Clip|null)[]){
+    sourceHistory.current=[...new Set([...sourceHistory.current,...items.flatMap(c=>c?.source_url?[c.source_url]:[])])].slice(-180);
+    try{localStorage.setItem('rank-studio-sources',JSON.stringify(sourceHistory.current));}catch{}
+  }
+  function renderPreparedClips(items:Clip[]):Promise<Job>{
+    if(voice&&!hasVoice)throw new Error('Vybraný hlas není připojený. Vyber Andrew / Antonín zdarma, nebo voiceover vypni.');
+    return api<Job>('/render',{title:title.trim()||topic,ranking_criteria:criteria,clips:items,language,voice,effects,captions,resolution,layout,voice_settings:voiceSettings,original_volume:originalVolume,voice_volume:voiceVolume,effects_volume:effectsVolume});
+  }
   function changeClip(index: number, changes: Partial<Clip>) {
     if(changes.voiceover!==undefined)changes={...changes,narration_mode:'custom'};
     setClips(old => old.map((c, i) => i === index && c ? { ...c, ...changes } : c));
@@ -218,9 +243,12 @@ function App() {
   async function discover() {
     if (topic.trim().length < 3) { setError('Napište téma alespoň o třech znacích, například funny cats.'); return; }
     if (ready && !window.confirm('Nahradit aktuální klipy novým vyhledáváním?')) return;
-    setError(''); setExported(null);
-    try { const result = await api<Job>('/discover', { topic, ranking_criteria: criteria, source: 'social', allow_youtube: allowYoutube, language, candidate_count: candidateCount, mode:discoveryMode,blur_text:blurText,exclude_notes:clips.filter(Boolean).map(c=>c!.rank_note??'') }); setJob(result); }
-    catch (e) { setError((e as Error).message); if (discoveryMode==='ai' && !health?.ai_scripts) setModal('settings'); }
+    setError(''); setExported(null);setPlaying(false);setBusy('Zahajuji nové hledání…');
+    rememberSources(clips);
+    pendingSearchPreview.current=autoPreview?renderPreparedClips:null;
+    try { const result = await api<Job>('/discover', { topic, ranking_criteria: criteria, source: 'social', allow_youtube: allowYoutube, language, candidate_count: candidateCount, mode:discoveryMode,blur_text:blurText,exclude_notes:clips.filter(Boolean).map(c=>c!.rank_note??''),exclude_urls:avoidRepeats?sourceHistory.current:[] }); setJob(result); }
+    catch (e) { pendingSearchPreview.current=null;setError((e as Error).message); if (discoveryMode==='ai' && !health?.ai_scripts) setModal('settings'); }
+    finally{setBusy('');}
   }
   async function generateScripts(mode:'ai'|'rank'='ai') {
     if (ready !== 5) { setError('Nejdřív připravte všech pět klipů.'); return; }
@@ -260,12 +288,12 @@ function App() {
     finally { setBusy(''); }
   }
   function saveProject() {
-    try { localStorage.setItem('rank-studio-project', JSON.stringify({ clips, title, topic, titleFollowsTopic, criteria, allowYoutube, layout, voiceSettings, reference, language, voice, effects, captions, resolution, originalVolume, voiceVolume, effectsVolume, candidateCount, discoveryMode, blurText, templateMethod, templateInstructions })); setSaved(true); setRestored(true); setToast('Projekt uložen v tomto prohlížeči.'); }
+    try { localStorage.setItem('rank-studio-project', JSON.stringify({ clips, title, topic, titleFollowsTopic, criteria, allowYoutube, layout, voiceSettings, reference, language, voice, effects, captions, resolution, originalVolume, voiceVolume, effectsVolume, candidateCount, discoveryMode, blurText, autoPreview, avoidRepeats, templateMethod, templateInstructions })); setSaved(true); setRestored(true); setToast('Projekt uložen v tomto prohlížeči.'); }
     catch { setError('Prohlížeč nemohl projekt uložit.'); }
   }
   function resetProject() {
     if (ready && !window.confirm('Vymazat aktuální projekt? Nahrané soubory zůstanou na serveru.')) return;
-    setClips(blankClips()); setDiscoveryMode('free');setVoice(false); setLayout(DEFAULT_LAYOUT);setVoiceSettings(DEFAULT_VOICE);setReference(null);setTemplateInstructions('');setTemplateFrame(0);setTemplateMethod('free');setMessages([]); setTopic('');setTitleFollowsTopic(true); setCriteria('Surprise, timing and skill'); setTitle('TOP 5 UNEXPECTED MOMENTS'); setSelected(0); setPlaying(false); setElapsed(0); setJob(null); setExported(null); setError(''); localStorage.removeItem('rank-studio-project'); setRestored(false); setToast('Nový projekt je připravený.');
+    pendingSearchPreview.current=null;setClips(blankClips()); setDiscoveryMode('free');setVoice(true);setCandidateCount(24);setAutoPreview(true);setAvoidRepeats(true); setLayout(DEFAULT_LAYOUT);setVoiceSettings(DEFAULT_VOICE);setReference(null);setTemplateInstructions('');setTemplateFrame(0);setTemplateMethod('free');setMessages([]); setTopic('');setTitleFollowsTopic(true); setCriteria('Surprise, timing and skill'); setTitle('TOP 5 UNEXPECTED MOMENTS'); setSelected(0); setPlaying(false); setElapsed(0); setJob(null); setExported(null); setError(''); localStorage.removeItem('rank-studio-project'); setRestored(false); setToast('Nový projekt je připravený.');
   }
   function moveClip(index: number, direction: number) {
     const target = index + direction;
@@ -364,8 +392,9 @@ function App() {
             <label htmlFor="topic"><Sparkles size={16}/> Co dnes rankujeme?</label>
             <div className="search-mode"><label htmlFor="search-mode">REŽIM HLEDÁNÍ</label><div className="select-wrap"><select id="search-mode" value={discoveryMode} disabled={occupied} onChange={e=>setDiscoveryMode(e.target.value as 'free'|'ai')}><option value="free">Zdarma · bez API klíče</option><option value="ai" disabled={!health?.ai_scripts}>AI výběr · placené API{!health?.ai_scripts?' · připoj klíč':''}</option></select><ChevronDown size={12}/></div></div>
             <div className="topic-input-row"><input id="topic" maxLength={100} value={topic} onChange={e => {setTopic(e.target.value);if(titleFollowsTopic)setTitle(e.target.value);}} onKeyDown={e => { if (e.key === 'Enter' && !occupied) discover(); }} placeholder="Například: ranking funniest cat moments" disabled={occupied}/><button className="button primary" onClick={discover} disabled={occupied}><WandSparkles size={16}/><span>Najít klipy</span><ArrowUpRight size={16}/></button></div>
-            <div className="criteria-input"><label htmlFor="criteria">TVŮJ ÚHEL POHLEDU</label><input id="criteria" value={criteria} maxLength={100} onChange={e=>setCriteria(e.target.value)} placeholder="Co porovnáváš? Např. surprise, timing, skill" disabled={occupied}/></div><div className="topic-options"><span className="social-sources"><Clapperboard size={12}/>TikTok + Instagram</span><label className="youtube-option"><input type="checkbox" checked={allowYoutube} onChange={e=>setAllowYoutube(e.target.checked)} disabled={occupied}/>+ YouTube</label><span className="option-divider"/><div className="select-wrap"><select aria-label="Počet kandidátů" value={candidateCount} onChange={e => setCandidateCount(Number(e.target.value))} disabled={occupied}><option value={8}>8 kandidátů</option><option value={12}>12 kandidátů</option><option value={20}>20 kandidátů</option></select><ChevronDown size={12}/></div><span className="topic-ai-note"><span className="dot green"/>{discoveryMode==='free'?'5 scén podle pravidel':'AI vybere 5 nejlepších scén'}</span></div>
-            <label className="cleanup-option"><input type="checkbox" checked={blurText} disabled={occupied} onChange={e=>setBlurText(e.target.checked)}/> Automaticky rozmazat nalezený text ve zdrojových klipech</label><p className="compilation-help">Z kompilace se vybírají různé souvislé scény, každá jako samostatný výřez. Nahraná kompilace: nejvýše 10 minut / 300 MB.</p><button className="text-button" disabled={occupied} onClick={()=>compilationInput.current?.click()}><Upload size={13}/>Nahrát a rozstříhat kompilaci</button><input ref={compilationInput} type="file" accept="video/*" hidden onChange={e=>{const file=e.target.files?.[0];if(file)splitCompilation(file);}}/><p className="free-search-note">{discoveryMode==='free'?'Zdarma: celé scény do 30 s; u delšího záběru výběr úseku s kontextem. Pointu zkontroluj přes Upravit střih. Voiceover připrav samostatně tlačítkem níže.':'Placené OpenAI API pro hledání, vizuální hodnocení a krátké analytické komentáře.'}</p>
+            <div className="criteria-input"><label htmlFor="criteria">TVŮJ ÚHEL POHLEDU</label><input id="criteria" value={criteria} maxLength={100} onChange={e=>setCriteria(e.target.value)} placeholder="Co porovnáváš? Např. surprise, timing, skill" disabled={occupied}/></div><div className="topic-options"><span className="social-sources"><Clapperboard size={12}/>TikTok + Instagram</span><label className="youtube-option"><input type="checkbox" checked={allowYoutube} onChange={e=>setAllowYoutube(e.target.checked)} disabled={occupied}/>+ YouTube</label><span className="option-divider"/><div className="select-wrap"><select aria-label="Počet kandidátů" value={candidateCount} onChange={e => setCandidateCount(Number(e.target.value))} disabled={occupied}><option value={8}>8 kandidátů</option><option value={12}>12 kandidátů</option><option value={20}>20 kandidátů</option><option value={24}>24 kandidátů</option><option value={40}>40 kandidátů</option></select><ChevronDown size={12}/></div><span className="topic-ai-note"><span className="dot green"/>{discoveryMode==='free'?'5 scén podle pravidel':'AI vybere 5 nejlepších scén'}</span></div>
+            <div className="discovery-options"><label><input type="checkbox" checked={avoidRepeats} disabled={occupied} onChange={e=>setAvoidRepeats(e.target.checked)}/>Vynechat dříve použité zdroje</label><label><input type="checkbox" checked={autoPreview} disabled={occupied} onChange={e=>setAutoPreview(e.target.checked)}/>Po hledání vytvořit hotový náhled</label><label><input type="checkbox" checked={voice} disabled={occupied} onChange={e=>setVoice(e.target.checked)}/>Voiceover</label><label><input type="checkbox" checked={effects} disabled={occupied} onChange={e=>setEffects(e.target.checked)}/>Sound efekty</label></div>
+            <label className="cleanup-option"><input type="checkbox" checked={blurText} disabled={occupied} onChange={e=>setBlurText(e.target.checked)}/> Automaticky rozmazat nalezený text ve zdrojových klipech</label><p className="compilation-help">Z kompilace se vybírají různé souvislé scény, každá jako samostatný výřez. Nahraná kompilace: nejvýše 10 minut / 300 MB.</p><button className="text-button" disabled={occupied} onClick={()=>compilationInput.current?.click()}><Upload size={13}/>Nahrát a rozstříhat kompilaci</button><input ref={compilationInput} type="file" accept="video/*" hidden onChange={e=>{const file=e.target.files?.[0];if(file)splitCompilation(file);}}/><p className="free-search-note">{discoveryMode==='free'?'Zdarma: celé scény do 30 s; u delšího záběru výběr úseku s kontextem. Pointu zkontroluj přes Upravit střih. Zapnutý hlas uvede pořadí; vlastní komentář můžeš napsat u klipu. Hotový náhled přimíchá hlas a efekty podle přepínačů.':'Placené OpenAI API pro hledání, vizuální hodnocení a krátké analytické komentáře.'}</p>
             <p className="free-search-note">{allowYoutube?'Když není pět použitelných klipů, proběhne samostatné hledání a doplnění z YouTube.':'Doplňování z YouTube je vypnuté.'}</p>
             <SourceSessions disabled={occupied} onError={setError} local={!!health?.local_mode}/>
           </div>
@@ -403,12 +432,12 @@ function App() {
           </div>
           <div className="playback"><button aria-label={playing?'Pozastavit':'Přehrát'} disabled={!current} onClick={() => setPlaying(!playing)}>{playing?<Pause size={16}/>:<Play size={16} fill="currentColor"/>}</button><span>{time(elapsed)}</span><div className="playback-track"><span style={{width:`${Math.min(100, elapsed/totalDuration*100)}%`}}/></div><span>{time(totalDuration)}</span><button aria-label={muted?'Zapnout zvuk':'Ztlumit'} onClick={() => setMuted(!muted)}>{muted?<VolumeX size={16}/>:<Volume2 size={16}/>}</button></div>
           <div className="timeline">{clips.map((c,i)=><button key={i} className={selected===i?'selected':''} onClick={()=>{setSelected(i);setPlaying(false);setElapsed(clips.slice(0,i).reduce((s,c)=>s+(c?.duration||4),0));}} aria-label={`Náhled pozice ${5-i}`} style={c?{backgroundImage:`linear-gradient(0deg, rgba(0,0,0,.6), rgba(0,0,0,.1)),url(${c.thumbnail})`}:undefined}><span>#{5-i}</span><small>{c?.duration??4}s</small></button>)}</div>
-          <p className="preview-note">Tento přehrávač ukazuje střih a původní zvuk. Zapnutý voiceover a SFX uslyšíš v hotovém náhledu níže; jejich zvuk se přimíchá při vytvoření videa.</p>
+          <p className="preview-note">Tento přehrávač ukazuje střih a původní zvuk. Zapnutý voiceover a SFX uslyšíš v hotovém náhledu níže; po hledání se vytvoří automaticky, pokud je tato volba zapnutá.</p>
           <div className="audio-preview-actions"><button className="button secondary" disabled={occupied||ready!==5} onClick={exportVideo}>Vytvořit náhled se zvukem</button><button className="text-button" disabled={occupied||ready!==5} onClick={()=>generateScripts('rank')}>Připravit voiceover zdarma</button></div>
           <VolumeSlider label="Původní zvuk" value={originalVolume} set={setOriginalVolume} max={1.5}/>
           {exported&&<section className="finished-preview" aria-label="Hotové video"><h3>Hotové video se zvukem</h3><video aria-label="Přehrávač hotového Shortu" src={exported.replace(/\/download$/,'/preview')} controls playsInline preload="metadata" onPlay={()=>{setPlaying(false);voiceAudio.current?.pause();}}/><p>Tento náhled obsahuje výsledný vzhled, zapnutý hlas a efekty.</p></section>}
 
-          <div className="output-settings"><div className="output-heading"><h2>Finální doladění</h2><button title="Zvukový mix" aria-label="Zvukový mix" onClick={()=>setModal('audio')}><SlidersHorizontal size={15}/></button></div><label className="video-title-label" htmlFor="video-title">NÁZEV VE VIDEU</label><input id="video-title" className="video-title-input" maxLength={100} value={title} disabled={occupied} onChange={e=>{setTitle(e.target.value);setTitleFollowsTopic(false);}}/><TitleSettings title={title} layout={layout} onLayout={setLayout} followTopic={titleFollowsTopic} onFollowTopic={follow=>{setTitleFollowsTopic(follow);if(follow)setTitle(topic);}} width={resolution==='1080'?1080:720} disabled={occupied}/><label className="video-title-label voice-label" htmlFor="male-voice">MUŽSKÝ HLAS</label><div className="voice-choice-row"><div className="select-wrap"><select id="male-voice" value={`${voiceSettings.provider}:${voiceSettings.voice}`} onChange={e=>chooseVoice(e.target.value)}>{VOICES.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select><ChevronDown size={12}/></div><button className="voice-sample" title="Poslechnout mužský hlas" aria-label="Poslechnout mužský hlas" disabled={occupied} onClick={previewMaleVoice}><Play size={13}/></button></div>{voiceSettings.provider==='edge'?<p className="free-voice-note">{language==='en'?'Andrew · anglický mužský hlas':'Antonín · český mužský hlas'} · zdarma bez účtu a API klíče. Text se posílá online službě Microsoft Edge; dostupnost ověř ukázkou. Zvol „Uvedení pořadí zdarma“ nebo napiš vlastní komentář, ideálně 2–4 slova.</p>:!hasVoice&&health?.free_voice?<div className="free-voice-note">Vybraný hlas není připojený.<button className="text-button" onClick={()=>{setVoiceSettings({...DEFAULT_VOICE});setToast('Vybraný bezplatný hlas bez registrace a API klíče.');}}>Použít hlas zdarma</button></div>:null}<div className="setting-row"><span><Mic2 size={15}/>AI voiceover <small>{language==='en'?'English':'Čeština'}</small></span><Toggle value={voice} set={setVoice} label="AI voiceover"/></div><div className="setting-row"><span><Zap size={15}/>Zvukové efekty</span><Toggle value={effects} set={setEffects} label="Zvukové efekty"/></div><div className="setting-row"><span><Clapperboard size={15}/>Poznámky u čísel</span><Toggle value={captions} set={setCaptions} label="Poznámky u čísel"/></div><div className="format-settings"><div><label htmlFor="resolution">ROZLIŠENÍ</label><div className="select-wrap"><select id="resolution" value={resolution} onChange={e=>setResolution(e.target.value)}><option value="1080">1080 × 1920</option><option value="720">720 × 1280</option></select><ChevronDown size={12}/></div></div><div><label htmlFor="language">JAZYK HLASU</label><div className="select-wrap"><select id="language" value={language} onChange={e=>{const lang=e.target.value;setLanguage(lang);setClips(old=>old.map((c,i)=>c?.narration_mode==='rank'?{...c,voiceover:rankLine(i,lang)}:c));}}><option value="en">English</option><option value="cs">Čeština</option></select><ChevronDown size={12}/></div></div></div></div>
+          <div className="output-settings"><div className="output-heading"><h2>Finální doladění</h2><button title="Zvukový mix" aria-label="Zvukový mix" onClick={()=>setModal('audio')}><SlidersHorizontal size={15}/></button></div><label className="video-title-label" htmlFor="video-title">NÁZEV VE VIDEU</label><input id="video-title" className="video-title-input" maxLength={100} value={title} disabled={occupied} onChange={e=>{setTitle(e.target.value);setTitleFollowsTopic(false);}}/><TitleSettings title={title} layout={layout} onLayout={setLayout} followTopic={titleFollowsTopic} onFollowTopic={follow=>{setTitleFollowsTopic(follow);if(follow)setTitle(topic);}} width={resolution==='1080'?1080:720} disabled={occupied}/><label className="video-title-label voice-label" htmlFor="male-voice">MUŽSKÝ HLAS</label><div className="voice-choice-row"><div className="select-wrap"><select id="male-voice" disabled={occupied} value={`${voiceSettings.provider}:${voiceSettings.voice}`} onChange={e=>chooseVoice(e.target.value)}>{VOICES.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select><ChevronDown size={12}/></div><button className="voice-sample" title="Poslechnout mužský hlas" aria-label="Poslechnout mužský hlas" disabled={occupied} onClick={previewMaleVoice}><Play size={13}/></button></div>{voiceSettings.provider==='edge'?<p className="free-voice-note">{language==='en'?'Andrew · anglický mužský hlas':'Antonín · český mužský hlas'} · zdarma bez účtu a API klíče. Text se posílá online službě Microsoft Edge; dostupnost ověř ukázkou. Zvol „Uvedení pořadí zdarma“ nebo napiš vlastní komentář, ideálně 2–4 slova.</p>:!hasVoice&&health?.free_voice?<div className="free-voice-note">Vybraný hlas není připojený.<button className="text-button" onClick={()=>{setVoiceSettings({...DEFAULT_VOICE});setToast('Vybraný bezplatný hlas bez registrace a API klíče.');}}>Použít hlas zdarma</button></div>:null}<div className="setting-row"><span><Mic2 size={15}/>AI voiceover <small>{language==='en'?'English':'Čeština'}</small></span><Toggle value={voice} set={v=>{if(!occupied)setVoice(v);}} label="AI voiceover"/></div><div className="setting-row"><span><Zap size={15}/>Zvukové efekty</span><Toggle value={effects} set={v=>{if(!occupied)setEffects(v);}} label="Zvukové efekty"/></div><div className="setting-row"><span><Clapperboard size={15}/>Poznámky u čísel</span><Toggle value={captions} set={setCaptions} label="Poznámky u čísel"/></div><div className="format-settings"><div><label htmlFor="resolution">ROZLIŠENÍ</label><div className="select-wrap"><select id="resolution" value={resolution} onChange={e=>setResolution(e.target.value)}><option value="1080">1080 × 1920</option><option value="720">720 × 1280</option></select><ChevronDown size={12}/></div></div><div><label htmlFor="language">JAZYK HLASU</label><div className="select-wrap"><select id="language" disabled={occupied} value={language} onChange={e=>{const lang=e.target.value;setLanguage(lang);setClips(old=>old.map((c,i)=>c?.narration_mode==='rank'?{...c,voiceover:rankLine(i,lang)}:c));}}><option value="en">English</option><option value="cs">Čeština</option></select><ChevronDown size={12}/></div></div></div></div>
           <div className="export-card"><div><span><Film size={13}/>MP4 · H.264</span><span>{time(totalDuration)} · {resolution}p</span></div>{exported?<a className="button primary export-button" href={exported} download><Download size={17}/>Stáhnout Short<Check size={17}/></a>:<button className="button primary export-button" onClick={exportVideo} disabled={occupied}>{occupied?<LoaderCircle className="spin" size={17}/>:<Download size={17}/>}Exportovat Short<ArrowUpRight size={17}/></button>}<p>Připraveno pro YouTube Shorts, Reels i TikTok.</p></div>
 
           <button className="research-link" disabled={occupied} onClick={doResearch}><Search size={14}/><span>Co funguje u ranking kanálů?</span><ArrowUpRight size={14}/></button>

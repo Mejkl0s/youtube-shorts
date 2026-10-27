@@ -153,21 +153,42 @@ def search_topic(topic):
     return ' '.join(clean) or topic
 
 
-def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False):
+def query_variants(topic):
+    """Expand concrete concepts, while relevance still checks the original topic."""
+    base = search_topic(topic)
+    queries = [base, base + ' compilation']
+    wanted = tokens(topic)
+    if 'winter' in wanted and wanted & FAIL_WORDS:
+        queries += ['snow fails', 'slipping on ice fails', 'skiing crashes', 'sledding fails']
+    else:
+        queries += [base + ' moments', base + ' shorts']
+    return list(dict.fromkeys(queries))
+
+
+def search_warning(engine, source, error):
+    # Do not echo response bodies, credentials, session data or raw process errors.
+    status = re.search(r'\b(403|407|429|5\d\d)\b', str(error))
+    reason = f' (HTTP {status[1]})' if status else ''
+    return f'{engine}: veřejné vyhledávání pro {source} nebylo dostupné{reason}.'
+
+
+def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False, exclude_urls=()):
     from .main import canonical_url, social_url
     sources = [('TikTok', 'site:tiktok.com inurl:video'), ('Instagram', 'site:instagram.com/reel/')]
     if allow_youtube:
         sources.append(('YouTube', 'site:youtube.com'))
     if only_youtube:
         sources = [source for source in sources if source[0] == 'YouTube']
-    pools, seen, warnings = [], set(), []
+    pools, seen, warnings, unavailable = [], {canonical_url(url) for url in exclude_urls}, [], set()
     for source, restriction in sources:
         entries = []
-        for suffix in ('', ' moments'):
+        for variant in query_variants(topic):
             if len(entries) >= limit:
                 break
-            query = search_topic(topic) + suffix + ' ' + restriction
+            query = variant + ' ' + restriction
             for engine in ('bing', 'duckduckgo'):
+                if engine in unavailable:
+                    continue
                 added = 0
                 try:
                     results = engine_results(query, engine)
@@ -193,8 +214,11 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
                         added += 1
                         if len(entries) >= limit:
                             break
-                except Exception:
-                    warnings.append(f'{engine}: veřejné vyhledávání pro {source} nebylo dostupné.')
+                except Exception as error:
+                    warnings.append(search_warning(engine, source, error))
+                    # A challenge, network refusal or timeout is not fixed by
+                    # repeating the same request with more topic variants.
+                    unavailable.add(engine)
                 if added:
                     break
         pools.append(entries)
@@ -209,37 +233,45 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
     return entries[:limit], list(dict.fromkeys(warnings))
 
 
-def youtube_search(topic: str, limit: int):
+def youtube_search(topic: str, limit: int, exclude_urls=()):
     """Independent public YouTube search; social results cannot consume its budget."""
     from . import main as m
-    entries, seen, warnings = [], set(), []
-    try:
-        raw = m.run([sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir',
+    entries, seen, warnings = [], {m.canonical_url(url) for url in exclude_urls}, []
+    # Read past previously used results before filtering; otherwise a new search
+    # sees the same first page and runs out before reaching any unseen clips.
+    pool_size = min(60, max(limit, limit + min(len(seen), 40)))
+    for query in query_variants(topic)[:4]:
+        if len(entries) >= limit:
+            break
+        try:
+            raw = m.run([sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir',
                      '--no-warnings', '--no-remote-components', '--flat-playlist', '--skip-download',
                      '--dump-single-json', '--socket-timeout', '10', '--retries', '0',
-                     '--playlist-end', str(limit), '--', f'ytsearch{limit}:{search_topic(topic)}'], 40)
-        if len(raw) > 4 * 1024 * 1024:
-            raise ValueError('Too many search results')
-        for index, row in enumerate(json.loads(raw).get('entries', [])[:limit]):
-            if not isinstance(row, dict) or not re.fullmatch(r'[\w-]{11}', str(row.get('id', ''))):
-                continue
-            duration = row.get('duration')
-            if (isinstance(duration, (int, float)) and not 2 <= duration <= m.MAX_SOURCE_SECONDS) or row.get('live_status') in ('is_live', 'is_upcoming'):
-                continue
-            title = plain(row.get('title', ''))
-            score = relevance(topic, title, plain(row.get('description', '')))
-            if not score:
-                continue
-            url = 'https://www.youtube.com/watch?v=' + row['id']
-            identity = m.canonical_url(url)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            entries.append({'url': url, 'title': title[:100], 'source': 'YouTube', 'provider': 'youtube', 'search_score': score*.85 + .15/(index+1)})
-    except Exception:
-        warnings.append('Přímé veřejné hledání na YouTube nebylo dostupné.')
+                     '--playlist-end', str(pool_size), '--', f'ytsearch{pool_size}:{query}'], 40)
+            if len(raw) > 4 * 1024 * 1024:
+                raise ValueError('Too many search results')
+            for index, row in enumerate(json.loads(raw).get('entries', [])[:pool_size]):
+                if not isinstance(row, dict) or not re.fullmatch(r'[\w-]{11}', str(row.get('id', ''))):
+                    continue
+                duration = row.get('duration')
+                if (isinstance(duration, (int, float)) and not 2 <= duration <= m.MAX_SOURCE_SECONDS) or row.get('live_status') in ('is_live', 'is_upcoming'):
+                    continue
+                title = plain(row.get('title', ''))
+                score = relevance(topic, title, plain(row.get('description', '')))
+                if not score:
+                    continue
+                url = 'https://www.youtube.com/watch?v=' + row['id']
+                identity = m.canonical_url(url)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                entries.append({'url': url, 'title': title[:100], 'source': 'YouTube', 'provider': 'youtube', 'search_score': score*.85 + .15/(index+1)})
+        except Exception as error:
+            warnings.append(search_warning('YouTube', 'YouTube', error))
+            break
     if len(entries) < limit:
-        extra, engine_warnings = public_search(topic, True, limit, only_youtube=True)
+        options = {'exclude_urls': list(seen)} if exclude_urls else {}
+        extra, engine_warnings = public_search(topic, True, limit, only_youtube=True, **options)
         warnings.extend(engine_warnings)
         for row in extra:
             identity = m.canonical_url(row['url'])

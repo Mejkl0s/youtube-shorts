@@ -57,6 +57,14 @@ Pokud chybí `winget`, nainstaluj nebo aktualizuj [App Installer od Microsoftu](
 
 Všech 12 písem v nabídce a jejich licence jsou přibalené v `backend/fonts`, takže Windows a Render používají stejná písma. Export počítá s mezerami, diakritikou i běžnými speciálními znaky v cestách. Windows nepotřebuje linuxový `uvloop`; použije standardní smyčku Pythonu.
 
+## Nové hledání a automatický zvukový náhled
+
+Pod **Najít klipy** jsou volby **Vynechat dříve použité zdroje**, **Po hledání vytvořit hotový náhled**, **Voiceover** a **Sound efekty**. Vyhledávání nabízí až 40 kandidátů, zkouší související dotazy a na YouTube čte i za už použitými výsledky. Historie posledních 180 použitých zdrojů zůstává v tomto prohlížeči i po obnovení stránky nebo založení dalšího projektu. Pokud chceš znovu použít starší zdroj, vypni vynechávání. Historie v jiném prohlížeči ani na jiné adrese se automaticky nesdílí.
+
+Po nalezení všech pěti klipů se při zapnutém automatickém náhledu vytvoří skutečné MP4 s vybraným mixem. Zapnutý bezplatný voiceover doplní chybějící texty krátkým uvedením pořadí (např. „Number five.“); nepopisuje neověřený děj. Vyhledávání už hlas samo nevypíná a zachová uložené přepínače. Vlastní komentáře můžeš upravit u klipů a vytvořit náhled znovu. Vypnutí hlasu nemění přepínač efektů a naopak. Pokud hlasová služba odmítne požadavek, klipy zůstanou v editoru a chyba náhledu se zobrazí; aplikace nepřechází na placenou službu.
+
+Nulový výsledek ponechá předchozí projekt a výslovně to oznámí. Údaj 5/5 se vztahuje k obsazeným místům editoru, nikoli k úspěchu nového hledání. Více dotazů ani kandidátů nezaručí přístup k odmítajícím veřejným zdrojům.
+
 ## Klipy, přihlášení a hlas
 
 - Nahraná videa, relace a exporty zůstávají ve složce `.runtime` uvnitř rozbalené aplikace. Při běžném zavření programu se nemažou. Smazáním složky nebo spuštěním jiné rozbalené kopie se k těmto souborům nedostaneš.

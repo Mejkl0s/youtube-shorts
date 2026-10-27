@@ -161,5 +161,7 @@ def test_full_heading_search_keeps_topic_and_accepts_watch_compilations(monkeypa
     monkeypatch.setattr(f,'engine_results',engine)
     results,_=f.public_search('ranking funniest winter fails',True,8)
     assert len(results)==1 and results[0]['url'].endswith('WINTER00001')
-    assert all('ranking' not in query and 'funny winter fails' in query for query in queries)
+    assert all('ranking' not in query for query in queries)
+    assert any(query.startswith('funny winter fails ') for query in queries)
+    assert any(query.startswith('snow fails ') for query in queries)
     assert any(query.endswith('site:youtube.com') for query in queries)

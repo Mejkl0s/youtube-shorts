@@ -421,3 +421,79 @@ def test_partial_ai_discovery_keeps_scenes_and_stops_later_assistant_actions(iso
     assert job['status'] == 'failed' and not job.get('download')
     assert [clip['id'] for clip in job['project']['clips']] == [clip['id'] for clip in partial]
     assert job['project']['voice'] is False
+
+
+def test_expanded_winter_search_finds_new_sources_without_music_or_repeats(monkeypatch):
+    calls=[]
+    def search(query,engine):
+        calls.append(query)
+        if 'site:tiktok.com' not in query:
+            return []
+        if query.startswith('snow fails'):
+            return [
+                {'url':'https://www.tiktok.com/@snow/video/500001','title':'Snow wipeouts'},
+                {'url':'https://www.tiktok.com/@snow/video/500002','title':'Sledding fails'},
+                {'url':'https://www.tiktok.com/@music/video/500003','title':'Antonio Vivaldi Winter'},
+            ]
+        return [{'url':'https://www.tiktok.com/@snow/video/500001?tracking=old','title':'Winter fails'}]
+    monkeypatch.setattr(f,'engine_results',search)
+    entries,_=f.public_search('ranking funniest winter fails',False,24,exclude_urls=['https://www.tiktok.com/@snow/video/500001'])
+    assert [row['url'] for row in entries]==['https://www.tiktok.com/@snow/video/500002']
+    assert any(q.startswith('snow fails') for q in calls)
+
+
+def test_unavailable_engines_are_not_hammered_with_more_queries(monkeypatch):
+    calls=[]
+    def unavailable(query,engine):
+        calls.append(engine)
+        raise RuntimeError('HTTP 429 opaque-session-secret')
+    monkeypatch.setattr(f,'engine_results',unavailable)
+    entries,warnings=f.public_search('winter fails',True,40)
+    assert not entries and sorted(calls)==['bing','duckduckgo']
+    assert any('429' in warning for warning in warnings)
+    assert 'opaque-session-secret' not in str(warnings)
+
+
+def test_youtube_reads_beyond_used_sources_and_tries_related_queries(monkeypatch):
+    import json
+    commands=[]
+    def search(args,timeout):
+        commands.append(args)
+        rows=[{'id':'WINTER00001','title':'Winter fails','duration':12}]
+        if args[-1].endswith(':snow fails'):
+            rows+=[{'id':'WINTER00002','title':'Snow wipeouts','duration':9},
+                   {'id':'WINTER00003','title':'Vivaldi Winter','duration':20}]
+        return json.dumps({'entries':rows}).encode()
+    monkeypatch.setattr(m,'run',search)
+    monkeypatch.setattr(f,'public_search',lambda *args,**kwargs:([],[]))
+    entries,_=f.youtube_search('winter fails',8,['https://youtu.be/WINTER00001'])
+    assert [row['url'] for row in entries]==['https://www.youtube.com/watch?v=WINTER00002']
+    assert commands[0][-1]=='ytsearch9:winter fails'
+    assert len(commands)<=4
+
+
+def test_discovery_exclusions_are_enforced_even_if_provider_returns_old_urls(isolated,monkeypatch):
+    entries=youtube_results(10)
+    used=[row['url'] for row in entries[:5]]
+    monkeypatch.setattr(m,'public_search',lambda *args:(entries,[]))
+    downloaded=[]
+    def download(item):
+        downloaded.append(item['url'])
+        return {'id':uuid.uuid4().hex,'source_url':item['url'],'source':'YouTube'}
+    monkeypatch.setattr(m,'download_candidate',download)
+    monkeypatch.setattr(m,'select_free',lambda rows,topic:rows[:5])
+    job_id=uuid.uuid4().hex
+    m.jobs[job_id]={'id':job_id,'status':'queued'}
+    m.discover(job_id,m.DiscoverRequest(topic='funny cats',exclude_urls=used,blur_text=False))
+    assert m.jobs[job_id]['status']=='done'
+    assert set(downloaded)=={row['url'] for row in entries[5:]}
+    assert not set(downloaded)&set(used)
+
+
+def test_discovery_bounds_larger_candidate_pool_and_history(isolated,monkeypatch):
+    monkeypatch.setattr(m.executor,'submit',lambda *args:None)
+    client=TestClient(m.app)
+    assert client.post('/api/discover',json={'topic':'winter fails','candidate_count':40}).status_code==202
+    m.jobs.clear()
+    assert client.post('/api/discover',json={'topic':'winter fails','candidate_count':1000}).status_code==422
+    assert client.post('/api/discover',json={'topic':'winter fails','exclude_urls':['http://127.0.0.1/private']}).status_code==422
