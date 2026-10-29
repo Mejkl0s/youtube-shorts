@@ -4,12 +4,15 @@ from __future__ import annotations
 import re
 import json
 import sys
+import time
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlparse
 from xml.etree import ElementTree
 
 import httpx
 import numpy as np
+from . import work_budget as work
+from .work_budget import WorkStopped
 
 
 class Text(HTMLParser):
@@ -80,12 +83,14 @@ def engine_results(query: str, engine: str):
     endpoint = 'https://www.bing.com/search' if engine == 'bing' else 'https://html.duckduckgo.com/html/'
     params = {'q': query, 'format': 'rss', 'count': '20'} if engine == 'bing' else {'q': query}
     # Read a bounded public response. Captchas/login/rate limits are reported, never bypassed.
-    with httpx.Client(timeout=10, follow_redirects=False, headers={'User-Agent': 'Mozilla/5.0 (compatible; RankStudio/1.0)'}) as client:
+    work.checkpoint()
+    with httpx.Client(timeout=work.timeout(8), follow_redirects=False, headers={'User-Agent': 'Mozilla/5.0 (compatible; RankStudio/1.0)'}) as client:
         with client.stream('GET', endpoint, params=params) as response:
             if response.status_code != 200:
                 raise ValueError(f'Veřejný vyhledávač {engine} není dostupný (HTTP {response.status_code}).')
             content = bytearray()
             for chunk in response.iter_bytes():
+                work.checkpoint()
                 content.extend(chunk)
                 if len(content) > 2 * 1024 * 1024:
                     raise ValueError('Vyhledávací odpověď je příliš velká.')
@@ -179,17 +184,21 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
         sources.append(('YouTube', 'site:youtube.com'))
     if only_youtube:
         sources = [source for source in sources if source[0] == 'YouTube']
-    pools, seen, warnings, unavailable = [], {canonical_url(url) for url in exclude_urls}, [], set()
-    for source, restriction in sources:
-        entries = []
-        for variant in query_variants(topic):
-            if len(entries) >= limit:
-                break
-            query = variant + ' ' + restriction
-            for engine in ('bing', 'duckduckgo'):
+    phase_end=time.monotonic()+35
+    seen, warnings = {canonical_url(url) for url in exclude_urls}, []
+    unavailable=work.current().unavailable_engines if work.current() else set()
+    pools = [[] for _ in sources]
+    # Give every source a turn before trying another engine or topic variant.
+    for variant in query_variants(topic):
+        for engine in ('bing', 'duckduckgo'):
+            for source_index, (source, restriction) in enumerate(sources):
+                work.checkpoint()
                 if engine in unavailable:
+                    break
+                entries = pools[source_index]
+                if len(entries)>=limit or time.monotonic()>=phase_end:
                     continue
-                added = 0
+                query = variant + ' ' + restriction
                 try:
                     results = engine_results(query, engine)
                     for position, result in enumerate(results):
@@ -204,24 +213,20 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
                         if identity in seen:
                             continue
                         match = relevance(topic, result['title'], result.get('description', ''))
-                        # No semantic AI assessment: require actual topical search text.
                         if match == 0:
                             continue
                         seen.add(identity)
                         entries.append({**result, 'url': url[:500], 'title': result['title'][:100] or topic,
                                         'search_score': match * .85 + .15 / (position + 1),
                                         'provider': engine, 'source': source})
-                        added += 1
                         if len(entries) >= limit:
                             break
+                except WorkStopped:
+                    raise
                 except Exception as error:
                     warnings.append(search_warning(engine, source, error))
-                    # A challenge, network refusal or timeout is not fixed by
-                    # repeating the same request with more topic variants.
                     unavailable.add(engine)
-                if added:
-                    break
-        pools.append(entries)
+    for (source, _), entries in zip(sources, pools):
         if not entries:
             warnings.append(f'{source}: vyhledávače nevrátily žádný odpovídající odkaz na video.')
     # Search each enabled source before applying the total limit. Interleaving
@@ -240,14 +245,16 @@ def youtube_search(topic: str, limit: int, exclude_urls=()):
     # Read past previously used results before filtering; otherwise a new search
     # sees the same first page and runs out before reaching any unseen clips.
     pool_size = min(60, max(limit, limit + min(len(seen), 40)))
+    phase_end=time.monotonic()+45
     for query in query_variants(topic)[:4]:
-        if len(entries) >= limit:
+        work.checkpoint()
+        if len(entries) >= limit or time.monotonic()>=phase_end:
             break
         try:
             raw = m.run([sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir',
                      '--no-warnings', '--no-remote-components', '--flat-playlist', '--skip-download',
                      '--dump-single-json', '--socket-timeout', '10', '--retries', '0',
-                     '--playlist-end', str(pool_size), '--', f'ytsearch{pool_size}:{query}'], 40)
+                     '--playlist-end', str(pool_size), '--', f'ytsearch{pool_size}:{query}'], min(20,max(.01,phase_end-time.monotonic())))
             if len(raw) > 4 * 1024 * 1024:
                 raise ValueError('Too many search results')
             for index, row in enumerate(json.loads(raw).get('entries', [])[:pool_size]):
@@ -266,6 +273,8 @@ def youtube_search(topic: str, limit: int, exclude_urls=()):
                     continue
                 seen.add(identity)
                 entries.append({'url': url, 'title': title[:100], 'source': 'YouTube', 'provider': 'youtube', 'search_score': score*.85 + .15/(index+1)})
+        except WorkStopped:
+            raise
         except Exception as error:
             warnings.append(search_warning('YouTube', 'YouTube', error))
             break
@@ -300,12 +309,22 @@ def window_score(raw: bytes):
 def select_free(candidates, topic, *, require_five=True):
     from . import main as m
     selected = []
-    for candidate in candidates:
+    cache=work.current().cache if work.current() else {}
+    for position, candidate in enumerate(candidates):
+        work.stage(f'Analyzuji zdroj {position+1}/{len(candidates)}…')
+        if candidate['id'] in cache:
+            best_by_shot,compilation=cache[candidate['id']]
+            for technical,start,duration,window in best_by_shot.values():
+                selected.append((float(candidate.get('search_score',0))*.8+technical*.2,candidate,start,duration,compilation,window))
+            continue
         path = m.DATA / 'media' / candidate['id'] / 'source'
         best_by_shot = {}
         try:
             windows = m.scene_windows(path)
+            compilation = len({getattr(window, 'shot', 0) for window in windows}) > 1
+            cache[candidate['id']]=(best_by_shot,compilation)
             for window in windows:
+                work.checkpoint()
                 scene_start, scene_duration = window
                 shot = getattr(window, 'shot', 0)
                 duration = scene_duration
@@ -316,9 +335,10 @@ def select_free(candidates, topic, *, require_five=True):
                 best = best_by_shot.get(shot)
                 if score is not None and (best is None or score > best[0]):
                     best_by_shot[shot] = (score, start, duration, window)
-            compilation = len({getattr(window, 'shot', 0) for window in windows}) > 1
             for technical, start, duration, window in best_by_shot.values():
                 selected.append((float(candidate.get('search_score', 0)) * .8 + technical * .2, candidate, start, duration, compilation, window))
+        except WorkStopped:
+            raise
         except Exception:
             continue
     # Prefer one scene per source; only fill the remaining slots with distinct
@@ -344,3 +364,21 @@ def select_free(candidates, topic, *, require_five=True):
                        'selection_version': 'whole-scene-v1', 'review_required': True,
                        'reason': 'Technický výběr podle názvu, ostrosti a pohybu. Pád ani pointa nejsou obsahově ověřené; zkontroluj je v původním záběru.'})
     return m.materialize_scenes(result)
+
+
+def recover_analyzed(candidates):
+    """Keep one completed analyzed window per source without starting more work."""
+    cache=work.current().cache if work.current() else {}
+    recovered=[]
+    for candidate in candidates:
+        best,_=cache.get(candidate['id'],({},False))
+        if not best:
+            continue
+        _,start,duration,window=max(best.values(),key=lambda row:row[0])
+        recovered.append({**candidate,'title':candidate['name'][:60],'voiceover':'',
+                          'start':start,'duration':duration,'sourceDuration':candidate['duration'],
+                          'scene_start':getattr(window,'scene_start',start),
+                          'scene_end':getattr(window,'scene_end',start+duration),
+                          'selection_version':'whole-scene-v1','review_required':True,
+                          'reason':'Dokončená analýza zachovaná po zastavení. Pointu a pořadí zkontroluj.'})
+    return recovered[:5]

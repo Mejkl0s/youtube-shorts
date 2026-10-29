@@ -101,3 +101,11 @@ Cloudové kontroly mohou ověřit společný Python spouštěč, skutečné vytv
 Bezplatný režim neověřuje, zda ve scéně opravdu nastal pád nebo jiná pointa. Výsledky jsou označené **Pointa neověřená**, včetně automatické obnovy střihů. Název zdroje a naměřený pohyb nejsou důkaz děje. **Upravit střih** přehrává zachovaný původní záběr; z už exportovaných čtyř sekund nelze dopočítat chybějící konec. Před dalším nasazením na Render si potřebný původní záznam stáhni pravým tlačítkem na video v tomto okně → **Uložit video jako…**, protože data bez trvalého disku mohou při novém nasazení zmizet.
 
 Vynechávání dřívějších zdrojů navíc porovnává SHA-256 celého původního videosouboru z dostupných uložených médií; rozpozná stejný soubor i pod jiným odkazem a při kontrolách následuje originál použitý pro dřívější výřez. Nejde o vizuální rozpoznávání přehraného nebo jinak zakódovaného repostu. Při chybějícím originálu zůstává pouze kontrola dostupných adres.
+
+## Když hledání trvá dlouho
+
+Nové hledání má společný limit **5 minut** pro hledání odkazů, stažení, přípravu náhledů, výběr scén i OCR. Po vypršení skončí se zprávou a zachová dokončené zdroje a už analyzované scény. Nejde o záruku nalezení pěti klipů. Krátké dokončení právě běžící síťové operace a úklid procesů mohou skončit těsně po limitu. Čas se ukazuje vedle aktuálního kroku. **Zastavit hledání** ukončí vlastní běžící podprocesy (včetně pomocného FFmpeg/Node), nechá dokončená média a uvolní editor až po úklidu. U ještě neanalyzovaných souborů jsou v přehledu odkazy na celý stažený zdroj.
+
+Bezplatný výběr se vyhodnocuje po dávkách a přestane připravovat kandidáty, jakmile má pět použitelných scén. Dokončené analýzy se v rámci hledání neopakují. H.264/AAC kandidáti a nově vytvořené H.264/AAC výřezy dostanou přehratelný MP4 náhled pouhým remuxováním bez dalšího překódování. Ostatní formáty se dál převádějí pro prohlížeč. Původní záznam zůstává zachovaný.
+
+Vytváření hotového videa s hlasem a efekty je samostatný následující úkol; pětiminutový limit hledání ho nezahrnuje. Pro rychlejší zkušební export lze před hledáním zvolit **720 × 1280**. Stop tlačítko je určeno pro hledání; přehrání samotného klipu nevyžaduje export.

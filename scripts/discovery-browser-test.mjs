@@ -3,7 +3,7 @@
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,writeFile,access} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createServer} from 'node:net';
 import {randomUUID} from 'node:crypto';
@@ -26,6 +26,9 @@ def search(topic,allow,limit,only=False,exclude=()):
  rows=[{'url':f'https://www.youtube.com/shorts/NEWSNOW{i:04d}','title':f'Winter fails {i}','source':'YouTube'} for i in range(10)]
  return [r for r in rows if m.canonical_url(r['url']) not in seen][:5],[]
 def download(item):
+ if (root/'slow-source').exists():
+  (root/'waiting-source').write_text('running')
+  m.run([sys.executable,'-c','import time;time.sleep(30)'],30)
  i=int(item['url'][-4:]);identity=uuid.uuid4().hex;folder=m.DATA/'media'/identity;folder.mkdir()
  shutil.copyfile(root/f'fixture-{i%5}.mp4',folder/'source')
  return {**m.register(folder/'source',identity,item['title']),'source_url':item['url'],'source':'YouTube'}
@@ -109,8 +112,21 @@ for p in sys.argv[1:]:
   assert.equal(renders.length,3);assert.equal(await page.locator('.ready-label').count(),5);
   assert.equal(await page.getByLabel('Voiceover',{exact:true}).isChecked(),true);
   assert.equal(await player.count(),0);
+  // Cancellation must stop real work and release the single worker slot.
+  await writeFile(root+'/slow-source','1');
+  await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
+  for(let i=0;i<100;i++){try{await access(root+'/waiting-source');break;}catch{}await new Promise(r=>setTimeout(r,50));}
+  const stop=page.getByRole('button',{name:'Zastavit hledání',exact:true});
+  await stop.waitFor();
+  assert.ok((await page.locator('.job-timing').innerText()).includes('05:00'));
+  await mkdir('.runtime/screenshots',{recursive:true});
+  await page.locator('.job-card').screenshot({path:'.runtime/screenshots/search-cancel.png'});
+  await stop.click();
+  await page.getByRole('alert').filter({hasText:'Hledání bylo zastaveno'}).waitFor({timeout:15000});
+  assert.equal(await page.getByRole('button',{name:'Najít klipy',exact:true}).isEnabled(),true);
+  assert.equal(renders.length,3);
   await mkdir('.runtime/screenshots',{recursive:true});
   await page.locator('.topic-box').screenshot({path:'.runtime/screenshots/discovery-options.png'});
   assert.deepEqual(errors,[]);
-  console.log('Discovery browser passed: actual scene lengths 3–12s, automatic mixed MP4, real voice frequency present/absent, independent voice/SFX/preview switches, 10 unique source clips, persistent exclusions, opt-in reuse and a separate recoverable backup on zero results. External search and speech were replaced by local fixtures.');
+  console.log('Discovery browser passed: actual scene lengths 3–12s, automatic mixed MP4, real voice frequency present/absent, independent voice/SFX/preview switches, 10 unique source clips, persistent exclusions, opt-in reuse and a separate recoverable backup on zero results, a five-minute timer and cancellation of real subprocess work. External search and speech were replaced by local fixtures.');
 }catch(error){console.error(logs);throw error;}finally{if(browser)await browser.close();server.kill('SIGTERM');}

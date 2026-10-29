@@ -55,7 +55,7 @@ def test_discovery_compares_prior_original_even_without_saved_url(isolated,monke
         output.write_bytes(b'old complete source' if index==0 else f'new source {index}'.encode())
         return b''
     monkeypatch.setattr(m,'run',download)
-    monkeypatch.setattr(m,'register',lambda path,identity,name:raw_registered(path,identity,name))
+    monkeypatch.setattr(m,'register',lambda path,identity,name,**kwargs:raw_registered(path,identity,name))
     def raw_registered(path,identity,name):
         return {'id':identity,'name':name,'duration':12,'content_sha256':file_hash(path)}
     monkeypatch.setattr(m,'select_free',lambda rows,topic:rows[:5])

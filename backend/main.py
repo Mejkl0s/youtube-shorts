@@ -13,6 +13,7 @@ import threading
 import uuid
 import wave
 from pathlib import Path
+from contextlib import asynccontextmanager
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -32,6 +33,8 @@ from .free_search import public_search, youtube_search, select_free
 from .social_sessions import download_session
 from .free_voice import available as free_voice_available
 from .source_identity import file_hash, original_hash
+from . import work_budget as work
+from .work_budget import WorkStopped
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('RANK_DATA_DIR', str(ROOT / '.runtime'))).resolve()
@@ -39,7 +42,17 @@ MODELS = Path(os.environ.get('PIPER_MODEL_DIR', str(ROOT / '.runtime/models'))).
 FONT = FONTS['bold']
 for folder in [DATA / 'media', DATA / 'jobs', MODELS]:
     folder.mkdir(parents=True, exist_ok=True)
-app = FastAPI(title='Rank Studio')
+
+
+@asynccontextmanager
+async def lifespan(app):
+    try:
+        yield
+    finally:
+        work.cancel_all()
+
+
+app = FastAPI(title='Rank Studio',lifespan=lifespan)
 app.middleware('http')(owner_access)
 app.mount('/media', StaticFiles(directory=DATA / 'media'), name='media')
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -52,7 +65,7 @@ VOICE_NAMES = {'cs': 'cs_CZ-jirka-medium', 'en': 'en_US-lessac-medium'}
 
 
 def run(args: list[str], timeout: int = 180):
-    result = subprocess.run(args, capture_output=True, timeout=timeout)
+    result = work.process_result(args, timeout)
     if result.returncode:
         raise RuntimeError(result.stderr.decode(errors='replace')[-2000:])
     return result.stdout
@@ -79,7 +92,8 @@ def asset(asset_id: str):
     return json.loads(path.read_text())
 
 
-def register(path: Path, asset_id: str, name: str):
+def register(path: Path, asset_id: str, name: str, *, fast_preview=False):
+    work.stage('Připravuji stažené video a jeho náhled…')
     metadata = probe(path)
     video = next((s for s in metadata['streams'] if s['codec_type'] == 'video'), None)
     duration = float(metadata.get('format', {}).get('duration', 0))
@@ -88,7 +102,13 @@ def register(path: Path, asset_id: str, name: str):
     folder = path.parent
     ffmpeg('-ss', str(min(0.5, duration / 2)), '-i', str(path), '-frames:v', '1', '-vf', 'scale=480:-2', str(folder / 'thumb.jpg'))
     # Browser playback is reliable even for MOV, HEVC and other uploaded codecs.
-    ffmpeg('-i', str(path), '-t', str(MAX_SOURCE_SECONDS), '-vf', 'scale=640:1138:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1', '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(folder / 'preview.mp4'), timeout=360)
+    compatible = video.get('codec_name')=='h264' and all(s.get('codec_name')=='aac' for s in metadata['streams'] if s['codec_type']=='audio')
+    if fast_preview and compatible:
+        # Downloaded H.264/AAC and our own cuts already play in browsers.
+        # Remux once rather than encoding every long candidate again.
+        ffmpeg('-i',str(path),'-map','0:v:0','-map','0:a?','-c','copy','-movflags','+faststart',str(folder/'preview.mp4'),timeout=60)
+    else:
+        ffmpeg('-i', str(path), '-t', str(MAX_SOURCE_SECONDS), '-vf', 'scale=640:1138:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1', '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(folder / 'preview.mp4'), timeout=360)
     result = {'id': asset_id, 'name': name, 'duration': duration, 'framing': 'fit', 'preview_framing': 'original', 'rank_note': fresh_notes(1)[0], 'has_audio': any(s['codec_type'] == 'audio' for s in metadata['streams']), 'url': f'/media/{asset_id}/preview.mp4', 'thumbnail': f'/media/{asset_id}/thumb.jpg'}
     result['content_sha256'] = file_hash(path)
     (folder / 'metadata.json').write_text(json.dumps(result))
@@ -455,12 +475,27 @@ def start_render(project: Project):
     return dict(jobs[job_id])
 
 
+@app.post('/api/jobs/{job_id}/cancel')
+def cancel_discovery(job_id: str):
+    with job_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, 'Úkol nebyl nalezen.')
+        if job['status'] in ('done','failed'):
+            return dict(job)
+        if job.get('kind')!='discover' or not work.cancel(job_id):
+            raise HTTPException(409, 'Tento úkol nelze tímto tlačítkem zastavit.')
+        # Keep the worker slot occupied until subprocess cleanup has finished.
+        job.update(cancel_requested=True,message='Zastavuji hledání a ukládám dokončené zdroje…')
+        return {**job, **work.timing(job_id)}
+
+
 @app.get('/api/jobs/{job_id}')
 def get_job(job_id: str):
     with job_lock:
         if job_id not in jobs:
             raise HTTPException(404, 'Export nebyl nalezen. Po restartu vytvořte nový.')
-        result = dict(jobs[job_id])
+        result = {**jobs[job_id], **work.timing(job_id)}
         if result.get('child_job') in jobs:
             child = jobs[result['child_job']]
             result['progress'] = min(98, result.get('child_base', 0) + int(child['progress'] * result.get('child_span', 1) / 100))
@@ -473,7 +508,8 @@ def ai_request(payload: dict, responses: bool = False):
     if not key:
         raise ValueError('Chybí OPENAI_API_KEY. Přidejte jej bezpečně v nastavení prostředí.')
     endpoint = 'responses' if responses else 'chat/completions'
-    response = httpx.post(f'https://api.openai.com/v1/{endpoint}', headers={'Authorization': f'Bearer {key}'}, json=payload, timeout=120)
+    response = httpx.post(f'https://api.openai.com/v1/{endpoint}', headers={'Authorization': f'Bearer {key}'}, json=payload, timeout=work.timeout(120))
+    work.checkpoint()
     if response.status_code != 200:
         raise ValueError(f'AI služba vrátila HTTP {response.status_code}. Zkontrolujte klíč, kredit a dostupnost modelu.')
     data = response.json()
@@ -574,7 +610,7 @@ def materialize_scenes(clips):
                    '-vf', f"fps=30:start_time=0,setsar=1,tpad=stop_mode=clone:stop_duration={row['duration']},trim=duration={row['duration']},setpts=PTS-STARTPTS",
                    '-c:v', 'libx264', '-preset', 'veryfast',
                    '-crf', '20', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', str(folder/'source'))
-            meta = register(folder/'source', asset_id, row['name'])
+            meta = register(folder/'source', asset_id, row['name'],fast_preview=True)
             clean = {key: value for key,value in row.items() if key != '_cut_scene'}
             origin = {'source_asset_id': row['id'], 'source_start': row['start'],
                       'scene_start': row.get('scene_start', 0), 'scene_end': row.get('scene_end', row['sourceDuration']),
@@ -608,13 +644,16 @@ def new_notes(body: NotesRequest):
 
 
 def add_cleanup(clips, warnings):
-    for clip in clips:
+    for index, clip in enumerate(clips):
+        work.stage(f'Rozpoznávám text v klipu {index+1}/{len(clips)}…')
         try:
             regions, note = detect_text(DATA/'media'/clip['id']/'source', clip['start'], clip['duration'], clip.get('framing','fill'))
             clip['blur_regions'] = regions
             if regions:
                 note = 'Automatické rozmazání textu je připravené. Zkontroluj oblasti tlačítkem Rozmazání u každého klipu.'
             warnings.append(note)
+        except WorkStopped:
+            raise
         except Exception:
             warnings.append('Rozpoznání textu se nezdařilo. Rozmazání nastav ručně u klipu.')
 
@@ -682,7 +721,8 @@ def start_compilation(body: CompilationRequest):
 def scene_windows(path: Path):
     """Candidate intervals never cross a detected hard scene change."""
     duration = min(float(probe(path)['format']['duration']), MAX_SOURCE_SECONDS)
-    result = subprocess.run(['ffmpeg', '-hide_banner', '-t', str(duration), '-i', str(path), '-vf', "scale=240:-2,select='gt(scene,0.32)',showinfo", '-an', '-f', 'null', '-'], capture_output=True, timeout=90)
+    work.stage('Rozpoznávám střihy ve staženém videu…')
+    result = work.process_result(['ffmpeg', '-hide_banner', '-t', str(duration), '-i', str(path), '-vf', "scale=240:-2,select='gt(scene,0.32)',showinfo", '-an', '-f', 'null', '-'], 90)
     if result.returncode:
         raise ValueError('Analýza scén videa selhala.')
     cuts = sorted({0.0, duration, *(float(t) for t in re.findall(r'pts_time:([\d.]+)', result.stderr.decode(errors='replace')))})
@@ -805,10 +845,10 @@ def download_candidate(item: dict):
     folder.mkdir()
     try:
         with download_session(item['url']) as cookies:
-            args = [sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir', '--no-remote-components', '--js-runtimes', 'node', '--no-playlist', '--no-progress', '--socket-timeout', '15', '--retries', '1', '--max-filesize', '300M', '--match-filter', f'duration <= {MAX_SOURCE_SECONDS}', '--restrict-filenames', '--merge-output-format', 'mp4', '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '-o', str(folder / 'download.%(ext)s')]
+            args = [sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-cache-dir', '--no-remote-components', '--js-runtimes', 'node', '--no-playlist', '--no-progress', '--socket-timeout', '10', '--retries', '1', '--extractor-retries','0', '--max-filesize', '300M', '--match-filter', f'duration <= {MAX_SOURCE_SECONDS}', '--restrict-filenames', '--merge-output-format', 'mp4', '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '-o', str(folder / 'download.%(ext)s')]
             if cookies:
                 args += ['--cookies', str(cookies)]
-            output = run([*args, '--', item['url']], 75)
+            output = run([*args, '--', item['url']], 40)
         files = [p for p in folder.glob('download.*') if p.suffix not in ('.part', '.ytdl')]
         if len(files) != 1:
             if not files:
@@ -824,7 +864,9 @@ def download_candidate(item: dict):
         if file_hash(folder/'source') in item.get('_excluded_content', ()):
             raise CandidateDownloadError('duplicate', 'Stejný soubor videa už byl použitý, i když má jiný odkaz. Přeskakuji ho.')
         try:
-            candidate = register(folder / 'source', asset_id, item['title'])
+            candidate = register(folder / 'source', asset_id, item['title'],fast_preview=True)
+        except WorkStopped:
+            raise
         except Exception:
             raise CandidateDownloadError('processing', 'Video se stáhlo, ale kontrola formátu nebo příprava náhledu selhala. Zkus jiný klip.') from None
         candidate.update({key: item[key] for key in ('search_score', 'source', 'provider') if key in item})
@@ -860,7 +902,9 @@ def download_failure(error):
     return 'unavailable', 'Video se nepodařilo stáhnout nebo zpracovat; může být nedostupné či delší než 600 sekund.'
 
 
+@work.limited_discovery
 def discover(job_id: str, body: DiscoverRequest):
+    candidates, selected, warnings = [], None, []
     try:
         set_job(job_id, status='searching', progress=3, message=f'Hledám {body.candidate_count} kandidátů podle tématu…')
         warnings = []
@@ -883,6 +927,7 @@ def discover(job_id: str, body: DiscoverRequest):
                     source_stats={name: dict(row) for name, row in stats.items()}, warnings=list(dict.fromkeys(warnings)), **updates)
         def load(items, base, span):
             for index, item in enumerate(items[:body.candidate_count]):
+                work.checkpoint()
                 if not social_url(item.get('url', ''), body.allow_youtube):
                     continue
                 identity = canonical_url(item['url'])
@@ -898,18 +943,27 @@ def discover(job_id: str, body: DiscoverRequest):
                 else:
                     try:
                         candidate = download_candidate({**item, 'source': source, '_excluded_content': excluded_content})
-                        if candidate.get('content_sha256'):
-                            excluded_content.add(candidate['content_sha256'])
-                        candidates.append(candidate)
-                        stats[source]['downloaded'] += 1
-                        blocked[source] = 0
-                        continue
+                    except WorkStopped:
+                        raise
                     except Exception as error:
                         kind, reason = download_failure(error)
                         if kind in ('blocked', 'timeout') or (kind == 'login_required' and source != 'YouTube'):
                             blocked[source] = blocked.get(source, 0)+1
                         else:
                             blocked[source] = 0
+                    else:
+                        if candidate.get('content_sha256'):
+                            excluded_content.add(candidate['content_sha256'])
+                        candidates.append(candidate)
+                        stats[source]['downloaded'] += 1
+                        blocked[source] = 0
+                        publish(candidate_count=len(candidates))
+                        # Free analyses are cached; don't prepare all 40 links first.
+                        if body.mode=='free' and len(candidates)%3 == 0:
+                            early, _ = choose(base+int(span*(index+1)/max(1,len(items))))
+                            if early:
+                                return early
+                        continue
                 stats[source]['failed'] += 1
                 failures.append({'url': item['url'], 'source': source, 'kind': kind, 'reason': reason})
             publish()
@@ -919,20 +973,20 @@ def discover(job_id: str, body: DiscoverRequest):
             publish(progress=progress, message='Vybírám souvislé scény podle pohybu a ostrosti…' if body.mode == 'free' else 'AI hodnotí obsah a vybírá samostatné scény…')
             try:
                 selected = select_free(candidates, body.topic) if body.mode == 'free' else select_candidates(candidates, body.topic, body.language, body.ranking_criteria)
-                return selected, None
+                return (selected, None) if len(selected)==5 else (None, 'Zatím není pět různých použitelných scén.')
             except ValueError as error:
                 return None, str(error)[:250]
         publish(youtube_fallback=False)
-        load(entries, 10, 35)
-        selected, selection_error = choose(55)
+        selected = load(entries, 10, 35)
+        selected, selection_error = (selected,None) if selected else choose(55)
         if selected is None and body.allow_youtube:
             publish(progress=60, youtube_fallback=True, message='Ze sociálních sítí není pět použitelných klipů. Hledám další přímo na YouTube…')
             extra, more_warnings = (youtube_search(body.topic, body.candidate_count, body.exclude_urls)
                                     if body.exclude_urls else youtube_search(body.topic, body.candidate_count))
             warnings.extend(more_warnings)
             # A separate budget ensures a full social result list cannot starve YouTube.
-            load([row for row in extra if source_name(row.get('url', '')) == 'YouTube'], 62, 20)
-            selected, selection_error = choose(88)
+            selected = load([row for row in extra if source_name(row.get('url', '')) == 'YouTube'], 62, 20)
+            selected, selection_error = (selected,None) if selected else choose(88)
         if selected is None:
             summary = '; '.join(f'{name}: {row["downloaded"]}/{row["found"]}' for name, row in stats.items() if row['found'])
             # A failed search still owns real downloaded media. Keep usable scenes
@@ -956,6 +1010,13 @@ def discover(job_id: str, body: DiscoverRequest):
         if body.blur_text:
             add_cleanup(selected, warnings)
         publish(status='done', progress=100, message='Pět momentů je připravených. Zkontroluj obsah a pořadí.' if body.mode == 'free' else 'Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=len(failures))
+    except WorkStopped as error:
+        from .free_search import recover_analyzed
+        partial = selected or recover_analyzed(candidates)
+        assign_notes(partial,body.language,body.exclude_notes)
+        set_job(job_id,status='failed',progress=100,cancelled=error.cancelled,
+                message=str(error)+' '+(f'Zachováno {len(partial)}/5 vybraných scén. ' if partial else '')+'Dokončené stažené zdroje zůstaly zachované.',
+                partial_clips=partial,downloaded_sources=candidates,candidate_count=len(candidates),warnings=warnings)
     except Exception as error:
         set_job(job_id, status='failed', message=f'Vyhledávání se nezdařilo: {str(error)[:700]}')
 
@@ -968,7 +1029,8 @@ def start_discover(body: DiscoverRequest):
         if any(j['status'] in ('queued', 'rendering', 'searching', 'working') for j in jobs.values()):
             raise HTTPException(409, 'Jeden úkol právě běží. Počkejte na jeho dokončení.')
         job_id = uuid.uuid4().hex
-        jobs[job_id] = {'id': job_id, 'status': 'queued', 'progress': 0, 'message': 'Připravuji hledání…', 'kind': 'discover'}
+        jobs[job_id] = {'id': job_id, 'status': 'queued', 'progress': 0, 'message': 'Připravuji hledání…', 'kind': 'discover', 'limit_seconds':work.SEARCH_SECONDS}
+        work.reserve(job_id)
     executor.submit(discover, job_id, body)
     return dict(jobs[job_id])
 

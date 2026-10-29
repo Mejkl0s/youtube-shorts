@@ -1,12 +1,14 @@
 """Exact source-file identity, independent of a video's public URL."""
 import hashlib
 import re
+from .work_budget import checkpoint
 
 
 def file_hash(path):
     digest = hashlib.sha256()
     with path.open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            checkpoint()
             digest.update(chunk)
     return digest.hexdigest()
 

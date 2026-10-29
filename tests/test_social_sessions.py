@@ -101,7 +101,7 @@ def test_downloader_uses_matching_cookie_file_and_node_but_never_social_cookies_
         Path(args[args.index('-o')+1].replace('%(ext)s', 'mp4')).write_bytes(b'video-fixture')
         return b''
     monkeypatch.setattr(m, 'run', download)
-    monkeypatch.setattr(m, 'register', lambda path, identity, title: {'id': identity, 'name': title, 'duration': 5})
+    monkeypatch.setattr(m, 'register', lambda path, identity, title, **kwargs: {'id': identity, 'name': title, 'duration': 5})
     for url in ['https://www.tiktok.com/@a/video/123', 'https://www.instagram.com/reel/cats/', 'https://www.youtube.com/shorts/CATCLIP0000']:
         result = m.download_candidate({'url': url, 'title': 'Funny cats'})
         assert result['source_url'] == url
