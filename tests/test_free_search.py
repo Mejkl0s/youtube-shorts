@@ -498,3 +498,45 @@ def test_discovery_bounds_larger_candidate_pool_and_history(isolated,monkeypatch
     m.jobs.clear()
     assert client.post('/api/discover',json={'topic':'winter fails','candidate_count':1000}).status_code==422
     assert client.post('/api/discover',json={'topic':'winter fails','exclude_urls':['http://127.0.0.1/private']}).status_code==422
+
+
+@pytest.mark.parametrize('direct_unavailable',[True,False])
+def test_youtube_fallback_excludes_url_strings_after_repeated_search(monkeypatch,direct_unavailable):
+    import json
+    old='https://www.youtube.com/shorts/WINTER00001'
+    first='https://www.youtube.com/watch?v=WINTER00002'
+    extra='https://www.youtube.com/watch?v=WINTER00003'
+    def direct(*args):
+        if direct_unavailable:
+            raise RuntimeError('HTTP 403')
+        return json.dumps({'entries':[{'id':'WINTER00001','title':'Winter fails'},
+                                      {'id':'WINTER00002','title':'Snow fails'}]}).encode()
+    monkeypatch.setattr(m,'run',direct)
+    # Exercise the REAL public_search and canonical_url fallback. A mock of
+    # public_search would miss tuple identities accidentally passed as URLs.
+    monkeypatch.setattr(f,'engine_results',lambda *args:[
+        {'url':old,'title':'Winter fails'},
+        {'url':first,'title':'Snow fails'},
+        {'url':extra,'title':'Skiing crashes'}])
+    entries,warnings=f.youtube_search('winter fails',8,[old])
+    assert {m.canonical_url(row['url']) for row in entries}=={m.canonical_url(first),m.canonical_url(extra)}
+    assert len(entries)==2
+    assert bool(warnings)==direct_unavailable
+
+
+def test_blocked_repeated_discovery_finishes_with_source_failure_not_tuple_crash(isolated,monkeypatch):
+    monkeypatch.setattr(m,'public_search',lambda *args:(results(3),[]))
+    monkeypatch.setattr(m,'youtube_search',f.youtube_search)
+    monkeypatch.setattr(f,'engine_results',lambda *args:[])
+    def blocked(*args,**kwargs):raise RuntimeError('HTTP 403')
+    monkeypatch.setattr(m,'run',blocked)
+    monkeypatch.setattr(m,'download_candidate',blocked)
+    job_id=uuid.uuid4().hex;m.jobs[job_id]={'id':job_id,'status':'queued'}
+    m.discover(job_id,m.DiscoverRequest(topic='winter fails',exclude_urls=['https://youtu.be/WINTER00001']))
+    job=m.jobs[job_id]
+    assert job['status']=='failed' and job['candidate_count']==0
+    assert 'Podařilo se načíst jen 0 videí' in job['message']
+    assert 'decode' not in job['message'] and 'tuple' not in str(job)
+    assert job['youtube_fallback'] and job['partial_clips']==[]
+    assert job['source_stats']['TikTok']['found']==3
+    assert any(row['kind']=='blocked' for row in job['download_failures'])

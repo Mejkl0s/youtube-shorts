@@ -270,7 +270,9 @@ def youtube_search(topic: str, limit: int, exclude_urls=()):
             warnings.append(search_warning('YouTube', 'YouTube', error))
             break
     if len(entries) < limit:
-        options = {'exclude_urls': list(seen)} if exclude_urls else {}
+        # `seen` contains canonical identity tuples, not URL strings. Keep
+        # provider inputs as URLs so the fallback can parse them normally.
+        options = {'exclude_urls': [*exclude_urls, *(row['url'] for row in entries)]} if exclude_urls else {}
         extra, engine_warnings = public_search(topic, True, limit, only_youtube=True, **options)
         warnings.extend(engine_warnings)
         for row in extra:
