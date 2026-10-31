@@ -21,13 +21,17 @@ Pro obarvení samotného slova (například `fails`) na něj klikni v seznamu sl
 
 Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Zaškrtnutím **Přebírat nadpis z „Co dnes rankujeme?“** propojení zase zapneš. Volba i vzhled nadpisu se uloží spolu s projektem. Písmo nadpisu může být jiné než písmo čísel a titulků.
 
-## AI posouzení skutečného děje
+## Vizuální AI zdarma na tvém PC
 
-Po připojení `OPENAI_API_KEY` v bezpečném nastavení serveru vyber v **REŽIM HLEDÁNÍ** možnost **AI posouzení obrazu · placené API**. Klíč nepiš do tématu ani do chatu. Tento režim používá placené OpenAI API; v režimu **Zdarma** se placený model nezapíná. Volitelný `OPENAI_VISION_MODEL` má výchozí hodnotu `gpt-4.1`.
+1. Použij studio na **http://127.0.0.1:8765/**. V bezplatném Renderu se lokální model nespouští.
+2. V hledání klikni na **Připravit AI zdarma**. Otevře se samostatné okno přípravy.
+3. Příprava sama zjistí RAM a místo na disku. Potřebuje alespoň 8 GB RAM a 8 GB volného místa; doporučeno 16 GB RAM a grafická karta. Nainstaluje Ollama přes winget a stáhne model `qwen2.5vl:3b`. Poprvé jde o několik GB; průběh vidíš v okně.
+4. Po zprávě **Hotovo** klikni ve studiu na **Ověřit AI**, pak vyber **AI na mém PC · zdarma**.
+5. Zadej téma a spusť **Najít klipy**. U načtených klipů lze použít **AI zdarma posoudit originály**. Hodnotí celé uložené zdroje, nikoli jen staré čtyřsekundové výřezy.
 
-AI nejprve dostane přehled časově označených snímků kandidátních záběrů, potom podrobnější snímky až osmi možných momentů. Posoudí téma, přípravu, hlavní akci a viditelný výsledek. Navrhne různě dlouhé střihy 2–30 sekund, krátké konkrétní poznámky a komentáře. Neúplné a nejisté momenty se do pětice nedoplňují jen kvůli počtu. Pod **Co AI viděla ve scéně** najdeš její pozorování a časy v originálu.
+Tento postup nepotřebuje API klíč a nepřepíná na placené služby. Spouštěč nastaví i serverovou pojistku `RANK_FREE_ONLY=1`, která odmítne placené požadavky a hlasy ze staré záložky. V běžném rozhraní jsou pouze bezplatné volby hledání a hlasu. Snímky pro lokální AI zůstávají na tomto PC. Internet je potřeba pro první stažení modelu a hledání/stahování klipů; bezplatný hlas Edge odesílá text Microsoftu. Na slabším počítači může být výběr pomalý, proto má lokální režim viditelný limit 10 minut a zastavení. Technické hledání má nadále limit 5 minut.
 
-U už načtených klipů klikni na **AI posoudit originály**. Hodnotí celé zachované původní soubory, ne pouze staré čtyřsekundové výřezy. Při neúspěchu nechá dosavadní projekt v editoru. U nahrané kompilace se použije stejný zvolený režim. AI pracuje se vzorky obrazu, původní zvuk neslyší a může se splést; finální klipy přehraj. Hledání a vizuální posouzení mají limit pěti minut a tlačítko zastavení. Odmítne-li síť stažení, vizuální model nemá co posoudit.
+AI posuzuje přípravu, akci a viditelný výsledek z časově označených snímků. Střih má 2–30 sekund podle děje. Pod **Co AI viděla ve scéně** najdeš její pozorování. Může se splést a původní zvuk neposuzuje; finální střih přehraj. Při neúspěchu posouzení zůstanou staré střihy zachované. Odmítne-li síť video stáhnout, model nemá co hodnotit.
 
 ## Pointa, obraz a zvuk
 
@@ -43,7 +47,7 @@ U každého klipu je pole **Poznámka u čísla** pro nejvýše čtyři slova. N
 
 1. Klikni **Uložit projekt**, aby aktuální výběr zůstal uložený v tomto prohlížeči.
 2. Pro seznam všech pěti čísel zvol **Žebříček 1–5**: jednička je nahoře, pětka dole a aktuální pozice se zvýrazní. Tato volba nepotřebuje OCR ani API klíč. Pro jedno velké aktuální číslo můžeš zvolit **Výrazný ranking** nebo **Číslo v rámečku**. Předloha zůstává volitelná; vybraný preset nastaví větší čísla a skryje názvy zdrojových souborů i kritéria ve videu.
-3. Zvol **Uvedení pořadí zdarma**: nastaví dvouslovná uvedení pořadí, mužský hlas bez klíče a zapne efekty i titulky. Místo uvedení můžeš napsat vlastní komentář, nejlépe 2–4 slova. Bezplatná uvedení nepopisují neověřený děj ve videu; AI komentáře podle obrazu jsou oddělená placená možnost.
+3. Zvol **Uvedení pořadí zdarma**: nastaví dvouslovná uvedení pořadí, mužský hlas bez klíče a zapne efekty i titulky. Místo uvedení můžeš napsat vlastní komentář, nejlépe 2–4 slova. Bezplatná uvedení nepopisují neověřený děj; konkrétní komentáře podle obrazu dodá lokální AI po přípravě modelu.
 4. Klikni **Exportovat Short**. Výsledný mix a vzhled ověř v přehrávači **Hotové video se zvukem**. Horní pracovní náhled přehrává jen původní zvuk.
 
 ## Aktualizace existující kopie

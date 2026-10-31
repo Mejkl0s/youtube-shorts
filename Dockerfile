@@ -9,7 +9,7 @@ COPY public ./public
 RUN npm run build
 
 FROM python:3.12-slim-bookworm
-ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 STUDIO_PUBLIC=1
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 STUDIO_PUBLIC=1 RANK_FREE_ONLY=1
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core tesseract-ocr tesseract-ocr-eng libstdc++6 \

@@ -198,7 +198,7 @@ def test_visual_reselect_success_via_real_async_endpoint(isolated,monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY','fixture-not-a-real-key')
     rows=[{**s,'title':s['name'],'voiceover':'','start':0,'duration':4} for s in sources]
     client=TestClient(m.app)
-    response=client.post('/api/visual-reselect',json={'clips':rows,'topic':'winter fails','blur_text':False})
+    response=client.post('/api/visual-reselect',json={'mode':'ai','clips':rows,'topic':'winter fails','blur_text':False})
     assert response.status_code==202,response.text
     identity=response.json()['id']
     deadline=time.monotonic()+30

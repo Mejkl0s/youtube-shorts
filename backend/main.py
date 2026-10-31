@@ -35,6 +35,7 @@ from .free_voice import available as free_voice_available
 from .source_identity import file_hash, original_hash
 from . import work_budget as work
 from .work_budget import WorkStopped
+from . import local_vision
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('RANK_DATA_DIR', str(ROOT / '.runtime'))).resolve()
@@ -180,7 +181,8 @@ class Project(BaseModel):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'studio': 'rank-studio', 'local_mode': os.environ.get('RANK_LOCAL_MODE') == '1', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'free_voice': free_voice_available(), 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'ai_scripts': bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
+    paid=os.environ.get('RANK_FREE_ONLY')!='1'
+    return {'status': 'ok', 'studio': 'rank-studio', 'free_only':not paid, 'local_mode': os.environ.get('RANK_LOCAL_MODE') == '1', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'free_voice': free_voice_available(), 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'local_vision': local_vision.status(), 'ai_scripts': paid and bool(os.environ.get('OPENAI_API_KEY')), 'elevenlabs': paid and bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
 
 
 @app.get('/api/fonts/{name}')
@@ -248,6 +250,8 @@ def scripts(body: ScriptRequest):
         # These announce the actual position; they do not pretend to describe
         # an event which the free text-only workflow has not understood.
         return {'lines': rank_lines(body.language), 'mode': 'rank'}
+    if os.environ.get('RANK_FREE_ONLY')=='1':
+        raise HTTPException(409,'Placené API je v tomto studiu vypnuté. Komentáře vytvoří AI zdarma na tvém PC.')
     key = os.environ.get('OPENAI_API_KEY')
     if not key:
         raise HTTPException(409, 'Automatický popis obrazu vyžaduje OPENAI_API_KEY. Krátký text můžete napsat ručně; lokální AI hlas klíč nepotřebuje.')
@@ -272,6 +276,8 @@ def scripts(body: ScriptRequest):
 
 def synthesize(text: str, language: str, output: Path, config: VoiceSettings | None = None):
     config = config or VoiceSettings()
+    if os.environ.get('RANK_FREE_ONLY')=='1' and config.provider not in ('edge','piper'):
+        raise ValueError('Placené hlasy jsou v tomto studiu vypnuté. Vyber Andrew / Antonín zdarma nebo Piper.')
     if config.provider == 'edge':
         from .free_voice import synthesize as free_speech
         free_speech(text, language, output, config.speed)
@@ -505,6 +511,8 @@ def get_job(job_id: str):
 
 
 def ai_request(payload: dict, responses: bool = False):
+    if os.environ.get('RANK_FREE_ONLY')=='1':
+        raise ValueError('Placené API je v tomto studiu vypnuté. Použij AI na svém PC zdarma.')
     key = os.environ.get('OPENAI_API_KEY')
     if not key:
         raise ValueError('Chybí OPENAI_API_KEY. Přidejte jej bezpečně v nastavení prostředí.')
@@ -687,7 +695,7 @@ class CompilationRequest(BaseModel):
     language: Literal['en','cs'] = 'en'
     topic: str = Field(default='Vlastní kompilace', min_length=1, max_length=100)
     blur_text: bool = True
-    mode: Literal['free','ai'] = 'free'
+    mode: Literal['free','local','ai'] = 'free'
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
 
 
@@ -697,7 +705,7 @@ def split_compilation(job_id, body):
         meta = asset(body.id)
         set_job(job_id, status='working', progress=10, message='Hledám samostatné scény v kompilaci…')
         clips = (select_free([meta], body.topic, require_five=False) if body.mode=='free'
-                 else select_candidates([meta],body.topic,body.language,body.ranking_criteria))
+                 else select_candidates([meta],body.topic,body.language,body.ranking_criteria,body.mode))
         assign_notes(clips,body.language,body.exclude_notes)
         warnings = (['Výběr z nahrané kompilace používá detekci střihů, pohyb a ostrost. Obsah a pořadí zkontroluj.']
                     if body.mode=='free' else ['AI posoudila časově označené snímky. Přehraj finální střihy a zkontroluj pointy.'])
@@ -720,16 +728,21 @@ def split_compilation(job_id, body):
 
 @app.post('/api/compilation', status_code=202)
 def start_compilation(body: CompilationRequest):
+    if body.mode=='ai' and os.environ.get('RANK_FREE_ONLY')=='1':
+        raise HTTPException(409,'Placený výběr je vypnutý. Použij režim local zdarma.')
     if body.mode=='ai' and not os.environ.get('OPENAI_API_KEY'):
         raise HTTPException(409,'Vizuální AI výběr potřebuje připojené OpenAI API.')
+    if body.mode=='local':
+        try:local_vision.require_ready()
+        except ValueError as error:raise HTTPException(409,str(error)) from None
     asset(body.id)
     with job_lock:
         if any(j['status'] in ('queued', 'rendering', 'searching', 'working') for j in jobs.values()):
             raise HTTPException(409, 'Jeden úkol právě běží. Počkejte na jeho dokončení.')
         job_id = uuid.uuid4().hex
         jobs[job_id] = {'id': job_id, 'status': 'queued', 'progress': 0, 'message': 'Připravuji kompilaci…',
-                        'kind': 'discover', 'mode': body.mode, 'candidate_count': 1,'limit_seconds':work.SEARCH_SECONDS}
-        work.reserve(job_id)
+                        'kind': 'discover', 'mode': body.mode, 'candidate_count': 1,'limit_seconds':work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS}
+        work.reserve(job_id,work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS)
     executor.submit(split_compilation, job_id, body)
     return dict(jobs[job_id])
 
@@ -753,9 +766,9 @@ def scene_windows(path: Path):
     return windows
 
 
-def select_candidates(candidates: list[dict], topic: str, language: str, ranking_criteria: str = 'Surprise, timing and skill'):
+def select_candidates(candidates: list[dict], topic: str, language: str, ranking_criteria: str = 'Surprise, timing and skill',mode='ai'):
     from .visual_selection import select
-    return select(candidates, topic, language, ranking_criteria)
+    return select(candidates, topic, language, ranking_criteria,provider='local' if mode=='local' else 'openai')
 
 
 class DiscoverRequest(BaseModel):
@@ -768,7 +781,7 @@ class DiscoverRequest(BaseModel):
     allow_youtube: bool = True
     language: str = 'en'
     candidate_count: int = Field(default=24, ge=8, le=40)
-    mode: Literal['free', 'ai'] = 'free'
+    mode: Literal['free', 'local', 'ai'] = 'free'
     blur_text: bool = True
 
     @field_validator('topic')
@@ -892,7 +905,7 @@ def discover(job_id: str, body: DiscoverRequest):
                 # Media may have expired after a hosting restart. URL exclusions
                 # still apply; never pretend missing files were compared.
                 continue
-        if body.mode == 'free':
+        if body.mode in ('free','local'):
             entries, warnings = public_search(body.topic, body.allow_youtube, body.candidate_count, False, body.exclude_urls)
         else:
             entries, warnings = public_search(body.topic, body.allow_youtube, body.candidate_count, False, body.exclude_urls)
@@ -959,10 +972,10 @@ def discover(job_id: str, body: DiscoverRequest):
                 return selection_attempts[identity]
             publish(progress=progress, message='Vybírám souvislé scény podle pohybu a ostrosti…' if body.mode == 'free' else 'AI hodnotí obsah a vybírá samostatné scény…')
             try:
-                selected = select_free(candidates, body.topic) if body.mode == 'free' else select_candidates(candidates, body.topic, body.language, body.ranking_criteria)
+                selected = select_free(candidates, body.topic) if body.mode == 'free' else select_candidates(candidates, body.topic, body.language, body.ranking_criteria,body.mode)
                 result=(selected, None) if len(selected)==5 else (None, 'Zatím není pět různých použitelných scén.')
             except ValueError as error:
-                if body.mode=='ai':
+                if body.mode in ('ai','local'):
                     from .visual_selection import VisualSelectionError
                     if not isinstance(error,VisualSelectionError):
                         # An unavailable AI service is not evidence that the
@@ -987,7 +1000,7 @@ def discover(job_id: str, body: DiscoverRequest):
             # A failed search still owns real downloaded media. Keep usable scenes
             # visible, without presenting an incomplete ranking as a successful job.
             partial = (select_free(candidates, body.topic, require_five=False) if candidates else []) if body.mode=='free' else getattr(work.current(),'visual_clips',[])
-            if body.mode=='ai':
+            if body.mode in ('ai','local'):
                 # Recovery uses at most one reviewed event per retained asset.
                 partial=list({clip['id']:clip for clip in partial}.values())
             assign_notes(partial,body.language,body.exclude_notes)
@@ -999,7 +1012,7 @@ def discover(job_id: str, body: DiscoverRequest):
                        + (f'V editoru je zachováno {len(partial)}/5 použitelných klipů. Nahraj zbývající klipy do prázdných míst. ' if partial else '')
                        + ('Dříve použité zdroje byly vynechány. ' if body.exclude_urls else '')
                        + 'Důvody odmítnutí jsou v přehledu zdrojů.')
-            if partial and body.mode == 'ai':
+            if partial and body.mode in ('ai','local'):
                 warnings.append('Zachované klipy mají dokončené vizuální posouzení. Pět vhodných momentů se zatím nepodařilo sestavit.')
             publish(status='failed', progress=100, message=message, partial_clips=partial,
                     candidate_count=len(candidates), rejected_count=len(failures), downloaded_sources=candidates)
@@ -1010,7 +1023,7 @@ def discover(job_id: str, body: DiscoverRequest):
         publish(status='done', progress=100, message='Pět momentů je připravených. Zkontroluj obsah a pořadí.' if body.mode == 'free' else 'Pět momentů je připravených.', clips=selected, candidate_count=len(candidates), rejected_count=len(failures))
     except WorkStopped as error:
         from .free_search import recover_analyzed
-        partial = selected or (getattr(work.current(),'visual_clips',[]) if body.mode=='ai' else recover_analyzed(candidates))
+        partial = selected or (getattr(work.current(),'visual_clips',[]) if body.mode in ('ai','local') else recover_analyzed(candidates))
         partial=list({clip['id']:clip for clip in partial}.values())
         assign_notes(partial,body.language,body.exclude_notes)
         set_job(job_id,status='failed',progress=100,cancelled=error.cancelled,
@@ -1023,14 +1036,20 @@ def discover(job_id: str, body: DiscoverRequest):
 
 @app.post('/api/discover', status_code=202)
 def start_discover(body: DiscoverRequest):
+    if body.mode=='ai' and os.environ.get('RANK_FREE_ONLY')=='1':
+        raise HTTPException(409,'Placený výběr je vypnutý. Použij AI na mém PC zdarma.')
     if body.mode == 'ai' and not os.environ.get('OPENAI_API_KEY'):
         raise HTTPException(409, 'AI výběr potřebuje OPENAI_API_KEY. Zvolte režim Zdarma pro vyhledávání bez placeného API.')
+    if body.mode=='local':
+        try:local_vision.require_ready()
+        except ValueError as error:raise HTTPException(409,str(error)) from None
     with job_lock:
         if any(j['status'] in ('queued', 'rendering', 'searching', 'working') for j in jobs.values()):
             raise HTTPException(409, 'Jeden úkol právě běží. Počkejte na jeho dokončení.')
         job_id = uuid.uuid4().hex
-        jobs[job_id] = {'id': job_id, 'status': 'queued', 'progress': 0, 'message': 'Připravuji hledání…', 'kind': 'discover', 'limit_seconds':work.SEARCH_SECONDS}
-        work.reserve(job_id)
+        limit=work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS
+        jobs[job_id] = {'id': job_id, 'status': 'queued', 'progress': 0, 'message': 'Připravuji hledání…', 'kind': 'discover', 'limit_seconds':limit}
+        work.reserve(job_id,limit)
     executor.submit(discover, job_id, body)
     return dict(jobs[job_id])
 
@@ -1082,6 +1101,7 @@ def preview_render(job_id: str):
 
 from .clip_editor import router as clip_editor_router
 app.include_router(clip_editor_router)
+app.include_router(local_vision.router)
 
 # Production build and API are served together. During development Vite proxies API.
 from .assistant import router as assistant_router

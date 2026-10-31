@@ -61,3 +61,5 @@
 .visual-evidence summary { cursor:pointer;color:var(--lime); }
 .visual-evidence p { margin:6px 0;overflow-wrap:anywhere; }
 .visual-evidence strong { color:#ededec; }
+
+.local-vision-panel{padding:12px;border:1px solid #3e4d2f;border-radius:7px;background:#161e12;margin:12px 0;font-size:11px;line-height:1.6}.local-vision-panel strong,.local-vision-panel a{color:var(--lime)}.local-vision-panel p{color:#a5b198;margin:6px 0}.local-vision-panel small{display:block;color:var(--muted);margin-top:7px}.local-vision-panel .button{min-height:32px;font-size:10px;margin-right:10px}

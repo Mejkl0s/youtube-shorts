@@ -155,6 +155,7 @@ def start_recut(body:RecutRequest):
 
 
 class VisualReviewRequest(BaseModel):
+    mode: Literal['local','ai'] = 'local'
     clips: list[dict] = Field(min_length=1,max_length=40)
     topic: str = Field(min_length=3,max_length=100)
     ranking_criteria: str = Field(default='Surprise, timing and skill',min_length=3,max_length=100)
@@ -189,7 +190,7 @@ def visual_reselect(job_id,body):
     try:
         m.set_job(job_id,status='working',progress=5,message='Načítám celé původní zdroje pro vizuální AI…')
         sources=review_sources(body.clips)
-        clips=m.select_candidates(sources,body.topic,body.language,body.ranking_criteria)
+        clips=m.select_candidates(sources,body.topic,body.language,body.ranking_criteria,body.mode)
         warnings=[]
         if body.blur_text:
             m.add_cleanup(clips,warnings)
@@ -208,7 +209,10 @@ def visual_reselect(job_id,body):
 def start_visual_review(body:VisualReviewRequest):
     from . import main as m
     from pydantic import ValidationError
-    if not m.health()['ai_scripts']:
+    if body.mode=='local':
+        try:m.local_vision.require_ready()
+        except ValueError as error:raise HTTPException(409,str(error)) from None
+    if body.mode=='ai' and not m.health()['ai_scripts']:
         raise HTTPException(409,'AI sledování videí potřebuje připojené placené OpenAI API. Klíč nastav bezpečně na serveru, neposílej ho do chatu.')
     try:
         for row in body.clips:
@@ -220,8 +224,8 @@ def start_visual_review(body:VisualReviewRequest):
         if any(j['status'] in ('queued','rendering','searching','working') for j in m.jobs.values()):
             raise HTTPException(409,'Jeden úkol právě běží. Počkej na dokončení.')
         identity=m.uuid.uuid4().hex
-        m.jobs[identity]={'id':identity,'status':'queued','progress':0,'kind':'visual-review','mode':'ai',
-                          'message':'Připravuji vizuální posouzení původních videí…','limit_seconds':work.SEARCH_SECONDS}
-        work.reserve(identity)
+        m.jobs[identity]={'id':identity,'status':'queued','progress':0,'kind':'visual-review','mode':body.mode,
+                          'message':'Připravuji vizuální posouzení původních videí…','limit_seconds':work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS}
+        work.reserve(identity,work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS)
     m.executor.submit(visual_reselect,identity,body)
     return dict(m.jobs[identity])

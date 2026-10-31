@@ -82,7 +82,7 @@ def prepare(skip_setup=False):
 
 def local_environment():
     environment = os.environ.copy()
-    environment.update(RANK_LOCAL_MODE='1', STUDIO_PUBLIC='0', PYTHONUTF8='1')
+    environment.update(RANK_LOCAL_MODE='1', RANK_FREE_ONLY='1', STUDIO_PUBLIC='0', PYTHONUTF8='1')
     return environment
 
 

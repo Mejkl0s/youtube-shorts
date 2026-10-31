@@ -9,15 +9,16 @@ import time
 
 
 SEARCH_SECONDS = 300
+LOCAL_SEARCH_SECONDS = 600
 _active = ContextVar('studio_work_budget', default=None)
 _controls = {}
 _lock = threading.Lock()
 
 
 class WorkStopped(RuntimeError):
-    def __init__(self, cancelled=False):
+    def __init__(self, cancelled=False, seconds=SEARCH_SECONDS):
         self.cancelled = cancelled
-        super().__init__('Hledání bylo zastaveno.' if cancelled else 'Hledání překročilo časový limit pěti minut.')
+        super().__init__('Hledání bylo zastaveno.' if cancelled else f'Hledání překročilo časový limit {int(seconds/60)} minut.')
 
 
 class Budget:
@@ -35,7 +36,7 @@ class Budget:
         if self.cancel.is_set():
             raise WorkStopped(True)
         if time.monotonic()-self.started >= self.seconds:
-            raise WorkStopped()
+            raise WorkStopped(seconds=self.seconds)
 
     def remaining(self):
         self.check()
@@ -61,14 +62,17 @@ def stage(message):
         budget.label(message)
 
 
-def post_json(url, *, headers, payload, seconds):
+def post_json(url, *, headers, payload, seconds, local=False):
     """Abort an owned AI request when its search is cancelled or expires."""
     import httpx
     if not current():
-        return httpx.post(url,headers=headers,json=payload,timeout=seconds)
+        if not local:
+            return httpx.post(url,headers=headers,json=payload,timeout=seconds)
+        with httpx.Client(timeout=seconds,trust_env=False,follow_redirects=False) as client:
+            return client.post(url,headers=headers,json=payload)
     import asyncio
     async def request():
-        async with httpx.AsyncClient(timeout=timeout(seconds)) as client:
+        async with httpx.AsyncClient(timeout=timeout(seconds),trust_env=not local,follow_redirects=False) as client:
             task=asyncio.create_task(client.post(url,headers=headers,json=payload))
             try:
                 while not task.done():
@@ -86,9 +90,9 @@ def post_json(url, *, headers, payload, seconds):
     return asyncio.run(request())
 
 
-def reserve(job_id):
+def reserve(job_id,seconds=SEARCH_SECONDS):
     with _lock:
-        return _controls.setdefault(job_id, Budget())
+        return _controls.setdefault(job_id, Budget(seconds))
 
 
 def cancel(job_id):
@@ -120,7 +124,8 @@ def limited_discovery(fn):
     @wraps(fn)
     def wrapped(job_id, *args, **kwargs):
         from . import main as m
-        budget = reserve(job_id)
+        mode=getattr(args[0],'mode',None) if args else None
+        budget = reserve(job_id,LOCAL_SEARCH_SECONDS if mode=='local' else SEARCH_SECONDS)
         budget.label = lambda text: m.set_job(job_id, message=text)
         token = _active.set(budget)
         try:

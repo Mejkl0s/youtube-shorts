@@ -49,11 +49,16 @@ def remote(payload,**kwargs):
    'action':{'time':b-1.5,'observation':'Main action appears'},'outcome':{'time':b-.2,'observation':'Late result visible'},
    'title':f'Visual event {i}','voiceover':'Late result appears.','rank_note':f'Visible result {i}','reason':'Complete event in sampled frames.'})
  return {'moments':result}
-m.public_search=search;m.download_candidate=download;m.ai_request=remote
+def free_request(prompt,evidence,tokens):
+ return remote({'messages':[{'content':prompt},{'content':evidence}]})
+def paid_forbidden(*args,**kwargs):raise AssertionError('Paid API called in free workflow')
+m.public_search=search;m.download_candidate=download;m.ai_request=paid_forbidden
+m.local_vision.status=lambda **kwargs:{'ready':True,'supported':True,'model':'fixture','message':'Local fixture ready'}
+m.local_vision.request=free_request
 import uvicorn
 uvicorn.run(m.app,host='127.0.0.1',port=int(sys.argv[2]),log_level='error')
 `;
-const env={...process.env,RANK_DATA_DIR:root+'/data',STUDIO_PUBLIC:'0',STUDIO_PASSWORD:'',RANK_LOCAL_MODE:'1',OPENAI_API_KEY:'fixture-only-no-network'};
+const env={...process.env,RANK_DATA_DIR:root+'/data',STUDIO_PUBLIC:'0',STUDIO_PASSWORD:'',RANK_LOCAL_MODE:'1',OPENAI_API_KEY:'must-never-be-used'};
 delete env.ELEVENLABS_API_KEY;
 const server=spawn('.venv/bin/python',['-c',code,root,String(port)],{env,stdio:['ignore','pipe','pipe']});
 let logs='';server.stdout.on('data',b=>logs+=b);server.stderr.on('data',b=>logs+=b);
@@ -64,7 +69,7 @@ try{
   const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   await page.goto(base);
-  await page.locator('#search-mode').selectOption('ai');
+  await page.locator('#search-mode').selectOption('local');
   await page.locator('#topic').fill('winter fails');
   await page.getByLabel('Po hledání vytvořit hotový náhled').uncheck();
   await page.getByLabel('Voiceover',{exact:true}).uncheck();
@@ -77,18 +82,33 @@ try{
   assert.ok((await first.innerText()).includes('Late result visible'));
   await page.locator('.save-button').click();
   const initial=await page.evaluate(()=>JSON.parse(localStorage.getItem('rank-studio-project')).clips);
-  assert.ok(initial.every(c=>c.selection_version==='visual-event-v2'&&c.visual_review&&c.has_audio));
+  assert.ok(initial.every(c=>c.selection_version==='visual-event-v2'&&c.visual_review?.provider==='local'&&c.has_audio));
+  assert.equal(await page.locator('#search-mode option[value=ai]').count(),0);
+  assert.equal(await page.locator('#male-voice option[value^=openai]').count(),0);
   assert.deepEqual(initial.map(c=>c.rank_note),['Visible result 0','Visible result 1','Visible result 2','Visible result 3','Visible result 4']);
   await mkdir('.runtime/screenshots',{recursive:true});
   await page.locator('.clips-section').screenshot({path:'.runtime/screenshots/visual-selection.png'});
+  await page.locator('#local-vision-panel').screenshot({path:'.runtime/screenshots/local-vision-ready.png'});
+  // Old projects must not accidentally keep a billable provider or paid mode.
+  await page.evaluate(()=>{
+    const old=JSON.parse(localStorage.getItem('rank-studio-project'));
+    old.discoveryMode='ai';old.templateMethod='ai';old.voiceSettings={provider:'openai',voice:'onyx',speed:1,delivery:''};
+    localStorage.setItem('rank-studio-project',JSON.stringify(old));
+  });
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelectorAll('.visual-evidence').length===5);
+  assert.equal(await page.locator('#male-voice').inputValue(),'edge:free_male');
+  assert.equal(await page.locator('#search-mode').inputValue(),'free');
+  assert.equal(await page.locator('#template-method').inputValue(),'free');
+  await page.locator('#search-mode').selectOption('local');
   const priorThumb=await page.locator('.clip-thumb img').first().getAttribute('src');
-  await page.getByRole('button',{name:'AI posoudit originály',exact:true}).click();
+  await page.getByRole('button',{name:'AI zdarma posoudit originály',exact:true}).click();
   await page.waitForFunction(old=>document.querySelector('.clip-thumb img')?.getAttribute('src')!==old,priorThumb,{timeout:90000});
   await page.locator('.save-button').click();
   const reviewed=await page.evaluate(()=>JSON.parse(localStorage.getItem('rank-studio-project')).clips);
   assert.ok(reviewed.every((c,i)=>c.id!==initial[i].id&&c.source_asset_id===initial[i].source_asset_id));
   await writeFile(root+'/reject','1');
-  await page.getByRole('button',{name:'AI posoudit originály',exact:true}).click();
+  await page.getByRole('button',{name:'AI zdarma posoudit originály',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'Předchozí střihy zůstaly v editoru'}).waitFor({timeout:90000});
   await page.locator('.save-button').click();
   assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('rank-studio-project')).clips.map(c=>c.id)),reviewed.map(c=>c.id));

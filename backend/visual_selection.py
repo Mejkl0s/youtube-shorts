@@ -8,6 +8,7 @@ import io
 import math
 import os
 import re
+from contextvars import ContextVar
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -17,6 +18,7 @@ MAX_SCENES = 40
 SHORTLIST = 8
 MIN_CONFIDENCE = .8
 FRAME_SIZE = 224
+_provider = ContextVar('visual_provider',default='openai')
 
 
 class VisualSelectionError(ValueError):
@@ -75,6 +77,9 @@ def sheets(scene_id, samples):
 
 
 def request(prompt, evidence, tokens=3500):
+    if _provider.get()=='local':
+        from .local_vision import request as local_request
+        return local_request(prompt,evidence,tokens)
     from . import main as m
     return m.ai_request({'model': os.environ.get('OPENAI_VISION_MODEL', 'gpt-4.1'),
                          'messages': [{'role': 'system', 'content': prompt}, {'role': 'user', 'content': evidence}],
@@ -109,22 +114,51 @@ def catalogue(candidates):
                 group.append({'candidate': candidate, 'shot': window.shot, 'a': a, 'b': b, 'path': path})
         groups.append(group)
     # Round-robin across sources: a large compilation cannot consume all images.
-    return [group[i] for i in range(max((len(g) for g in groups), default=0))
-            for group in groups if i < len(group)][:MAX_SCENES]
+    rows=[group[i] for i in range(max((len(g) for g in groups), default=0))
+          for group in groups if i < len(group)]
+    if _provider.get()!='local':
+        return rows[:MAX_SCENES]
+    if len(rows)<=8:
+        return rows
+    # A bounded local model must still see NEW sources in subsequent rounds.
+    # Carry forward previously accepted events, then fill with fresh sources;
+    # a single long compilation is sampled across its whole shot list.
+    previous=work.current().visual_clips if work.current() else []
+    kept=[scene for clip in reversed(previous) for scene in rows
+          if scene['candidate']['id']==clip['id'] and scene['a']==clip['scene_start'] and scene['b']==clip['scene_end']][:4]
+    if len(groups)==1:
+        pool=[rows[i] for i in range(len(rows)) if rows[i] not in kept]
+        slots=8-len(kept)
+        sampled=[pool[round(i*(len(pool)-1)/max(1,slots-1))] for i in range(min(slots,len(pool)))]
+        return kept+sampled
+    fresh=[group[i] for i in range(max((len(g) for g in groups),default=0))
+           for group in reversed(groups) if i<len(group) and group[i] not in kept]
+    return kept+fresh[:8-len(kept)]
 
 
 def overview(index, scene):
     cache = work.current().visual_cache if work.current() else {}
     key = ('overview', scene['candidate']['id'], scene['shot'])
     if key not in cache:
-        count = min(24, max(5, math.ceil((scene['b']-scene['a'])/3)+1))
+        count = min(8 if _provider.get()=='local' else 24, max(5, math.ceil((scene['b']-scene['a'])/3)+1))
         cache[key] = frames(scene['path'], scene['a'], scene['b'], count)
     return sheets(index, cache[key])
 
 
-def select(candidates, topic, language, ranking_criteria):
+def select(candidates, topic, language, ranking_criteria,provider='openai'):
+    if provider not in ('openai','local'):
+        raise ValueError('Neplatný poskytovatel vizuálního výběru.')
+    token=_provider.set(provider)
+    try:
+        return _select(candidates,topic,language,ranking_criteria)
+    finally:
+        _provider.reset(token)
+
+
+def _select(candidates, topic, language, ranking_criteria):
     from . import main as m
     scenes = catalogue(candidates)
+    shortlist_size=6 if _provider.get()=='local' else SHORTLIST
     evidence = [{'type': 'text', 'text': f'Topic: {topic!r}. Ranking criteria: {ranking_criteria!r}.'}]
     for index, scene in enumerate(scenes):
         work.stage(f'Čtu obraz kandidátní scény {index+1}/{len(scenes)}…')
@@ -135,13 +169,13 @@ def select(candidates, topic, language, ranking_criteria):
     if len(scenes) < 5:
         raise VisualSelectionError('Pro vizuální výběr zatím chybí pět různých záběrů.')
     work.stage('AI porovnává obsah videí a hledá hlavní momenty…')
-    scout = request(RULES+f' SCOUT PASS: nominate up to {SHORTLIST} promising distinct scenes for detailed review. '
+    scout = request(RULES+f' SCOUT PASS: nominate up to {shortlist_size} promising distinct scenes for detailed review. '
                     'Prefer different source videos and different incidents. Proposed start/end are absolute source seconds '
                     'inside the stated scene bounds, between 2 and 30 seconds apart. For a long shot, locate the event in '
                     'the overview rather than blindly using its start or biggest camera motion. Return JSON '
                     '{"shortlist":[{"scene":0,"start":1.0,"end":12.0}]}. Return fewer or none if evidence is weak.', evidence, 1200)
     nominations = scout.get('shortlist')
-    if not isinstance(nominations, list) or len(nominations) > SHORTLIST:
+    if not isinstance(nominations, list) or len(nominations) > shortlist_size:
         raise VisualSelectionError('AI nevrátila platný užší výběr scén.')
     detailed, intervals, seen = [], {}, set()
     for item in nominations:
@@ -226,7 +260,7 @@ def select(candidates, topic, language, ranking_criteria):
             raise VisualSelectionError('AI nedodržela krátký komentář a poznámku.')
         accepted.append((score, {**scene['candidate'], **clip.model_dump(), 'sourceDuration': scene['candidate']['duration'],
                                 'scene_start': scene['a'], 'scene_end': scene['b'], '_cut_scene': True,
-                                'review_required': True, 'visual_review': {'method': 'timestamped-frames-v2',
+                                'review_required': True, 'visual_review': {'method': 'timestamped-frames-v2','provider':_provider.get(),
                                 'confidence': confidence, 'score': score, 'sample_interval': [lower, upper], **observations}}))
     # Keep completed, reviewed results for deadline/failure recovery. Never
     # silently substitute motion-only results into this visual review workflow.
