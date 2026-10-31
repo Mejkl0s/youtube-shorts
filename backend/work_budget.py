@@ -26,6 +26,8 @@ class Budget:
         self.seconds = seconds
         self.cancel = threading.Event()
         self.cache = {}
+        self.visual_cache = {}
+        self.visual_clips = []
         self.unavailable_engines = set()
         self.label = None
 
@@ -57,6 +59,31 @@ def stage(message):
     checkpoint()
     if (budget := current()) and budget.label:
         budget.label(message)
+
+
+def post_json(url, *, headers, payload, seconds):
+    """Abort an owned AI request when its search is cancelled or expires."""
+    import httpx
+    if not current():
+        return httpx.post(url,headers=headers,json=payload,timeout=seconds)
+    import asyncio
+    async def request():
+        async with httpx.AsyncClient(timeout=timeout(seconds)) as client:
+            task=asyncio.create_task(client.post(url,headers=headers,json=payload))
+            try:
+                while not task.done():
+                    checkpoint()
+                    await asyncio.wait({task},timeout=.2)
+                checkpoint()
+                return await task
+            finally:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+    return asyncio.run(request())
 
 
 def reserve(job_id):

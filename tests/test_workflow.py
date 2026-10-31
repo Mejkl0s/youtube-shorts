@@ -147,15 +147,16 @@ def test_visual_ai_selection_preserves_source_length_and_rejects_duplicate(isola
         candidate = make_source(isolated / 'media' / asset_id, duration=9)
         candidate['source_url'] = 'https://www.instagram.com/reel/ABC/'
         candidates.append(candidate)
-    # Real frame extraction and scene analysis; only the remote response is mocked.
-    selection = {'clips': [{'scene': i, 'title': f'Moment {i}', 'voiceover': 'Great timing wins this round.', 'reason': 'A clearly visible moment with good timing.'} for i in range(5)]}
-    monkeypatch.setattr(m, 'ai_request', lambda *a, **kw: selection)
+    # Real two-pass frame extraction and materialization; remote responses only are fixtures.
+    from test_visual_selection import responses
+    scout,review=responses([9]*5)
+    monkeypatch.setattr(m, 'ai_request', lambda payload: scout if 'SCOUT PASS' in payload['messages'][0]['content'] else review)
     result = m.select_candidates(candidates, 'timing', 'en')
     assert len({c['id'] for c in result}) == 5
-    assert all(c['sourceDuration'] == 9 for c in result)
-    assert all(c['duration'] == 9 for c in result)
-    selection['clips'][1]['scene'] = 0
-    with pytest.raises(ValueError, match='stejné video'):
+    assert all(c['source_asset_id'] in {s['id'] for s in candidates} for c in result)
+    assert all(abs(c['duration']-8.8)<.1 for c in result)
+    review['moments'][1]['scene'] = 0
+    with pytest.raises(ValueError, match='opakovala'):
         m.select_candidates(candidates, 'timing', 'en')
 
 

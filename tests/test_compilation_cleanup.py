@@ -80,13 +80,22 @@ def test_compilation_past_old_two_minute_limit_has_complete_preview_and_tail_cut
 
 def test_ai_may_use_separate_shots_but_not_two_windows_of_same_shot(isolated,monkeypatch):
     candidate = compilation(isolated/'media'/uuid.uuid4().hex)
-    selection={'clips':[{'scene':i,'title':f'Moment {i}','voiceover':'Better timing.','reason':'A test scene.'} for i in range(5)]}
-    monkeypatch.setattr(m,'ai_request',lambda *args:selection)
+    from test_visual_selection import responses
+    scout,review=responses([3]*5)
+    for i,item in enumerate(scout['shortlist']):
+        item['start']+=i*3
+        item['end']+=i*3
+    for i,item in enumerate(review['moments']):
+        item['start']+=i*3
+        item['end']+=i*3
+        for key in ('setup','action','outcome'):item[key]['time']+=i*3
+    monkeypatch.setattr(m,'ai_request',lambda payload:scout if 'SCOUT PASS' in payload['messages'][0]['content'] else review)
     result=m.select_candidates([candidate],'winter fails','en')
     assert len({clip['id'] for clip in result})==5
-    selection['clips'][1]['scene']=0
-    with pytest.raises(ValueError,match='stejné video'):
+    review['moments'][1]['scene']=0
+    with pytest.raises(ValueError,match='opakovala'):
         m.select_candidates([candidate],'winter fails','en')
+
 
 
 @pytest.mark.parametrize('background,box',[('navy',''),('yellow','drawbox=x=40:y=260:w=640:h=150:color=black:t=fill,')])

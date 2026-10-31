@@ -21,6 +21,14 @@ Pro obarvení samotného slova (například `fails`) na něj klikni v seznamu sl
 
 Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Zaškrtnutím **Přebírat nadpis z „Co dnes rankujeme?“** propojení zase zapneš. Volba i vzhled nadpisu se uloží spolu s projektem. Písmo nadpisu může být jiné než písmo čísel a titulků.
 
+## AI posouzení skutečného děje
+
+Po připojení `OPENAI_API_KEY` v bezpečném nastavení serveru vyber v **REŽIM HLEDÁNÍ** možnost **AI posouzení obrazu · placené API**. Klíč nepiš do tématu ani do chatu. Tento režim používá placené OpenAI API; v režimu **Zdarma** se placený model nezapíná. Volitelný `OPENAI_VISION_MODEL` má výchozí hodnotu `gpt-4.1`.
+
+AI nejprve dostane přehled časově označených snímků kandidátních záběrů, potom podrobnější snímky až osmi možných momentů. Posoudí téma, přípravu, hlavní akci a viditelný výsledek. Navrhne různě dlouhé střihy 2–30 sekund, krátké konkrétní poznámky a komentáře. Neúplné a nejisté momenty se do pětice nedoplňují jen kvůli počtu. Pod **Co AI viděla ve scéně** najdeš její pozorování a časy v originálu.
+
+U už načtených klipů klikni na **AI posoudit originály**. Hodnotí celé zachované původní soubory, ne pouze staré čtyřsekundové výřezy. Při neúspěchu nechá dosavadní projekt v editoru. U nahrané kompilace se použije stejný zvolený režim. AI pracuje se vzorky obrazu, původní zvuk neslyší a může se splést; finální klipy přehraj. Hledání a vizuální posouzení mají limit pěti minut a tlačítko zastavení. Odmítne-li síť stažení, vizuální model nemá co posoudit.
+
 ## Pointa, obraz a zvuk
 
 Po aktualizaci klikni pod pěti klipy na **Znovu vybrat celé scény**, pokud byly uložené ještě jako čtyřsekundové výřezy. Původní videa musí zůstat ve stejné složce `.runtime`. Krátká scéna se zachová celá až do 30 sekund. U delších záběrů jde o odhad podle pohybu, proto pointu zkontroluj přes **Upravit střih**. V tomto okně můžeš přehrát původní záběr, posunout začátek/konec a vybrat **Celý obraz**, aby nebyl děj u okraje uříznutý. **Celý původní zdroj** ukáže i části za detekovaným střihem. Změna vytvoří nový výřez a nechá původní soubory zachované.

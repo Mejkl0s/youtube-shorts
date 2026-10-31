@@ -49,6 +49,33 @@ def test_individual_timeout_does_not_exhaust_whole_job():
     finally:w._active.reset(token)
 
 
+@pytest.mark.parametrize('cancelled',[False,True])
+def test_ai_http_wait_is_cancelled_at_budget_or_user_stop(monkeypatch,cancelled):
+    import asyncio
+    import httpx
+    import threading
+    budget=w.Budget(10 if cancelled else .15)
+    aborted=[]
+    async def slow(request):
+        try:
+            await asyncio.sleep(10)
+            return httpx.Response(200,json={})
+        finally:aborted.append(True)
+    client=httpx.AsyncClient
+    monkeypatch.setattr(httpx,'AsyncClient',lambda **kwargs:client(transport=httpx.MockTransport(slow),**kwargs))
+    timer=threading.Timer(.15,budget.cancel.set) if cancelled else None
+    token=w._active.set(budget);started=time.monotonic()
+    try:
+        if timer:timer.start()
+        with pytest.raises(w.WorkStopped) as error:
+            w.post_json('https://fixture.invalid',headers={},payload={},seconds=120)
+        assert error.value.cancelled is cancelled
+        assert aborted and time.monotonic()-started<2
+    finally:
+        if timer:timer.cancel()
+        w._active.reset(token)
+
+
 def test_discovery_stops_when_six_candidates_supply_five_scenes(isolated,monkeypatch):
     rows=[{'url':f'https://www.tiktok.com/@winter/video/{100000+i}','title':'Winter fails'} for i in range(40)]
     monkeypatch.setattr(m,'public_search',lambda *args:(rows,[]))
