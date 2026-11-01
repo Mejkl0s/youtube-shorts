@@ -30,10 +30,12 @@ U už nalezených dobrých klipů klikni na **Vyčistit všechny klipy**. Jejich
 ## Vizuální AI zdarma na tvém PC
 
 1. Použij studio na **http://127.0.0.1:8765/**. V bezplatném Renderu se lokální model nespouští.
-2. V hledání klikni na **Připravit AI zdarma**. Otevře se samostatné okno přípravy.
-3. Příprava sama zjistí RAM a místo na disku. Potřebuje alespoň 8 GB RAM a 8 GB volného místa; doporučeno 16 GB RAM a grafická karta. Nainstaluje Ollama přes winget a stáhne model `qwen2.5vl:3b`. Poprvé jde o několik GB; průběh vidíš v okně.
-4. Po zprávě **Hotovo** klikni ve studiu na **Ověřit AI**, pak vyber **AI na mém PC · zdarma**.
+2. V poli **Vizuální model** zvol **Qwen2.5-VL 7B** nebo úspornější **3B**. Nově je předvolený 7B. Pak klikni na **Připravit vybranou AI zdarma**. Otevře se samostatné okno přípravy.
+3. Příprava zjistí RAM a disk: pro 7B potřebuje alespoň 16 GB RAM (doporučeno 32 GB) a 12 GB místa, pro 3B alespoň 8 GB RAM a 8 GB místa. Nainstaluje Ollama přes winget a stáhne zvolený model. Poprvé jde o několik GB; průběh vidíš v okně. Před změnou modelu dokonči úkol a zavři okno přípravy. Starý 3B se nemaže; můžeš jej zvolit znovu bez nového stahování.
+4. Po zprávě **Hotovo** zavři okno přípravy klávesou Enter. Klikni ve studiu na **Ověřit AI**, pak vyber **AI na mém PC · zdarma**.
 5. Zadej téma a spusť **Najít klipy**. U načtených klipů lze použít **AI zdarma posoudit originály**. Hodnotí celé uložené zdroje, nikoli jen staré čtyřsekundové výřezy.
+
+S 8 GB paměti grafiky a 32 GB RAM můžeš vyzkoušet 7B. Nemusí se celý vejít do grafiky: část může Ollama zpracovat přes RAM a procesor, což je pomalejší. Sdílená paměť grafiky není další vlastní VRAM. Po prvním výběru tlačítko **Ověřit AI** ukáže dostupný údaj o paměti načteného modelu. Větší model může stále přehlédnout pointu; rychlost ani kvalita na tvém PC zde nebyly změřené.
 
 Tento postup nepotřebuje API klíč a nepřepíná na placené služby. Spouštěč nastaví i serverovou pojistku `RANK_FREE_ONLY=1`, která odmítne placené požadavky a hlasy ze staré záložky. V běžném rozhraní jsou pouze bezplatné volby hledání a hlasu. Snímky pro lokální AI zůstávají na tomto PC. Internet je potřeba pro první stažení modelu a hledání/stahování klipů; bezplatný hlas Edge odesílá text Microsoftu. Na slabším počítači může být výběr pomalý, proto má lokální režim viditelný limit 10 minut a zastavení. Technické hledání má nadále limit 5 minut.
 

@@ -53,7 +53,7 @@ def free_request(prompt,evidence,tokens):
  return remote({'messages':[{'content':prompt},{'content':evidence}]})
 def paid_forbidden(*args,**kwargs):raise AssertionError('Paid API called in free workflow')
 m.public_search=search;m.download_candidate=download;m.ai_request=paid_forbidden
-m.local_vision.status=lambda **kwargs:{'ready':True,'supported':True,'model':'fixture','message':'Local fixture ready'}
+m.local_vision.status=lambda **kwargs:{'ready':True,'supported':True,'model':m.local_vision.selected_model(),'message':'Local fixture ready'}
 m.local_vision.request=free_request
 import uvicorn
 uvicorn.run(m.app,host='127.0.0.1',port=int(sys.argv[2]),log_level='error')
@@ -69,6 +69,14 @@ try{
   const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   await page.goto(base);
+  await page.getByLabel('Vizuální model',{exact:true}).selectOption('qwen2.5vl:3b');
+  await page.waitForFunction(()=>document.querySelector('.toast')?.textContent?.includes('qwen2.5vl:3b'));
+  assert.equal((await (await fetch(base+'/api/local-vision/status')).json()).model,'qwen2.5vl:3b');
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('#local-model')?.value==='qwen2.5vl:3b');
+  await page.getByLabel('Vizuální model',{exact:true}).selectOption('qwen2.5vl:7b');
+  await page.waitForFunction(()=>document.querySelector('.toast')?.textContent?.includes('qwen2.5vl:7b'));
+  assert.equal((await (await fetch(base+'/api/local-vision/status')).json()).model,'qwen2.5vl:7b');
   await page.locator('#search-mode').selectOption('local');
   await page.locator('#topic').fill('winter fails');
   await page.getByLabel('Po hledání vytvořit hotový náhled').uncheck();

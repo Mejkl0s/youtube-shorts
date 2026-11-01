@@ -17,10 +17,11 @@ from test_visual_selection import candidates
 
 
 @pytest.fixture
-def local_pc(monkeypatch):
+def local_pc(monkeypatch,tmp_path):
     monkeypatch.setenv('RANK_LOCAL_MODE','1')
     monkeypatch.setenv('STUDIO_PUBLIC','0')
     monkeypatch.setattr(local,'_status_cache',None)
+    monkeypatch.setattr(local,'model_path',lambda:tmp_path/'private'/'local-vision.json')
     return {'supported':True,'ready':True,'model':local.MODEL,'message':'Local fixture ready'}
 
 
@@ -171,8 +172,10 @@ def test_free_only_server_blocks_paid_routes_and_voices_even_for_old_clients(iso
     assert client.post('/api/scripts',json={'clips':rows,'mode':'rank'}).status_code==200
 
 
-def test_setup_uses_only_fixed_visible_installer(local_pc,monkeypatch):
+@pytest.mark.parametrize('model',local.MODEL_OPTIONS)
+def test_setup_uses_only_fixed_visible_installer(local_pc,monkeypatch,model):
     import subprocess
+    path=local.model_path();path.parent.mkdir();path.write_text(json.dumps({'model':model}))
     monkeypatch.setattr(local,'supported',lambda:True)
     monkeypatch.setattr(local,'os',types.SimpleNamespace(name='nt'))
     monkeypatch.setattr(local,'_setup_process',None)
@@ -185,8 +188,87 @@ def test_setup_uses_only_fixed_visible_installer(local_pc,monkeypatch):
     assert local.start_setup()['started']
     assert local.start_setup()['started'] and len(calls)==1
     args,kwargs=calls[0]
-    assert args==['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(m.ROOT/'scripts/setup_local_vision.ps1')]
+    assert args==['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(m.ROOT/'scripts/setup_local_vision.ps1'),'-Model',model]
     assert kwargs['creationflags']==16 and kwargs['cwd']==m.ROOT
+
+
+@pytest.mark.parametrize('model',local.MODEL_OPTIONS)
+def test_model_choice_persists_and_drives_native_inference(isolated,local_pc,monkeypatch,model):
+    monkeypatch.setattr(local,'_setup_process',None)
+    monkeypatch.setattr(local,'status',lambda **kw:{**local_pc,'model':local.selected_model()})
+    response=TestClient(m.app,base_url='http://127.0.0.1:8765').post('/api/local-vision/model',json={'model':model})
+    assert response.status_code==200,response.text
+    assert response.json()['model']==model
+    assert json.loads(local.model_path().read_text())=={'model':model}
+    assert not local.model_path().with_suffix('.tmp').exists()
+    captured=[]
+    def post(url,**kwargs):
+        captured.append(kwargs['payload'])
+        assert url==local.BASE+'/api/chat' and kwargs['headers']=={} and kwargs['local']
+        return httpx.Response(200,request=httpx.Request('POST',url),json={'message':{'content':'{"shortlist":[]}'}})
+    monkeypatch.setattr(work,'post_json',post)
+    monkeypatch.setattr(m,'ai_request',lambda *a,**kw:pytest.fail('Paid API used'))
+    assert local.request('SCOUT PASS',[],1000)=={'shortlist':[]}
+    assert captured[0]['model']==model and captured[0]['options']['num_ctx']==local.CONTEXT[model]
+
+
+@pytest.mark.parametrize('value',['qwen2.5vl:72b','qwen2.5vl:7b-cloud','https://cloud.invalid','qwen2.5vl:7b;whoami',None])
+def test_model_choice_only_accepts_supported_local_models(isolated,local_pc,value):
+    assert TestClient(m.app,base_url='http://127.0.0.1:8765').post('/api/local-vision/model',json={'model':value}).status_code==422
+    assert not local.model_path().exists()
+
+
+@pytest.mark.parametrize('running',['queued','working','rendering','searching','setup','public'])
+def test_model_cannot_change_during_work_or_on_public_host(isolated,local_pc,monkeypatch,running):
+    monkeypatch.setattr(local,'_setup_process',types.SimpleNamespace(poll=lambda:None) if running=='setup' else None)
+    if running=='public':
+        monkeypatch.setenv('STUDIO_PUBLIC','1')
+        monkeypatch.setenv('STUDIO_PASSWORD','model-choice-test')
+        monkeypatch.setenv('STUDIO_USERNAME','owner')
+    elif running!='setup':m.jobs['fixture']={'status':running}
+    response=TestClient(m.app,base_url='http://127.0.0.1:8765').post('/api/local-vision/model',json={'model':'qwen2.5vl:3b'},auth=('owner','model-choice-test') if running=='public' else None)
+    assert response.status_code==409,response.text
+    assert not local.model_path().exists()
+
+
+@pytest.mark.parametrize('stored',['broken','[]','{"model":"remote:cloud"}','{"model":null}'])
+def test_invalid_saved_model_defaults_to_known_local_model(local_pc,stored):
+    path=local.model_path();path.parent.mkdir();path.write_text(stored)
+    assert local.selected_model()==local.MODEL
+
+
+def test_model_change_invalidates_readiness_cache(isolated,local_pc,monkeypatch):
+    original=httpx.Client;calls=[]
+    def respond(request):
+        calls.append(request.url.path)
+        if request.url.path=='/api/tags':
+            return httpx.Response(200,json={'models':[{'name':'qwen2.5vl:7b','size':5_000_000_000,'digest':'a'*64}]})
+        return httpx.Response(200,json={'capabilities':['vision']})
+    monkeypatch.setattr(httpx,'Client',lambda **kw:original(transport=httpx.MockTransport(respond),**kw))
+    monkeypatch.setattr(local,'_setup_process',None)
+    assert local.status()['ready']
+    count=len(calls)
+    assert local.status()['ready'] and len(calls)==count
+    state=local.choose_model(local.ModelChoice(model='qwen2.5vl:3b'))
+    assert not state['ready'] and state['model']=='qwen2.5vl:3b' and len(calls)>count
+
+
+@pytest.mark.parametrize('residency',[{'size':8_000_000_000,'size_vram':5_000_000_000},
+    {'size':8_000_000_000,'size_vram':9_000_000_000}, {'size':None,'size_vram':0}, 'offline'])
+def test_optional_residency_reports_actual_loaded_memory_without_blocking_readiness(local_pc,monkeypatch,residency):
+    original=httpx.Client
+    def respond(request):
+        if request.url.path=='/api/tags':
+            return httpx.Response(200,json={'models':[{'name':local.MODEL,'size':5_000_000_000,'digest':'a'*64}]})
+        if request.url.path=='/api/show':return httpx.Response(200,json={'capabilities':['vision']})
+        if residency=='offline':raise httpx.ConnectError('Optional telemetry unavailable')
+        return httpx.Response(200,json={'models':[{'name':local.MODEL,**residency}]})
+    monkeypatch.setattr(httpx,'Client',lambda **kw:original(transport=httpx.MockTransport(respond),**kw))
+    state=local.status()
+    assert state['ready']
+    if isinstance(residency,dict) and residency.get('size_vram')==5_000_000_000:
+        assert state['memory']=={'total_bytes':8_000_000_000,'gpu_bytes':5_000_000_000}
+    else:assert 'memory' not in state
 
 
 def test_local_http_cancellation_does_not_leave_inference_request_waiting(monkeypatch):

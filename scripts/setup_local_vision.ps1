@@ -1,3 +1,5 @@
+param([ValidateSet('qwen2.5vl:3b', 'qwen2.5vl:7b')][string]$Model = 'qwen2.5vl:7b')
+
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'Continue'
 
@@ -5,12 +7,19 @@ try {
     Write-Host 'Rank Studio - vizualni AI zdarma na tomto pocitaci'
     Write-Host 'Bez API klice a bez poplatku za model. Prvni priprava stahne nekolik GB.'
     $rankRamGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
-    Write-Host "Pamet pocitace: $rankRamGB GB. Doporuceno 16 GB a vice; na CPU muze byt vyber pomaly."
-    if ($rankRamGB -lt 7.5) { throw 'Pro tento vizualni model je potreba alespon 8 GB RAM. Bezne hledani a rucni strih zustavaji zdarma.' }
+    Write-Host "Vybrany model: $Model. Pamet pocitace: $rankRamGB GB."
+    $rankMinimumRam = 7.5
+    $rankDiskSpace = 8GB
+    if ($Model -eq 'qwen2.5vl:7b') {
+        $rankMinimumRam = 15.5
+        $rankDiskSpace = 12GB
+        Write-Host 'Pro 7B doporuceno 32 GB RAM. Na grafice s 8 GB VRAM muze cast modelu bezet pres RAM a vyber bude pomalejsi.'
+    } else { Write-Host 'Pro 3B doporuceno 16 GB RAM. Mensi model muze byt rychlejsi.' }
+    if ($rankRamGB -lt $rankMinimumRam) { throw 'Pro vybrany model je malo RAM: 3B potrebuje alespon 8 GB, 7B alespon 16 GB. Ve studiu muzes zvolit 3B.' }
     $rankModelDirectory = $env:OLLAMA_MODELS
     if (-not $rankModelDirectory) { $rankModelDirectory = Join-Path $env:USERPROFILE '.ollama\models' }
     $rankDrive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($rankModelDirectory))
-    if ($rankDrive.AvailableFreeSpace -lt 8GB) { throw 'Pro instalaci a model uvolni alespon 8 GB na disku s modely Ollama.' }
+    if ($rankDrive.AvailableFreeSpace -lt $rankDiskSpace) { throw 'Pro instalaci a model uvolni misto na disku s modely Ollama: 8 GB pro 3B, 12 GB pro 7B.' }
     $rankOllama = Get-Command ollama.exe -ErrorAction SilentlyContinue
     $rankKnownPath = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
     if (-not $rankOllama -and (Test-Path -LiteralPath $rankKnownPath)) { $rankOllama = Get-Item -LiteralPath $rankKnownPath }
@@ -48,8 +57,8 @@ try {
         }
     }
     if (-not $rankServing) { throw 'Ollama se nespustila na 127.0.0.1:11434. Zkontroluj jeji okno.' }
-    Write-Host 'Stahuji qwen2.5vl:3b. Toto je jednorazove stazeni; prubeh uvidis nize.'
-    & $rankExecutable pull 'qwen2.5vl:3b'
+    Write-Host "Stahuji $Model. Toto je jednorazove stazeni; prubeh uvidis nize."
+    & $rankExecutable pull $Model
     if ($LASTEXITCODE -ne 0) { throw 'Model se nepodarilo stahnout. Zkontroluj pripojeni a spust pripravu znovu; hotove casti stahovani se vyuziji.' }
     Write-Host 'Hotovo. Ve studiu klikni Overit AI a vyber AI na mem PC - zdarma.' -ForegroundColor Green
 } catch {

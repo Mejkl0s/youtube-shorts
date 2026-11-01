@@ -67,3 +67,5 @@
 .duration-budget{font-size:11px;color:#a5b198;margin:12px 0;line-height:1.6}.duration-budget.over{color:#e5ba99}.cleanup-methods{display:grid;gap:8px}.cleanup-methods label{display:grid;gap:4px}.cleanup-methods select{max-width:100%;padding:7px;border:1px solid #3e4d2f;border-radius:5px;background:#171e17}
 
 .comment-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.clip-footer{flex-wrap:wrap}
+
+.local-vision-panel label{display:block;color:var(--muted);margin-bottom:4px}.local-vision-panel .select-wrap{display:flex;margin-bottom:10px;max-width:100%}.local-vision-panel select{width:100%;min-width:0}
