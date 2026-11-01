@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from .cleanup import BlurRegion
 from .scene_context import reframe_regions
+from .timeline import MIN_CLIP_SECONDS
 from . import work_budget as work
 
 router=APIRouter(prefix='/api')
@@ -15,7 +16,7 @@ class ContextRequest(BaseModel):
     full_source: bool = False
     parent_start: float | None = Field(default=None,ge=0,le=600,allow_inf_nan=False)
     start: float = Field(default=0,ge=0,le=600,allow_inf_nan=False)
-    duration: float = Field(default=4,ge=2,le=30,allow_inf_nan=False)
+    duration: float = Field(default=4,ge=MIN_CLIP_SECONDS,le=30,allow_inf_nan=False)
 
 
 def context(body):
@@ -32,7 +33,7 @@ def context(body):
     upper=min(float(clip.get('scene_end',parent['duration'])),parent['duration'])
     if body.full_source:
         lower,upper=0,parent['duration']
-    current_start=min(upper-2,max(lower,origin+body.start))
+    current_start=min(upper-MIN_CLIP_SECONDS,max(lower,origin+body.start))
     if parent.get('preview_framing')!='original':
         full=m.DATA/'media'/parent_id/'context-preview.mp4'
         if not full.is_file():
@@ -48,7 +49,7 @@ def context(body):
         parent={**parent,'url':f'/media/{parent_id}/context-preview.mp4','preview_framing':'original'}
     return {'source':parent,'full_source':body.full_source,'bounds':{'start':lower,'end':upper},
             'current':{'start':current_start,'end':min(upper,current_start+body.duration)},
-            'message':'Zkontroluj přípravu, hlavní moment i konec. Výřez má 2–30 sekund; původní video zůstává zachované.'}
+            'message':'Zkontroluj přípravu, hlavní moment i konec. Výřez má 1–30 sekund; původní video zůstává zachované.'}
 
 
 @router.post('/clip-context')
@@ -58,7 +59,7 @@ def get_context(body:ContextRequest):
 
 class CutRequest(ContextRequest):
     cut_start: float = Field(ge=0,le=600,allow_inf_nan=False)
-    cut_end: float = Field(ge=2,le=600,allow_inf_nan=False)
+    cut_end: float = Field(ge=MIN_CLIP_SECONDS,le=600,allow_inf_nan=False)
     framing: Literal['fit','fill'] = 'fit'
     original_framing: Literal['fit','fill'] = 'fill'
     blur_regions: list[BlurRegion] = Field(default_factory=list,max_length=8)
@@ -70,8 +71,8 @@ def cut_clip(body:CutRequest):
     ctx=context(body)
     lower,upper=ctx['bounds']['start'],ctx['bounds']['end']
     length=body.cut_end-body.cut_start
-    if not 2<=length<=30 or body.cut_start<lower or body.cut_end>upper+.01:
-        raise HTTPException(400,'Výřez musí mít 2–30 sekund a zůstat v rámci této scény.')
+    if not MIN_CLIP_SECONDS<=length<=30 or body.cut_start<lower or body.cut_end>upper+.01:
+        raise HTTPException(400,'Výřez musí mít 1–30 sekund a zůstat v rámci této scény.')
     parent=ctx['source']
     old=m.asset(body.id)
     row={**parent,'title':old['name'][:60],'voiceover':'','start':body.cut_start,'duration':length,
@@ -127,7 +128,8 @@ def recut_all(job_id, rows):
             cut.update({key:getattr(old,key) for key in ('title','voiceover','narration_mode','rank_note','source_url')})
             cut['blur_regions']=reframe_regions(old.blur_regions,video['width'],video['height'],old.framing,'fit')
             result.append(cut)
-        m.set_job(job_id,status='done',progress=100,clips=result,message='Scény jsou znovu vybrané. Přehraj je a zkontroluj pointu; u dlouhého záběru pomůže Upravit střih.')
+        m.Project(title='Obnovené scény',clips=result,voice=False)
+        m.set_job(job_id,status='done',progress=100,clips=result,message='Scény jsou znovu vybrané do 40 sekund. Přehraj je a zkontroluj pointu.')
     except Exception as error:
         for directory in created:
             m.shutil.rmtree(directory,ignore_errors=True)
@@ -139,11 +141,13 @@ def start_recut(body:RecutRequest):
     from . import main as m
     from pydantic import ValidationError
     try:
-        validated=m.Project(title='Obnova střihu',clips=body.clips,voice=False)
-        body.clips=[{**raw,**clip.model_dump()} for raw,clip in zip(body.clips,validated.clips)]
+        validated=[m.Clip.model_validate(row) for row in body.clips]
+        if len({clip.id for clip in validated})!=5:
+            raise ValueError('Obnova potřebuje pět různých klipů.')
+        body.clips=[{**raw,**clip.model_dump()} for raw,clip in zip(body.clips,validated)]
         for row in body.clips:
             m.asset(row['id'])
-    except (ValidationError,KeyError):
+    except (ValueError,KeyError):
         raise HTTPException(422,'Obnova střihu potřebuje pět platných klipů.') from None
     with m.job_lock:
         if any(j['status'] in ('queued','rendering','searching','working') for j in m.jobs.values()):
@@ -228,4 +232,55 @@ def start_visual_review(body:VisualReviewRequest):
                           'message':'Připravuji vizuální posouzení původních videí…','limit_seconds':work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS}
         work.reserve(identity,work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS)
     m.executor.submit(visual_reselect,identity,body)
+    return dict(m.jobs[identity])
+
+
+class CleanupBatchRequest(BaseModel):
+    clips:list[dict]=Field(min_length=5,max_length=5)
+    mode:Literal['free','local']='free'
+
+
+@work.limited_discovery
+def cleanup_batch(identity,body):
+    from . import main as m
+    try:
+        rows=[]
+        for raw in body.clips:
+            clip=m.Clip.model_validate(raw)
+            meta=m.asset(clip.id)
+            rows.append({**meta,**raw,**clip.model_dump(),'url':meta['url'],'thumbnail':meta['thumbnail']})
+        warnings=[]
+        m.set_job(identity,status='working',progress=5,message='Čistím obraz vybraných klipů, střihy zůstávají zachované…')
+        m.add_cleanup(rows,warnings)
+        m.set_job(identity,status='done',progress=100,clips=rows,warnings=warnings,
+                  message='Úpravy obrazu jsou připravené. Zkontroluj masky; časy střihů se nezměnily.')
+    except work.WorkStopped as error:
+        m.set_job(identity,status='failed',cancelled=error.cancelled,progress=100,
+                  message=('Čištění bylo zastaveno.' if error.cancelled else 'Čištění překročilo časový limit.')+' Dosavadní klipy zůstaly v editoru.')
+    except Exception:
+        m.set_job(identity,status='failed',message='Čištění se nepodařilo dokončit. Dosavadní klipy zůstaly v editoru; další oblasti označ ručně.')
+
+
+@router.post('/cleanup-clips',status_code=202)
+def start_cleanup_batch(body:CleanupBatchRequest):
+    from . import main as m
+    try:
+        identities=set()
+        for raw in body.clips:
+            clip=m.Clip.model_validate(raw);meta=m.asset(clip.id)
+            if clip.start+clip.duration>meta['duration']+.05:
+                raise ValueError('Výřez je mimo zdrojové video.')
+            identities.add(clip.id)
+        if len(identities)!=5:raise ValueError('Použij pět různých klipů.')
+    except (ValueError,KeyError) as error:
+        raise HTTPException(422,str(error)[:250]) from None
+    with m.job_lock:
+        if any(j['status'] in ('queued','rendering','searching','working') for j in m.jobs.values()):
+            raise HTTPException(409,'Jeden úkol právě běží. Počkej na dokončení.')
+        identity=m.uuid.uuid4().hex
+        limit=work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS
+        m.jobs[identity]={'id':identity,'status':'queued','progress':0,'kind':'cleanup','limit_seconds':limit,
+                          'message':'Připravuji čištění vybraných klipů…'}
+        work.reserve(identity,limit)
+    m.executor.submit(cleanup_batch,identity,body)
     return dict(m.jobs[identity])

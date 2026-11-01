@@ -127,7 +127,7 @@ def test_local_workflow_uses_real_frames_and_cuts_without_cloud_calls(isolated,l
     job=m.jobs[identity]
     assert job['status']=='done',job
     assert job['limit_seconds']==600 and len(calls)==6
-    assert len(job['clips'])==5 and all(c['has_audio'] and c['duration']>7 for c in job['clips'])
+    assert len(job['clips'])==5 and all(c['has_audio'] and c['duration']>4 for c in job['clips'])
     assert all(c['visual_review']['provider']=='local' for c in job['clips'])
 
 

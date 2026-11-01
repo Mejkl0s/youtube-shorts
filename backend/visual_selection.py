@@ -13,6 +13,7 @@ from contextvars import ContextVar
 from PIL import Image, ImageDraw, ImageFont
 
 from . import work_budget as work
+from .timeline import MIN_CLIP_SECONDS, choose_moments
 
 MAX_SCENES = 40
 SHORTLIST = 8
@@ -34,7 +35,7 @@ def number(value):
 def frames(path, start, end, count):
     """Decode once per interval; keep actual decoded PTS beside every image."""
     duration = end-start
-    if duration < 2:
+    if duration < MIN_CLIP_SECONDS:
         raise VisualSelectionError('Scéna je příliš krátká pro vizuální kontrolu.')
     step = max(.08, (duration-.15)/(count-1))
     select = f"isnan(prev_selected_t)+gte(t-prev_selected_t,{step:.6f})+gte(t,{duration-.12:.6f})*lt(prev_selected_t,{duration-.12:.6f})"
@@ -92,7 +93,7 @@ RULES = ('You are a conservative ranking video editor. Judge actual visible even
          'dialogue or unseen events. For fails, a talking presenter, scenery, a person merely standing or a camera shake '
          'is not proof of a fall. Reject irrelevant events, duplicates, missing setups and missing outcomes. '
          'No fixed four-second target: preserve preparation, main action AND visible aftermath. '
-         'A physical camera shot is not necessarily a complete event. If the action continues outside the shown '
+         'The TOTAL finished five-clip video must be at most 40 seconds, not exactly 40. Prefer compact complete events, never pad a shorter ranking or remove the outcome to fit. A physical camera shot is not necessarily a complete event. If the action continues outside the shown '
          'interval, reject it. A full event exceeding 30 seconds must be rejected, never squeezed into an incomplete cut. ')
 
 
@@ -110,7 +111,7 @@ def catalogue(candidates):
         group = []
         for window in windows:
             a, b = window.scene_start, window.scene_end
-            if b-a >= 2:
+            if b-a >= MIN_CLIP_SECONDS:
                 group.append({'candidate': candidate, 'shot': window.shot, 'a': a, 'b': b, 'path': path})
         groups.append(group)
     # Round-robin across sources: a large compilation cannot consume all images.
@@ -171,7 +172,7 @@ def _select(candidates, topic, language, ranking_criteria):
     work.stage('AI porovnává obsah videí a hledá hlavní momenty…')
     scout = request(RULES+f' SCOUT PASS: nominate up to {shortlist_size} promising distinct scenes for detailed review. '
                     'Prefer different source videos and different incidents. Proposed start/end are absolute source seconds '
-                    'inside the stated scene bounds, between 2 and 30 seconds apart. For a long shot, locate the event in '
+                    'inside the stated scene bounds, between 1 and 30 seconds apart. For a long shot, locate the event in '
                     'the overview rather than blindly using its start or biggest camera motion. Return JSON '
                     '{"shortlist":[{"scene":0,"start":1.0,"end":12.0}]}. Return fewer or none if evidence is weak.', evidence, 1200)
     nominations = scout.get('shortlist')
@@ -187,8 +188,8 @@ def _select(candidates, topic, language, ranking_criteria):
         seen.add(index)
         scene = scenes[index]
         a, b = number(item.get('start')), number(item.get('end'))
-        if not scene['a'] <= a < b <= scene['b'] or not 2 <= b-a <= 30:
-            raise VisualSelectionError('AI navrhla střih mimo původní scénu nebo limit 2–30 sekund.')
+        if not scene['a'] <= a < b <= scene['b'] or not MIN_CLIP_SECONDS <= b-a <= 30:
+            raise VisualSelectionError('AI navrhla střih mimo původní scénu nebo limit 1–30 sekund.')
         # Include extra context on BOTH sides of the proposal before judging it.
         lower, upper = max(scene['a'], a-2), min(scene['b'], b+2)
         work.stage(f'Kontroluji přípravu, akci a konec momentu {len(intervals)+1}/{len(nominations)}…')
@@ -241,7 +242,7 @@ def _select(candidates, topic, language, ranking_criteria):
             continue
         start, end = number(item.get('start')), number(item.get('end'))
         lower, upper = intervals[index]
-        if not lower <= start < end <= upper or not 2 <= end-start <= 30:
+        if not lower <= start < end <= upper or not MIN_CLIP_SECONDS <= end-start <= 30:
             raise VisualSelectionError('Střih přesahuje vizuálně zkontrolovaný úsek.')
         observations, times = {}, []
         for key in ('setup', 'action', 'outcome'):
@@ -265,9 +266,11 @@ def _select(candidates, topic, language, ranking_criteria):
     # Keep completed, reviewed results for deadline/failure recovery. Never
     # silently substitute motion-only results into this visual review workflow.
     accepted.sort(key=lambda row: row[0])
-    selected = [row for _, row in accepted[-5:]]
+    selected=[row for _,row in choose_moments(accepted,duration=lambda item:item[1]['duration'],score=lambda item:item[0]/100,
+              identity=lambda item:(item[1]['id'],item[1]['scene_start'],item[1]['scene_end']),source=lambda item:item[1]['id'],partial=True)]
+    selected.sort(key=lambda row:row['visual_review']['score'])
     if work.current():
         work.current().visual_clips = selected
     if len(selected) < 5:
-        raise VisualSelectionError(f'AI obrazově přijala jen {len(selected)}/5 celých momentů. Další videa mají nejasný děj nebo chybějící pointu.')
+        raise VisualSelectionError(f'Do 40 sekund se vešlo jen {len(selected)}/5 obrazově přijatých celých momentů. Další videa jsou příliš dlouhá, nejasná nebo bez pointy.')
     return m.materialize_scenes(selected)

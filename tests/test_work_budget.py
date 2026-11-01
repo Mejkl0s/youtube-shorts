@@ -38,7 +38,15 @@ def test_deadline_terminates_owned_child_process_tree(tmp_path):
     finally:w._active.reset(token)
     pid=int(pidfile.read_text())
     stat=Path(f'/proc/{pid}/stat')
-    assert not stat.exists() or stat.read_text().split()[2]=='Z'
+    # SIGKILL delivery/reparenting of the grandchild may lag parent reaping
+    # briefly when several FFmpeg checks compete for CPU.
+    def stopped():
+        try:return stat.read_text().split()[2]=='Z'
+        except FileNotFoundError:return True
+    deadline=time.monotonic()+1
+    while not stopped() and time.monotonic()<deadline:
+        time.sleep(.01)
+    assert stopped()
 
 
 def test_individual_timeout_does_not_exhaust_whole_job():

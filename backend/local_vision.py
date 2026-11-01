@@ -137,7 +137,7 @@ def _call(prompt,evidence,tokens):
 
 def request(prompt,evidence,tokens):
     if 'FINAL REVIEW' not in prompt:
-        work.stage('AI na tvém PC hledá hlavní momenty v obrazu…')
+        work.stage('AI na tvém PC hledá rušivé překryvy…' if 'OVERLAY REVIEW' in prompt else 'AI na tvém PC hledá hlavní momenty v obrazu…')
         return _call(prompt,evidence,min(tokens,1800))
     # A small local VLM must not receive dozens of full-resolution sheets in
     # one context. Review each nominated scene independently, keeping all its

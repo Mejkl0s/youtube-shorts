@@ -9,7 +9,7 @@ import {createServer} from 'node:net';
 import {randomUUID} from 'node:crypto';
 const root=resolve('.runtime/discovery-test-'+randomUUID());
 await mkdir(root,{recursive:true});
-for(const [i,duration] of [3,5,7,9,12].entries())execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y',
+for(const [i,duration] of [3,5,7,9,11].entries())execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y',
   '-f','lavfi','-i',`color=c=gray:s=160x284:r=15:d=${duration}`,'-f','lavfi','-i',`sine=frequency=440:sample_rate=44100:duration=${duration}`,
   '-vf',`drawbox=x=10:y=100:w=30:h=50:color=lime:t=fill:enable='gte(t,${duration-1})'`,'-c:v','libx264','-c:a','aac',`${root}/fixture-${i}.mp4`]);
 const reservation=createServer();await new Promise(done=>reservation.listen(0,'127.0.0.1',done));
@@ -55,14 +55,14 @@ try{
   page.on('request',r=>{if(r.method()==='POST'){if(r.url().endsWith('/api/discover'))searches.push(r.postDataJSON());if(r.url().endsWith('/api/render'))renders.push(r.postDataJSON());}});
   await page.goto(base);
   await page.locator('#topic').fill('ranking funniest winter fails');
-  await page.getByLabel('Automaticky rozmazat nalezený text ve zdrojových klipech').uncheck();
+  await page.getByLabel('Automaticky upravit nápisy, loga a černé bloky').uncheck();
   await page.locator('#resolution').selectOption('720');
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
   const player=page.getByLabel('Přehrávač hotového Shortu',{exact:true});
   await player.waitFor({timeout:120000});
   await page.waitForFunction(()=>document.querySelector('.finished-preview video')?.readyState>=1);
   assert.equal(renders.length,1);assert.equal(renders[0].voice,true);assert.equal(renders[0].effects,true);
-  assert.deepEqual(new Set(renders[0].clips.map(c=>Math.round(c.duration))),new Set([3,5,7,9,12]));
+  assert.deepEqual(new Set(renders[0].clips.map(c=>Math.round(c.duration))),new Set([3,5,7,9,11]));
   assert.deepEqual(renders[0].clips.map(c=>c.voiceover),['Number five.','Number four.','Number three.','Number two.','Number one.']);
   const first=(await page.request.get(new URL(await player.getAttribute('src'),base).href)).body();
   const firstFile=root+'/with-voice.mp4';await writeFile(firstFile,await first);

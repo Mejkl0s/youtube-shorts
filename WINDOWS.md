@@ -21,6 +21,12 @@ Pro obarvení samotného slova (například `fails`) na něj klikni v seznamu sl
 
 Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Zaškrtnutím **Přebírat nadpis z „Co dnes rankujeme?“** propojení zase zapneš. Volba i vzhled nadpisu se uloží spolu s projektem. Písmo nadpisu může být jiné než písmo čísel a titulků.
 
+## Délka hotového videa a čištění obrazu
+
+Celé hotové video má **nejvýše 40 sekund**. Kratší výsledek se nenatahuje: například 8 nebo 37 sekund zůstane 8 nebo 37. Jednotlivý výřez má 1–30 sekund a součet všech pěti musí být do 40 sekund. Editor ukazuje součet a delší projekt nepovolí exportovat. Automatický výběr hledá celé momenty, které se do limitu vejdou; pokud nestačí, potřebuje další kratší momenty. Starý delší projekt uprav ručně nebo přes **AI zdarma posoudit originály**.
+
+U už nalezených dobrých klipů klikni na **Vyčistit všechny klipy**. Jejich výběr, pořadí a střihy zůstanou zachované. Ruční oblasti se ponechají, automatické se obnoví. Zapnuté **Automaticky upravit nápisy, loga a černé bloky** hledá překryvy také při novém hledání. Text může rozpoznat Tesseract, černé obdélníky detektor a loga připravená lokální AI. Rozpoznání může něco přehlédnout. U klipu klikni na **Rozmazání**, zkontroluj oblasti a pro každou zvol **Rozmazat** nebo **Odstranit · doplnit okolím**. Další oblast označíš tažením myši. Odstranění vyplní oblast z okolních pixelů; skutečný obraz pod blokem obnovit neumí. Pracovní náhled ukazuje rozmazané masky, doplnění okolím ověř až v hotovém MP4. Vlastní nadpis, čísla a poznámky se vykreslují po čištění a zůstanou ostré.
+
 ## Vizuální AI zdarma na tvém PC
 
 1. Použij studio na **http://127.0.0.1:8765/**. V bezplatném Renderu se lokální model nespouští.
@@ -31,7 +37,7 @@ Když název přepíšeš přímo vpravo, přestane se přebírat z tématu. Za�
 
 Tento postup nepotřebuje API klíč a nepřepíná na placené služby. Spouštěč nastaví i serverovou pojistku `RANK_FREE_ONLY=1`, která odmítne placené požadavky a hlasy ze staré záložky. V běžném rozhraní jsou pouze bezplatné volby hledání a hlasu. Snímky pro lokální AI zůstávají na tomto PC. Internet je potřeba pro první stažení modelu a hledání/stahování klipů; bezplatný hlas Edge odesílá text Microsoftu. Na slabším počítači může být výběr pomalý, proto má lokální režim viditelný limit 10 minut a zastavení. Technické hledání má nadále limit 5 minut.
 
-AI posuzuje přípravu, akci a viditelný výsledek z časově označených snímků. Střih má 2–30 sekund podle děje. Pod **Co AI viděla ve scéně** najdeš její pozorování. Může se splést a původní zvuk neposuzuje; finální střih přehraj. Při neúspěchu posouzení zůstanou staré střihy zachované. Odmítne-li síť video stáhnout, model nemá co hodnotit.
+AI posuzuje přípravu, akci a viditelný výsledek z časově označených snímků. Střih má 1–30 sekund podle děje. Pod **Co AI viděla ve scéně** najdeš její pozorování. Může se splést a původní zvuk neposuzuje; finální střih přehraj. Při neúspěchu posouzení zůstanou staré střihy zachované. Odmítne-li síť video stáhnout, model nemá co hodnotit.
 
 ## Pointa, obraz a zvuk
 

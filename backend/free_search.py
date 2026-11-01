@@ -13,6 +13,7 @@ import httpx
 import numpy as np
 from . import work_budget as work
 from .work_budget import WorkStopped
+from .timeline import MIN_CLIP_SECONDS, choose_moments
 
 
 class Text(HTMLParser):
@@ -261,7 +262,7 @@ def youtube_search(topic: str, limit: int, exclude_urls=()):
                 if not isinstance(row, dict) or not re.fullmatch(r'[\w-]{11}', str(row.get('id', ''))):
                     continue
                 duration = row.get('duration')
-                if (isinstance(duration, (int, float)) and not 2 <= duration <= m.MAX_SOURCE_SECONDS) or row.get('live_status') in ('is_live', 'is_upcoming'):
+                if (isinstance(duration, (int, float)) and not MIN_CLIP_SECONDS <= duration <= m.MAX_SOURCE_SECONDS) or row.get('live_status') in ('is_live', 'is_upcoming'):
                     continue
                 title = plain(row.get('title', ''))
                 score = relevance(topic, title, plain(row.get('description', '')))
@@ -344,18 +345,13 @@ def select_free(candidates, topic, *, require_five=True):
     # Prefer one scene per source; only fill the remaining slots with distinct
     # shots from compilations. Multiple windows of one continuous shot never count.
     ordered = sorted(selected, key=lambda row: (row[1].get('source') == 'YouTube', -row[0]))
-    chosen, seen = [], set()
-    for row in ordered:
-        if row[1]['id'] not in seen and len(chosen) < 5:
-            chosen.append(row)
-            seen.add(row[1]['id'])
-    for row in ordered:
-        if len(chosen) == 5:
-            break
-        if row not in chosen:
-            chosen.append(row)
-    if require_five and len(chosen) < 5:
-        raise ValueError(f'Pouze {len(chosen)} různých scén je použitelných. Zkuste jiné téma nebo nahrajte vlastní klipy či kompilaci.')
+    chosen=choose_moments(ordered,duration=lambda row:row[3],
+                          score=lambda row:row[0]-(.05 if row[1].get('source')=='YouTube' else 0),
+                          identity=lambda row:(row[1]['id'],getattr(row[5],'shot',0)),
+                          source=lambda row:row[1]['id'],partial=not require_five)
+    if require_five and len(chosen)<5:
+        available=len({(row[1]['id'],getattr(row[5],'shot',0)) for row in ordered})
+        raise ValueError(f'Pouze {available} různých scén je k dispozici. Pět celých momentů se zatím nevejde do celkového limitu 40 sekund. Zkus další zdroje nebo vyber kratší úplné scény.')
     result = []
     for _, candidate, start, duration, compilation, window in sorted(chosen, key=lambda row: row[0]):
         result.append({**candidate, 'title': candidate['name'][:60], 'voiceover': '', 'start': start, 'duration': duration,
@@ -381,4 +377,5 @@ def recover_analyzed(candidates):
                           'scene_end':getattr(window,'scene_end',start+duration),
                           'selection_version':'whole-scene-v1','review_required':True,
                           'reason':'Dokončená analýza zachovaná po zastavení. Pointu a pořadí zkontroluj.'})
-    return recovered[:5]
+    return choose_moments(recovered,duration=lambda row:row['duration'],score=lambda row:1,
+                          identity=lambda row:row['id'],source=lambda row:row['id'],partial=True)

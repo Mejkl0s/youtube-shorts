@@ -75,7 +75,7 @@ class Edit(BaseModel):
     voiceover: str | None = Field(default=None, max_length=180)
     rank_note: str | None = Field(default=None, max_length=40)
     start: float | None = Field(default=None, ge=0, le=120)
-    duration: float | None = Field(default=None, ge=2, le=30)
+    duration: float | None = Field(default=None, ge=1, le=30)
 
 
 class Plan(BaseModel):

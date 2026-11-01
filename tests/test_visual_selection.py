@@ -38,7 +38,7 @@ def fake_ai(monkeypatch,durations,edit=None):
     return calls
 
 
-def candidates(isolated,durations=(8,9,10,11,12)):
+def candidates(isolated,durations=(5,6,7,8,9)):
     result=[]
     for index,duration in enumerate(durations):
         identity=uuid.uuid4().hex;folder=isolated/'media'/identity;folder.mkdir()
@@ -66,7 +66,7 @@ def test_real_pts_and_contact_sheet_include_late_event(isolated):
 
 
 def test_two_pass_review_keeps_late_results_audio_and_specific_notes(isolated,monkeypatch):
-    durations=(8,9,10,11,12)
+    durations=(5,6,7,8,9)
     sources=candidates(isolated,durations)
     calls=fake_ai(monkeypatch,durations)
     result=m.select_candidates(sources,'winter fails','en')
@@ -76,7 +76,7 @@ def test_two_pass_review_keeps_late_results_audio_and_specific_notes(isolated,mo
     assert all(any(c['type']=='image_url' for c in p['messages'][1]['content']) for p in calls)
     assert len({c['id'] for c in result})==5
     assert len({round(c['duration'],1) for c in result})==5
-    assert all(c['duration']>7 and c['framing']=='fit' and c['has_audio'] for c in result)
+    assert all(c['duration']>4 and c['framing']=='fit' and c['has_audio'] for c in result)
     assert all(c['selection_version']=='visual-event-v2' and c['review_required'] for c in result)
     before=[c['rank_note'] for c in result]
     assert before==[f'Late result {i}' for i in range(5)]
@@ -95,8 +95,8 @@ def test_two_pass_review_keeps_late_results_audio_and_specific_notes(isolated,mo
 
 @pytest.fixture
 def lightweight(monkeypatch):
-    sources=[{'id':uuid.uuid4().hex,'name':'Unverified title','duration':12} for _ in range(6)]
-    monkeypatch.setattr(m,'scene_windows',lambda path:[m.SceneWindow(0,12,0,0,12)])
+    sources=[{'id':uuid.uuid4().hex,'name':'Unverified title','duration':6} for _ in range(6)]
+    monkeypatch.setattr(m,'scene_windows',lambda path:[m.SceneWindow(0,6,0,0,6)])
     monkeypatch.setattr(v,'frames',lambda path,start,end,count:[(start,Image.new('RGB',(224,224))),(end-.05,Image.new('RGB',(224,224)))])
     monkeypatch.setattr(m,'materialize_scenes',lambda clips:clips)
     return sources
@@ -108,7 +108,7 @@ def lightweight(monkeypatch):
     lambda s,r:r['moments'][0].update(confidence=.6),
 ])
 def test_incomplete_unrelated_uncertain_events_do_not_fill_five(lightweight,monkeypatch,change):
-    fake_ai(monkeypatch,[12]*5,change)
+    fake_ai(monkeypatch,[6]*5,change)
     with pytest.raises(v.VisualSelectionError,match='4/5'):
         m.select_candidates(lightweight[:5],'winter fails','en')
 
@@ -126,7 +126,7 @@ def test_incomplete_unrelated_uncertain_events_do_not_fill_five(lightweight,monk
     lambda s,r:s['shortlist'][0].update(end=40),
 ])
 def test_rejects_unsupported_timestamps_missing_evidence_and_repeated_shots(lightweight,monkeypatch,change):
-    fake_ai(monkeypatch,[12]*5,change)
+    fake_ai(monkeypatch,[6]*5,change)
     with pytest.raises(ValueError):m.select_candidates(lightweight[:5],'winter fails','en')
 
 
@@ -135,7 +135,7 @@ def test_ranks_by_visible_event_score_and_rejects_sixth_unrelated_video(lightwei
         for item,score in zip(r['moments'],(30,80,60,20,90,100)):
             item['score']=score
         r['moments'][-1]['topic_match']=False
-    fake_ai(monkeypatch,[12]*6,edit)
+    fake_ai(monkeypatch,[6]*6,edit)
     selected=m.select_candidates(lightweight,'winter fails','en')
     assert [c['visual_review']['score'] for c in selected]==[20,30,60,80,90]
     assert lightweight[5]['id'] not in {c['id'] for c in selected}
@@ -194,7 +194,7 @@ def test_existing_short_cut_is_reviewed_using_entire_retained_original(isolated,
 
 def test_visual_reselect_success_via_real_async_endpoint(isolated,monkeypatch):
     sources=candidates(isolated)
-    fake_ai(monkeypatch,(8,9,10,11,12))
+    fake_ai(monkeypatch,(5,6,7,8,9))
     monkeypatch.setenv('OPENAI_API_KEY','fixture-not-a-real-key')
     rows=[{**s,'title':s['name'],'voiceover':'','start':0,'duration':4} for s in sources]
     client=TestClient(m.app)

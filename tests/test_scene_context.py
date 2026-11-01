@@ -16,7 +16,7 @@ from test_workflow import isolated
 def late_point(path,duration=12):
     m.ffmpeg('-f','lavfi','-i',f'color=c=gray:s=320x180:r=15:d={duration}',
              '-f','lavfi','-i',f'sine=frequency=440:sample_rate=44100:duration={duration}',
-             '-vf',"drawbox=x=0:y=40:w=30:h=60:color=lime:t=fill:enable='gte(t,10.5)'",
+             '-vf',f"drawbox=x=0:y=40:w=30:h=60:color=lime:t=fill:enable='gte(t,{duration-1.5})'",
              '-c:v','libx264','-c:a','aac',str(path))
 
 
@@ -45,7 +45,7 @@ def test_long_shot_uses_motion_peak_with_leadup_and_aftermath(isolated):
 
 def test_batch_recovers_original_ending_full_frame_and_sound_in_real_mp4(isolated):
     source_file=isolated/'input.mp4'
-    late_point(source_file)
+    late_point(source_file,duration=8)
     old=[]
     for _ in range(5):
         folder=isolated/'media'/uuid.uuid4().hex
@@ -53,7 +53,7 @@ def test_batch_recovers_original_ending_full_frame_and_sound_in_real_mp4(isolate
         shutil.copyfile(source_file,folder/'source')
         source=m.register(folder/'source',folder.name,'Late ending')
         cut=m.materialize_scenes([{**source,'title':'Moment','voiceover':'','rank_note':'Keep this note',
-                                  'start':2,'duration':4,'sourceDuration':12,'scene_start':0,'scene_end':12,'_cut_scene':True}])[0]
+                                  'start':2,'duration':4,'sourceDuration':8,'scene_start':0,'scene_end':8,'_cut_scene':True}])[0]
         old.append({**cut,'framing':'fill','rank_note':'Keep this note'})
     job=uuid.uuid4().hex
     m.jobs[job]={'id':job}
@@ -61,7 +61,7 @@ def test_batch_recovers_original_ending_full_frame_and_sound_in_real_mp4(isolate
     assert m.jobs[job]['status']=='done',m.jobs[job]
     clips=m.jobs[job]['clips']
     assert len({c['id'] for c in clips})==5
-    assert all(c['duration']>=11.9 and c['start']==0 and c['source_start']==0 for c in clips)
+    assert all(c['duration']>=7.9 and c['start']==0 and c['source_start']==0 for c in clips)
     assert all(c['has_audio'] and c['framing']=='fit' and c['rank_note']=='Keep this note' for c in clips)
     assert all((isolated/'media'/c['id']/'source').exists() for c in old)
     render=uuid.uuid4().hex
@@ -72,7 +72,7 @@ def test_batch_recovers_original_ending_full_frame_and_sound_in_real_mp4(isolate
     assert m.jobs[render]['status']=='done',m.jobs[render]
     output=isolated/'jobs'/render/'ranking.mp4'
     # The late event at the LEFT EDGE survives timing AND portrait framing.
-    raw=m.ffmpeg('-ss','11.2','-i',str(output),'-frames:v','1','-vf','crop=4:4:12:548,format=rgb24','-f','rawvideo','pipe:1')
+    raw=m.ffmpeg('-ss','7.2','-i',str(output),'-frames:v','1','-vf','crop=4:4:12:548,format=rgb24','-f','rawvideo','pipe:1')
     pixel=np.frombuffer(raw,np.uint8).reshape(-1,3).mean(axis=0)
     assert pixel[1]>180 and pixel[0]<80 and pixel[2]<80,pixel
     audio=m.ffmpeg('-i',str(output),'-t','1','-vn','-ac','1','-f','s16le','pipe:1')

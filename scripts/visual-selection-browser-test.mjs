@@ -9,7 +9,7 @@ import {createServer} from 'node:net';
 import {randomUUID} from 'node:crypto';
 const root=resolve('.runtime/visual-browser-'+randomUUID());
 await mkdir(root,{recursive:true});
-for(const [i,duration] of [6,8,10,12,14].entries())execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y',
+for(const [i,duration] of [4,6,8,10,12].entries())execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y',
   '-f','lavfi','-i',`color=c=gray:s=160x284:r=15:d=${duration}`,'-f','lavfi','-i',`sine=frequency=440:duration=${duration}`,
   '-vf',`drawbox=x=5:y=100:w=30:h=50:color=lime:t=fill:enable='gte(t,${duration-1})'`,'-c:v','libx264','-c:a','aac',`${root}/fixture-${i}.mp4`]);
 const reservation=createServer();await new Promise(done=>reservation.listen(0,'127.0.0.1',done));
@@ -73,11 +73,11 @@ try{
   await page.locator('#topic').fill('winter fails');
   await page.getByLabel('Po hledání vytvořit hotový náhled').uncheck();
   await page.getByLabel('Voiceover',{exact:true}).uncheck();
-  await page.getByLabel('Automaticky rozmazat nalezený text ve zdrojových klipech').uncheck();
+  await page.getByLabel('Automaticky upravit nápisy, loga a černé bloky').uncheck();
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.visual-evidence').length===5,{},{timeout:90000});
   const lengths=await page.getByLabel(/Délka klipu/).evaluateAll(inputs=>inputs.map(i=>Number(i.value)));
-  assert.ok(lengths.every(n=>n>5));assert.equal(new Set(lengths.map(Math.round)).size,5);
+  assert.ok(lengths.every(n=>n>3));assert.equal(new Set(lengths.map(Math.round)).size,5);
   const first=page.locator('.visual-evidence').first();await first.locator('summary').click();
   assert.ok((await first.innerText()).includes('Late result visible'));
   await page.locator('.save-button').click();
