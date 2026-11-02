@@ -7,10 +7,18 @@ Technický návrh a hranice jsou v [DESKTOP.md](DESKTOP.md).
 
 ## Instalace a první nastavení
 
+Ověřená sestava: [stáhnout Windows ZIP, 341 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780/artifacts/13183257915).
+GitHub pro stažení artefaktu vyžaduje přihlášení. ZIP rozbal a spusť
+`Rank-Studio-2.0.0-Setup.exe`. Pokud se přímé stažení neotevře, na
+[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780#artifacts)
+dole vyber **Artifacts → Rank-Studio-Windows-x64**.
+
 Výstup Windows buildu je `Rank-Studio-2.0.0-Setup.exe`. Instalátor přidá aplikaci
 do nabídky Start a odinstalaci do Windows. Produkční vydání má mít platný podpis
 vydavatele. Nepodepsaný CI build je vývojový artefakt, ne ověřené produkční vydání.
-V Linuxovém pracovním prostředí nebyl Windows instalátor vytvořen ani spuštěn.
+Windows instalátor se sestavuje na Windows runneru. Dokončené kontroly a stav
+instalace jsou doložené v [záznamu ověření](DESKTOP-VERIFICATION.md); samotný
+Linuxový sidecar není Windows instalátor.
 
 1. Spusť nainstalovanou aplikaci **Rank Studio**.
 2. V průvodci vyber **Lokální**, **Cloudový** nebo **Kombinovaný** režim.
@@ -141,12 +149,18 @@ Výstup je v `release/windows`, včetně integrity souborů `SHA256SUMS.json`.
 Build nepublikuje vydání. `.github/workflows/windows-desktop.yml` připravuje
 stejný build na Windows runneru, regresní testy, skutečný Electron s přibaleným
 backendem a test instalace/odinstalace na jednorázovém profilu. Artefakt se
-jmenuje **Rank-Studio-Windows-x64**. Zde nebyl stav vzdáleného workflow ověřen;
-přístup ke GitHub Actions API blokuje síť pracovního prostředí.
+jmenuje **Rank-Studio-Windows-x64**. [Stav Windows workflow](https://github.com/Mejkl0s/youtube-shorts/actions/workflows/windows-desktop.yml)
+a hranice skutečně dokončeného ověření jsou v záznamu testů. Samotná přítomnost
+workflow nepotvrzuje, že byl vytvořen použitelný instalátor.
+Artefakty mají retenční dobu podle GitHub Actions. Pro trvalou produkční
+distribuci zveřejni podepsané vydání podle postupu níže.
 
-Vývojové spuštění po `npm ci` a `npm --prefix desktop ci`:
+Vývojové spuštění po vytvoření `.venv` a instalaci Python závislostí výše:
 
 ```powershell
+npm ci
+npm --prefix desktop ci
+npm run build
 npm --prefix desktop start
 ```
 
@@ -163,7 +177,7 @@ Před podepsaným buildem nastav mimo zdrojový kód:
 - `RANK_PUBLISHER`: přesný očekávaný název podepisujícího vydavatele.
 - `RANK_UPDATE_URL`: produkční HTTPS adresář pro manifest a artefakty.
 
-Pak spusť `scripts/build_desktop.py --signed`. Bez certifikátu/publishera tento
+Pak spusť `.\.venv\Scripts\python.exe scripts/build_desktop.py --signed`. Bez certifikátu/publishera tento
 režim selže. Ověř Authenticode podpis vytvořeného `.exe` ve Windows a zveřejni
 spolu `latest.yml`, instalátor a případný `.blockmap`. Samotný build nic neodešle.
 Certifikát není součástí projektu ani instalátoru.

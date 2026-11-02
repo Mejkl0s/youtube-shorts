@@ -6,7 +6,7 @@ A personal AI director, editor and MP4 renderer for ranking Shorts: exactly five
 
 The installed Electron edition reuses this editor with a bundled Python backend, native tray/file dialogs, versioned projects, repeatable AI setup wizard and synchronized local/cloud provider selection. DeepSeek, OpenAI, Anthropic, Gemini, OpenRouter and custom APIs use separate adapters. Windows API keys use DPAPI. The web/standalone free defaults below remain in place.
 
-See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md) and [architecture](DESKTOP.md). The NSIS installer is built on Windows using the included CI workflow; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
+See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
 ## Finished video: at most 40 seconds
 

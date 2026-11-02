@@ -36,9 +36,12 @@ node scripts/compilation-browser-test.mjs
 Poslední příkaz potřebuje testovací backend na `127.0.0.1:8000`.
 Na Windows použij místo `.venv/bin/python` cestu `.venv\Scripts\python.exe`.
 
-- Python na Linuxu: **312 testů prošlo** (298,77 s), s jedním upozorněním
+- Python na Linuxu: **313 testů prošlo** (242,93 s), s jedním upozorněním
   knihovny Starlette na testovací HTTP klient. Původní regresní sada a desktopové testy adaptérů, klíčů, hranic
   endpointů, streamů, autentizace, snapshotů, SQLite, archivů a modelů.
+  Po úpravě Windows testovacího prostředí a kontroly původních ZIP názvů
+  prošlo také všech 70 souvisejících cílených kontrol.
+  Prošel i nový samostatný test opakované přípravy již připravených nástrojů.
 - Node: 5 úspěšných kontrol IPC origin/frame, omezeného rozhraní, externích
   odkazů a přímého privátního HTTP/multipart transportu. Konfigurace balení
   prošla také validací schématu electron-builderu.
@@ -77,12 +80,41 @@ sandbox. Tím se neprokazuje jeho ochrana na úrovni OS. Produkční nastavení
 okna ponechává `sandbox`, `contextIsolation` a `webSecurity` zapnuté a Node
 v rendereru vypnutý; Windows test tento příznak nepřidává.
 
+## Windows CI
+
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780)
+používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
+je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
+
+| Kontrola | Doložený stav |
+|---|---|
+| Frontend a bezpečnostní Node testy | Prošly na Windows. |
+| Celá Python regresní sada | Prošla na Windows; POSIX procesová kontrola je na Windows výslovně vynechaná. |
+| PyInstaller backend a NSIS `.exe` | Sestaveny na Windows. |
+| Celý Electron scénář s přibaleným Windows backendem | Prošel na Windows, včetně kompaktního okna, MP4 exportu, archivů, simulované chyby uložení, restartu a chování systémové lišty. |
+| Instalace, spuštění, reinstalace, zachování dat, odinstalace | Prošly; ověřen Start menu zástupce, skutečné spuštění a SQLite stav, normální ukončení, zachování databáze i dalšího uživatelského souboru po reinstalaci a odinstalaci. |
+| Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 341 MB. |
+
+Celý běh skončil úspěšně pro zdrojový commit
+`c78e8cd0368602d066c29d539c3cdba03f3f6a0c`. Úspěšná reinstalace stejné verze
+není vydávána za test aktualizace ze skutečného podepsaného feedu.
+
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780/artifacts/13183257915)
+vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
+GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
+`e6328343bc5863cb7bcd63fcba3f1391619fc1542b8c40f1bb22cbba520d53df`.
+
+Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
+i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako
+v reprodukovatelném návodu. OCR závislost pro testy se stahuje z oficiálního
+zdroje s kontrolou SHA-256. Windows se pro přístup k souborům řídí ACL; Linuxové
+testy bitů `0600/0700` nejsou vydávané za kontrolu Windows ACL.
+
 ## Co zde ověřeno nebylo
 
-- Windows `.exe`, instalace, reinstalace, odinstalace, Start menu, start po
-  přihlášení, skutečné Windows DPAPI a různé monitory/DPI. Windows CI obsahuje
-  build a instalační akceptační skript, ale přístup k jeho stavu přes GitHub
-  Actions API zde blokuje síť. Úspěšný vzdálený běh proto není doložený.
+- Fyzický Windows 10/11 počítač uživatele, restart Windows, start po přihlášení,
+  různé monitory/DPI a oddělení souborů mezi dvěma reálnými Windows účty.
+  Automatický běh Windows Server 2022 tyto ruční kontroly nenahrazuje.
 - Živé cloudové volání včetně DeepSeek s platným soukromým klíčem.
   Testy protokolu nenahrazují ověření účtu, kreditu, konkrétního modelu a jeho
   výstupní kvality. Žádný placený požadavek nebyl kvůli ověření automaticky spuštěn.
