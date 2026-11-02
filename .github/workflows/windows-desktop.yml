@@ -6,6 +6,9 @@ on:
     paths: ['desktop/**', 'backend/**', 'src/**', 'scripts/desktop*', 'scripts/build_desktop.py', 'requirements.txt', 'package*.json', '.github/workflows/windows-desktop.yml']
 permissions:
   contents: read
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: windows-2022
@@ -63,6 +66,12 @@ jobs:
             '```text' | Add-Content $env:GITHUB_STEP_SUMMARY
             Get-Content "$env:RUNNER_TEMP\rank-pytest.log" -Tail 160 | Add-Content $env:GITHUB_STEP_SUMMARY
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            # Public check annotations remain readable when raw Actions logs
+            # require a browser login. Only test failures are reported.
+            Get-Content "$env:RUNNER_TEMP\rank-pytest.log" | Where-Object { $_ -match '^FAILED |^ERROR |^E\s' } | Select-Object -First 30 | ForEach-Object {
+              $rankFailure = $_.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Windows regression::$rankFailure"
+            }
             exit $rankTestExit
           }
       - name: Build bundled backend and NSIS exe
