@@ -116,7 +116,7 @@ try{
   // usable. SQLite injects a real storage failure for this import only.
   const python=resolve('.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python');
   const database=root+'/runtime/private/desktop/projects.sqlite3';
-  function sql(statement){return execFileSync(python,['-c','import sqlite3,sys;db=sqlite3.connect(sys.argv[1]);db.execute(sys.argv[2]);db.commit();db.close()',database,statement]);}
+  function sql(statement){return execFileSync(python,['-X','utf8','-c','import sqlite3,sys;db=sqlite3.connect(sys.argv[1]);db.execute(sys.argv[2]);db.commit();db.close()',database,statement]);}
   await page.locator('#video-title').fill('Keep current project after failed import');
   await page.evaluate(()=>window.rankDesktop.saveState(Object.fromEntries(['rank-studio-project','rank-studio-chat','rank-studio-assets','rank-studio-sources','rank-studio-previous-clips','rank-studio-writing'].map(key=>[key,localStorage.getItem(key)]).filter(([,value])=>value!==null))));
   sql("CREATE TRIGGER reject_fixture_import BEFORE INSERT ON state WHEN NEW.key='rank-studio-project' AND instr(NEW.value,'Desktop project restored')>0 BEGIN SELECT RAISE(FAIL,'fixture storage failure'); END");
@@ -126,7 +126,7 @@ try{
   await page.locator('#video-title').fill('Autosave still works after failed import');
   let retained='';
   for(let attempt=0;attempt<40;attempt++){
-    retained=execFileSync(python,['-c',"import sqlite3,sys;db=sqlite3.connect(sys.argv[1]);print(db.execute(\"SELECT value FROM state WHERE key='rank-studio-project'\").fetchone()[0]);db.close()",database],{encoding:'utf8'});
+    retained=execFileSync(python,['-X','utf8','-c',"import sqlite3,sys;db=sqlite3.connect(sys.argv[1]);print(db.execute(\"SELECT value FROM state WHERE key='rank-studio-project'\").fetchone()[0]);db.close()",database],{encoding:'utf8'});
     if(retained.includes('Autosave still works after failed import'))break;
     await page.waitForTimeout(250);
   }
