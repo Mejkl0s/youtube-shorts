@@ -166,7 +166,7 @@ def _terminate(process):
                 stream.close()
 
 
-def process_result(args, seconds):
+def process_result(args, seconds, *, cwd=None):
     budget = current()
     if not budget and os.environ.get('RANK_DESKTOP_MODE')=='1':
         # Upload/preview helpers also belong to the desktop lifecycle, even
@@ -174,17 +174,17 @@ def process_result(args, seconds):
         budget=Budget(seconds);identity='process-'+str(id(budget))
         with _lock:_controls[identity]=budget
         token=_active.set(budget)
-        try:return process_result(args,seconds)
+        try:return process_result(args,seconds,cwd=cwd)
         finally:
             _active.reset(token)
             with _lock:_controls.pop(identity,None)
     if not budget:
-        return subprocess.run(args, capture_output=True, timeout=seconds,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' and os.environ.get('RANK_DESKTOP_MODE')=='1' else 0)
+        return subprocess.run(args, capture_output=True, timeout=seconds,cwd=cwd,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' and os.environ.get('RANK_DESKTOP_MODE')=='1' else 0)
     budget.check()
     deadline = time.monotonic()+min(seconds, budget.remaining())
     options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
     if os.name=='nt' and os.environ.get('RANK_DESKTOP_MODE')=='1':options['creationflags']|=subprocess.CREATE_NO_WINDOW
-    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **options)
+    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,cwd=cwd, **options)
     try:
         while True:
             budget.check()

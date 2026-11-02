@@ -110,7 +110,7 @@ def reference(reference_id: str):
     path = m.DATA / 'templates' / f'{reference_id}.json'
     if not path.exists():
         raise ValueError('Šablona nebyla nalezena. Nahrajte ji znovu.')
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
 @router.post('/templates/upload')

@@ -1,4 +1,5 @@
 import uuid
+import shutil
 
 import numpy as np
 import pytest
@@ -101,9 +102,10 @@ def test_ai_may_use_separate_shots_but_not_two_windows_of_same_shot(isolated,mon
 @pytest.mark.parametrize('background,box',[('navy',''),('yellow','drawbox=x=40:y=260:w=640:h=150:color=black:t=fill,')])
 def test_real_ocr_finds_burned_in_text_in_portrait_coordinates(isolated,background,box):
     source=isolated/'text.mp4'
+    shutil.copyfile(m.FONTS['bold'],isolated/'fixture-font.ttf')
     m.ffmpeg('-f','lavfi','-i',f'color=c={background}:s=720x1280:r=15:d=3','-vf',
-             box+f"drawtext=fontfile={m.filter_path(m.FONTS['bold'])}:text='WINTER FAILS':fontsize=50:fontcolor=white:x=80:y=300",
-             '-c:v','libx264',str(source))
+             box+"drawtext=fontfile=fixture-font.ttf:text='WINTER FAILS':fontsize=50:fontcolor=white:x=80:y=300",
+             '-c:v','libx264',str(source),cwd=isolated)
     regions,note=detect_text(source,0,3)
     assert regions,note
     assert any(r['x']<.15 and r['y']<.25 and r['x']+r['w']>.65 and r['y']+r['h']>.26 for r in regions),regions

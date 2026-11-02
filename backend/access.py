@@ -57,7 +57,7 @@ def same_origin(request):
 
 
 def login_page(username='owner', error=''):
-    document = (Path(__file__).with_name('login.html')).read_text()
+    document = (Path(__file__).with_name('login.html')).read_text(encoding='utf-8')
     document = document.replace('@@ERROR@@', '<p class="error" role="alert">' + html.escape(error) + '</p>' if error else '')
     document = document.replace('@@USERNAME@@', html.escape(username, quote=True))
     return HTMLResponse(document, headers={'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin'})

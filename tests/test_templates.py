@@ -25,7 +25,7 @@ def isolated(tmp_path, monkeypatch):
 
 def make_reference(path):
     m.ffmpeg('-f', 'lavfi', '-i', 'color=c=0x181818:s=720x1280', '-vf',
-             f"drawtext=fontfile={m.FONT}:text='TOP FIVE MOMENTS':fontsize=46:fontcolor=white:x=(w-tw)/2:y=65,drawtext=fontfile={m.FONT}:text='#5':fontsize=95:fontcolor=0xCAFA63:x=50:y=250,drawtext=fontfile={m.FONT}:text='THE PERFECT MOMENT':fontsize=37:fontcolor=white:x=(w-tw)/2:y=1020",
+             f"drawtext=fontfile={m.filter_path(m.FONT)}:text='TOP FIVE MOMENTS':fontsize=46:fontcolor=white:x=(w-tw)/2:y=65,drawtext=fontfile={m.filter_path(m.FONT)}:text='#5':fontsize=95:fontcolor=0xCAFA63:x=50:y=250,drawtext=fontfile={m.filter_path(m.FONT)}:text='THE PERFECT MOMENT':fontsize=37:fontcolor=white:x=(w-tw)/2:y=1020",
              '-frames:v', '1', str(path))
 
 
@@ -65,7 +65,7 @@ def test_no_recognized_text_retains_user_layout_and_reports_limit(isolated):
 def test_video_template_selects_actual_frame_and_rejects_outside_duration(isolated):
     video = isolated / 'reference.mp4'
     m.ffmpeg('-f', 'lavfi', '-i', 'color=c=black:s=360x640:r=15:d=3', '-f', 'lavfi', '-i', 'color=c=black:s=360x640:r=15:d=3', '-filter_complex',
-             f"[0:v]drawtext=fontfile={m.FONT}:text='#5':fontsize=75:fontcolor=yellow:x=20:y=100[v0];[1:v]drawtext=fontfile={m.FONT}:text='#1':fontsize=75:fontcolor=red:x=160:y=200[v1];[v0][v1]concat=n=2:v=1:a=0[v]",
+             f"[0:v]drawtext=fontfile={m.filter_path(m.FONT)}:text='#5':fontsize=75:fontcolor=yellow:x=20:y=100[v0];[1:v]drawtext=fontfile={m.filter_path(m.FONT)}:text='#1':fontsize=75:fontcolor=red:x=160:y=200[v1];[v0][v1]concat=n=2:v=1:a=0[v]",
              '-map', '[v]', '-c:v', 'libx264', str(video))
     client = TestClient(m.app)
     ref = client.post('/api/templates/upload', files={'file': ('example.mp4', video.read_bytes(), 'video/mp4')}).json()

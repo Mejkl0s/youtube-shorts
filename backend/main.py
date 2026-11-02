@@ -71,15 +71,15 @@ MAX_SOURCE_SECONDS = 600
 VOICE_NAMES = {'cs': 'cs_CZ-jirka-medium', 'en': 'en_US-lessac-medium'}
 
 
-def run(args: list[str], timeout: int = 180):
-    result = work.process_result(args, timeout)
+def run(args: list[str], timeout: int = 180, *, cwd=None):
+    result = work.process_result(args, timeout,**({'cwd':cwd} if cwd is not None else {}))
     if result.returncode:
         raise RuntimeError(result.stderr.decode(errors='replace')[-2000:])
     return result.stdout
 
 
-def ffmpeg(*args: str, timeout: int = 180):
-    return run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-threads', '2', *args], timeout)
+def ffmpeg(*args: str, timeout: int = 180, cwd=None):
+    return run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-threads', '2', *args], timeout,**({'cwd':cwd} if cwd is not None else {}))
 
 
 def probe(path: Path):
@@ -96,7 +96,7 @@ def asset(asset_id: str):
     path = DATA / 'media' / asset_id / 'metadata.json'
     if not path.exists():
         raise HTTPException(404, 'Klip nebyl nalezen. Nahrajte jej znovu.')
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
 def register(path: Path, asset_id: str, name: str, *, fast_preview=False):
@@ -389,7 +389,12 @@ def render(job_id: str, project: Project):
     folder.mkdir()
     width, height = (1080, 1920) if project.resolution == '1080' else (720, 1280)
     scale = width / 1080
+    font_copy=folder/'ranking-font.ttf'
     try:
+        # FreeType in Windows FFmpeg may not open a Unicode absolute font path.
+        # A relative ASCII filename works even when the job directory contains
+        # Czech characters; CreateProcessW sets that directory without loss.
+        shutil.copyfile(FONTS[project.layout.font],font_copy)
         # Use complete output frames, so five rounded segments cannot exceed
         # the total ceiling. This discards less than one frame per boundary.
         for clip in project.clips:
@@ -442,9 +447,9 @@ def render(job_id: str, project: Project):
             else:
                 filters.append(f'anullsrc=r=44100:cl=stereo,atrim=duration={duration}[audio]')
             layout = project.layout
-            font = filter_path(FONTS[layout.font])
+            font = font_copy.name
             def draw_text(file: Path, size: int, y: str, color: str = 'white', x: str = '(w-text_w)/2'):
-                return f'drawtext=fontfile={font}:textfile={filter_path(file)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
+                return f'drawtext=fontfile={font}:textfile={filter_path(file.name)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
             video = f'[0:v]{portrait_filter(width,height,clip.framing)},fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS[source_clean]'
             filters.append(video)
             cleanup_filters, clean = blur_filters(clip.blur_regions, width, height)
@@ -468,7 +473,7 @@ def render(job_id: str, project: Project):
                     video += ',' + draw_text(notefile, note_size, str(note_y), 'white', str(note_x))
             filters.append(video + '[video]')
             out = folder / f'clip-{rank}.mp4'
-            ffmpeg(*inputs, '-filter_complex_threads', '2', '-filter_complex', ';'.join(filters), '-map', '[video]', '-map', '[audio]', '-t', str(duration), '-c:v', 'libx264', '-r','30','-fps_mode','cfr', '-threads', '2', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2', '-movflags', '+faststart', str(out))
+            ffmpeg(*inputs, '-filter_complex_threads', '2', '-filter_complex', ';'.join(filters), '-map', '[video]', '-map', '[audio]', '-t', str(duration), '-c:v', 'libx264', '-r','30','-fps_mode','cfr', '-threads', '2', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2', '-movflags', '+faststart', str(out),cwd=folder)
             rendered.append(out)
         set_job(job_id, progress=96, message='Spojuji pět klipů a dokončuji MP4…')
         concat = folder / 'concat.txt'
@@ -494,6 +499,9 @@ def render(job_id: str, project: Project):
         set_job(job_id, status='done', progress=100, message='Váš Short je připravený.', download=f'/api/jobs/{job_id}/download', duration=float(output_meta['format']['duration']))
     except Exception as error:
         set_job(job_id, status='failed', message=f'Export se nezdařil: {str(error)[-1000:]}')
+    finally:
+        try:font_copy.unlink(missing_ok=True)
+        except OSError:pass
 
 
 @app.post('/api/render', status_code=202)

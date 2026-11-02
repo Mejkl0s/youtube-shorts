@@ -79,7 +79,9 @@ jobs:
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
             # Public check annotations remain readable when raw Actions logs
             # require a browser login. Only test failures are reported.
-            Get-Content "$env:RUNNER_TEMP\rank-pytest.log" | Where-Object { $_ -match '^FAILED |^ERROR |^E\s' } | Select-Object -First 30 | ForEach-Object {
+            $rankReportLines = Get-Content "$env:RUNNER_TEMP\rank-pytest.log"
+            $rankFailureLines = @($rankReportLines | Where-Object { $_ -match '^FAILED |^ERROR ' } | Select-Object -First 7) + @($rankReportLines | Where-Object { $_ -match '^E\s' } | Select-Object -First 3)
+            $rankFailureLines | ForEach-Object {
               $rankFailure = $_.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
               Write-Output "::error title=Windows regression::$rankFailure"
             }
