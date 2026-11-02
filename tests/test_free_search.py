@@ -230,13 +230,13 @@ def test_free_search_to_real_scene_selection_and_export_never_calls_paid_api(iso
     monkeypatch.setattr(f, 'engine_results', lambda *args: results())
     original = m.run
     downloads = []
-    def download(args, timeout=180):
+    def download(args, timeout=180, **options):
         if 'yt_dlp' in args:
             downloads.append(args[-1])
             output = args[args.index('-o') + 1].replace('%(ext)s', 'mp4')
             m.ffmpeg('-i',str(source),'-vf',f'hue=h={len(downloads)*40}','-c:v','libx264',output)
             return b''
-        return original(args, timeout)
+        return original(args, timeout, **options)
     monkeypatch.setattr(m, 'run', download)
     client = TestClient(m.app)
     response = client.post('/api/discover', json={'topic': 'funny cats', 'mode': 'free', 'allow_youtube': False, 'candidate_count': 8})
@@ -369,13 +369,13 @@ def test_partial_search_preserves_real_scenes_for_upload_completion_and_export(i
     monkeypatch.setattr(m, 'public_search', lambda *args: (entries, []))
     monkeypatch.setattr(m, 'ai_request', lambda *args, **kwargs: pytest.fail('Partial recovery called a paid API'))
     original = m.run
-    def download(args, timeout=180):
+    def download(args, timeout=180, **options):
         if 'yt_dlp' in args:
             output = args[args.index('-o')+1].replace('%(ext)s', 'mp4')
             index=int(args[-1].rsplit('cats',1)[1].strip('/'))
             m.ffmpeg('-i',str(black if index==3 else source),'-vf',f'hue=h={index*40}','-c:v','libx264',output)
             return b''
-        return original(args, timeout)
+        return original(args, timeout, **options)
     monkeypatch.setattr(m, 'run', download)
     job_id = uuid.uuid4().hex
     m.jobs[job_id] = {'id': job_id, 'kind': 'discover', 'status': 'queued'}
