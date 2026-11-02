@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['desktop/**', 'backend/**', 'src/**', 'scripts/desktop*', 'scripts/build_desktop.py', 'requirements.txt', 'package*.json', '.github/workflows/windows-desktop.yml']
+    paths: ['desktop/**', 'backend/**', 'src/**', 'tests/**', 'scripts/desktop*', 'scripts/build_desktop.py', 'scripts/test_windows_installer.ps1', 'requirements.txt', 'package*.json', '.github/workflows/windows-desktop.yml']
 permissions:
   contents: read
 concurrency:
