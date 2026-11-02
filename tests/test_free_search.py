@@ -1,6 +1,7 @@
 import shutil
 import time
 import uuid
+from pathlib import Path
 from urllib.parse import quote
 from xml.sax.saxutils import escape
 
@@ -154,7 +155,7 @@ def test_download_failure_reports_known_causes_without_echoing_secrets(detail, e
 
 def test_failed_video_preparation_is_not_reported_as_download_block(isolated, monkeypatch):
     def download(args, timeout):
-        (isolated/'media'/args[args.index('-o')+1].split('/')[-2]/'download.mp4').write_bytes(b'video fixture')
+        (Path(args[args.index('-o')+1]).parent/'download.mp4').write_bytes(b'video fixture')
         return b''
     monkeypatch.setattr(m, 'run', download)
     monkeypatch.setattr(m, 'register', lambda *args: (_ for _ in ()).throw(RuntimeError('decoder failed; opaque-owner-secret')))

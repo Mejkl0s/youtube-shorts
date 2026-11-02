@@ -32,7 +32,8 @@ def source_files(bundle: bytes, commit: str):
         for member in archive.infolist():
             parts = PurePosixPath(member.filename).parts
             if (not parts or parts[0] != prefix or any(part in ('.', '..') for part in parts)
-                    or '\\' in member.filename or any(':' in part for part in parts) or PurePosixPath(member.filename).is_absolute()
+                    or member.orig_filename!=member.filename or '\\' in member.orig_filename
+                    or any(':' in part for part in parts) or PurePosixPath(member.filename).is_absolute()
                     or stat.S_ISLNK(member.external_attr >> 16)):
                 raise ValueError('Archiv obsahuje nepodporovanou cestu.')
             if member.is_dir() or len(parts) < 2:

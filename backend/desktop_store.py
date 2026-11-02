@@ -160,7 +160,7 @@ def make_bundle(state):
 def safe_member(member):
     path=PurePosixPath(member.filename)
     reserved={'CON','PRN','AUX','NUL',*(f'COM{i}' for i in range(1,10)),*(f'LPT{i}' for i in range(1,10))}
-    if (path.is_absolute() or member.filename!=path.as_posix() or '\\' in member.filename or any(part in ('.','..') for part in path.parts)
+    if (path.is_absolute() or member.orig_filename!=member.filename or member.filename!=path.as_posix() or '\\' in member.orig_filename or any(part in ('.','..') for part in path.parts)
             or path.name.split('.')[0].upper() in reserved
             or stat.S_ISLNK(member.external_attr>>16) or member.flag_bits&1 or member.is_dir()):return False
     if member.filename=='project.json':return member.file_size<=9*1024**2

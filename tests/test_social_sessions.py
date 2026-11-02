@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import stat
 import time
 
@@ -33,8 +34,11 @@ def test_owner_only_import_filters_domains_and_stores_outside_media(isolated, mo
     response = client.post('/api/source-sessions/instagram', files={'file': ('cookies.txt', raw)}, auth=auth)
     assert response.status_code == 200 and response.json() == {'configured': True, 'cookie_count': 1}
     path = isolated/'private/source-sessions/instagram.txt'
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    # Windows reports emulated mode bits; access there uses the user profile's
+    # ACL, not POSIX 0600/0700. Content, HTTP isolation and cleanup run on both.
+    if os.name!='nt':
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     assert b'another-platform-token' not in path.read_bytes()
     state = client.get('/api/source-sessions', auth=auth)
     assert 'opaque-test-session' not in state.text
@@ -71,7 +75,7 @@ def test_actual_cookie_jar_and_disposable_copy_are_scoped_and_cleaned(isolated):
             jar.load()
             assert 'opaque-test-session' in jar.get_cookie_header('https://www.instagram.com/reel/cats/')
             assert not jar.get_cookie_header('https://www.youtube.com/watch?v=CATCLIP0000')
-            assert stat.S_IMODE(path.stat().st_mode) == 0o600
+            if os.name!='nt':assert stat.S_IMODE(path.stat().st_mode) == 0o600
             raise RuntimeError('Download failed')
     assert temporary is not None and not temporary.exists()
     with s.download_session('https://www.youtube.com/watch?v=CATCLIP0000') as path:

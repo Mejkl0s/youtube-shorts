@@ -17,7 +17,11 @@ def bundle(extra=()):
         for name in REQUIRED:
             archive.writestr(f'youtube-shorts-{COMMIT}/{name}', 'new source')
         for name, content in extra:
-            archive.writestr(name if name.startswith('/') else f'youtube-shorts-{COMMIT}/{name}', content)
+            entry=zipfile.ZipInfo()
+            # ZipInfo's constructor normalizes backslashes on Windows. Set the
+            # raw archive name afterward so malicious-path fixtures stay raw.
+            entry.filename=name if name.startswith('/') else f'youtube-shorts-{COMMIT}/{name}'
+            archive.writestr(entry, content)
     return out.getvalue()
 
 
