@@ -86,6 +86,7 @@ try{
   await settings.getByRole('button',{name:'Aktualizace',exact:true}).click();
   assert.equal(await settings.getByRole('button',{name:'Zkontrolovat aktualizace',exact:true}).isDisabled(),true);
   await page.getByRole('button',{name:'Zavřít nastavení',exact:true}).click();
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,800));
   await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{value:false,configurable:true});window.dispatchEvent(new Event('offline'));});
   await page.getByText('Offline',{exact:true}).waitFor();
   await page.getByLabel('Zadání textovému AI pomocníkovi',{exact:true}).fill('Local work while remote connectivity is unavailable.');
