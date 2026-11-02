@@ -38,6 +38,18 @@ jobs:
         run: |
           python scripts/build_desktop.py --prepare-only
           Add-Content -Path $env:GITHUB_PATH -Value "$pwd\build\desktop-tools\bin"
+      - name: Install verified OCR dependency for regression fixtures
+        run: |
+          $rankOcrInstaller = Join-Path $env:RUNNER_TEMP 'rank-tesseract-5.4.0.exe'
+          $rankOcrDirectory = Join-Path $env:RUNNER_TEMP 'rank-test-ocr'
+          Invoke-WebRequest -Uri 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe' -OutFile $rankOcrInstaller
+          # microsoft/winget-pkgs: UB-Mannheim.TesseractOCR 5.4.0.20240606
+          if ((Get-FileHash -LiteralPath $rankOcrInstaller -Algorithm SHA256).Hash -ne 'C885FFF6998E0608BA4BB8AB51436E1C6775C2BAFC2559A19B423E18678B60C9') { throw 'OCR installer integrity check failed.' }
+          $rankOcrResult = Start-Process -FilePath $rankOcrInstaller -ArgumentList @('/S', "/D=$rankOcrDirectory") -Wait -PassThru
+          if ($rankOcrResult.ExitCode -ne 0) { throw 'OCR fixture dependency installation failed.' }
+          & (Join-Path $rankOcrDirectory 'tesseract.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'OCR fixture dependency did not start.' }
+          Add-Content -Path $env:GITHUB_PATH -Value $rankOcrDirectory
       - name: Frontend production check
         run: npm run build
       - name: Desktop security checks
