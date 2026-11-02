@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['desktop/**', 'backend/**', 'src/**', 'tests/**', 'scripts/desktop*', 'scripts/build_desktop.py', 'scripts/test_windows_installer.ps1', 'requirements.txt', 'package*.json', '.github/workflows/windows-desktop.yml']
+    paths: ['desktop/**', 'backend/**', 'src/**', 'tests/**', 'scripts/desktop*', 'scripts/build_desktop.py', 'scripts/test_windows_installer.ps1', 'scripts/windows_ci_step.ps1', 'requirements.txt', 'package*.json', '.github/workflows/windows-desktop.yml']
 permissions:
   contents: read
 concurrency:
@@ -92,13 +92,13 @@ jobs:
             exit $rankTestExit
           }
       - name: Build bundled backend and NSIS exe
-        run: python scripts/build_desktop.py --skip-install
+        run: .\scripts\windows_ci_step.ps1 -StepName 'Windows build' -Executable python -Arguments @('scripts/build_desktop.py', '--skip-install')
       - name: Exercise actual Electron app with bundled Windows backend
         env:
           RANK_DESKTOP_BACKEND: ${{ github.workspace }}\build\desktop-backend\rank-backend\rank-backend.exe
-        run: node scripts/desktop-electron-test.mjs
+        run: .\scripts\windows_ci_step.ps1 -StepName 'Desktop acceptance' -Executable node -Arguments @('scripts/desktop-electron-test.mjs')
       - name: Install, launch, upgrade and uninstall on Windows
-        run: .\scripts\test_windows_installer.ps1
+        run: .\scripts\windows_ci_step.ps1 -StepName 'Installer acceptance' -Executable pwsh -Arguments @('-NoProfile', '-File', 'scripts/test_windows_installer.ps1')
       - name: Upload installer and integrity files
         uses: actions/upload-artifact@v4
         with:

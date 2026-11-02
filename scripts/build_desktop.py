@@ -65,12 +65,13 @@ def prepare_tools():
         for name in ('ffmpeg','ffprobe'):
             source=shutil.which(name)
             if not source:raise RuntimeError('Pro test sidecaru chybí '+name)
-            shutil.copy2(source,binary/name)
+            if Path(source).resolve()!=(binary/name).resolve():shutil.copy2(source,binary/name)
     node=shutil.which('node')
     if not node:raise RuntimeError('Chybí Node.js pro yt-dlp JavaScript runtime.')
     major=int(subprocess.check_output([node,'-p','process.versions.node.split(".")[0]'],text=True).strip())
     if major<24:raise RuntimeError('Build vyžaduje Node.js 24 nebo novější.')
-    shutil.copy2(Path(node).resolve(),binary/('node.exe' if os.name=='nt' else 'node'))
+    node_target=binary/('node.exe' if os.name=='nt' else 'node')
+    if Path(node).resolve()!=node_target.resolve():shutil.copy2(Path(node).resolve(),node_target)
     for name in ('LICENSE','LICENSE.txt'):
         license_file=Path(node).resolve().parent/name
         if license_file.is_file():shutil.copy2(license_file,notices/('Node-'+name))
