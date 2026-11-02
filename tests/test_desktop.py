@@ -201,6 +201,28 @@ def test_external_ollama_is_never_terminated_by_app(desktop,monkeypatch):
     assert models.stop_service()['owned'] is False
 
 
+def test_owned_local_service_is_actually_stopped(desktop,monkeypatch,tmp_path):
+    import subprocess,sys
+    monkeypatch.setenv('OLLAMA_MODELS',str(tmp_path/'owned-models'))
+    client=httpx.Client;popen=subprocess.Popen;children=[]
+    def unavailable(request):raise httpx.ConnectError('fixture service is not running',request=request)
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:client(transport=httpx.MockTransport(unavailable),**kwargs))
+    monkeypatch.setattr(models.shutil,'which',lambda name:sys.executable if name=='ollama' else None)
+    def start(args,**kwargs):
+        if args==[sys.executable,'serve']:args=[sys.executable,'-c','import time;time.sleep(30)']
+        process=popen(args,**kwargs);children.append(process);return process
+    monkeypatch.setattr(models.subprocess,'Popen',start)
+    try:
+        assert models.start_service()['owned'] is True
+        owned=models._owned
+        assert models.stop_service()['owned'] is False
+        assert owned.poll() is not None
+    finally:
+        for child in children:
+            if child.poll() is None:child.kill()
+            child.wait(timeout=5)
+
+
 def test_model_removal_requires_matching_confirmation_and_no_active_jobs(desktop,monkeypatch):
     with pytest.raises(Exception) as error:models.delete('qwen2.5vl:7b','wrong')
     assert error.value.status_code==400

@@ -109,7 +109,7 @@ def start_service():
         model_path=Path(storage());model_path.mkdir(parents=True,exist_ok=True)
         environment={**os.environ,'OLLAMA_HOST':'127.0.0.1:11434','OLLAMA_MODELS':str(model_path),'OLLAMA_NO_CLOUD':'1'}
         _owned=subprocess.Popen([executable,'serve'],env=environment,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-                                creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,start_new_session=os.name!='nt')
         return service_status()
 
 

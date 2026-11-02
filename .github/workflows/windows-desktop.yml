@@ -38,11 +38,21 @@ jobs:
         run: |
           python scripts/build_desktop.py --prepare-only
           Add-Content -Path $env:GITHUB_PATH -Value "$pwd\build\desktop-tools\bin"
-      - name: Regression and security checks
+      - name: Frontend production check
+        run: npm run build
+      - name: Desktop security checks
+        run: npm --prefix desktop test
+      - name: Python regressions
         run: |
-          npm run build
-          npm --prefix desktop test
-          python -m pytest -q
+          python -m pytest -q --tb=short 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\rank-pytest.log"
+          $rankTestExit = $LASTEXITCODE
+          if ($rankTestExit -ne 0) {
+            '### Windows regression failure' | Add-Content $env:GITHUB_STEP_SUMMARY
+            '```text' | Add-Content $env:GITHUB_STEP_SUMMARY
+            Get-Content "$env:RUNNER_TEMP\rank-pytest.log" -Tail 160 | Add-Content $env:GITHUB_STEP_SUMMARY
+            '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            exit $rankTestExit
+          }
       - name: Build bundled backend and NSIS exe
         run: python scripts/build_desktop.py --skip-install
       - name: Exercise actual Electron app with bundled Windows backend
