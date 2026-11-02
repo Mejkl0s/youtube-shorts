@@ -43,16 +43,27 @@ jobs:
           Add-Content -Path $env:GITHUB_PATH -Value "$pwd\build\desktop-tools\bin"
       - name: Install verified OCR dependency for regression fixtures
         run: |
+          try {
           $rankOcrInstaller = Join-Path $env:RUNNER_TEMP 'rank-tesseract-5.4.0.exe'
           $rankOcrDirectory = Join-Path $env:RUNNER_TEMP 'rank-test-ocr'
           Invoke-WebRequest -Uri 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe' -OutFile $rankOcrInstaller
           # microsoft/winget-pkgs: UB-Mannheim.TesseractOCR 5.4.0.20240606
           if ((Get-FileHash -LiteralPath $rankOcrInstaller -Algorithm SHA256).Hash -ne 'C885FFF6998E0608BA4BB8AB51436E1C6775C2BAFC2559A19B423E18678B60C9') { throw 'OCR installer integrity check failed.' }
           $rankOcrResult = Start-Process -FilePath $rankOcrInstaller -ArgumentList @('/S', "/D=$rankOcrDirectory") -Wait -PassThru
-          if ($rankOcrResult.ExitCode -ne 0) { throw 'OCR fixture dependency installation failed.' }
-          & (Join-Path $rankOcrDirectory 'tesseract.exe') --version
+          if ($rankOcrResult.ExitCode -ne 0) { throw "OCR fixture dependency installation failed with exit code $($rankOcrResult.ExitCode)." }
+          $rankOcrBinary = Join-Path $rankOcrDirectory 'tesseract.exe'
+          if (-not (Test-Path -LiteralPath $rankOcrBinary)) {
+            $rankOcrBinary = Join-Path $env:ProgramFiles 'Tesseract-OCR\tesseract.exe'
+          }
+          if (-not (Test-Path -LiteralPath $rankOcrBinary)) { throw 'Verified OCR installer did not create its executable.' }
+          & $rankOcrBinary --version
           if ($LASTEXITCODE -ne 0) { throw 'OCR fixture dependency did not start.' }
-          Add-Content -Path $env:GITHUB_PATH -Value $rankOcrDirectory
+          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $rankOcrBinary)
+          } catch {
+            $rankOcrFailure = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=OCR dependency setup::$rankOcrFailure"
+            exit 1
+          }
       - name: Frontend production check
         run: npm run build
       - name: Desktop security checks
