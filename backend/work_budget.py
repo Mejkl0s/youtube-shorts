@@ -148,7 +148,7 @@ def _terminate(process):
         # Terminate only this job's owned tree (yt-dlp may launch FFmpeg/Node).
         try:
             subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
-                           capture_output=True, timeout=3)
+                           capture_output=True, timeout=3,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.environ.get('RANK_DESKTOP_MODE')=='1' else 0)
         except (OSError, subprocess.TimeoutExpired):
             pass
         if process.poll() is None:
@@ -168,11 +168,22 @@ def _terminate(process):
 
 def process_result(args, seconds):
     budget = current()
+    if not budget and os.environ.get('RANK_DESKTOP_MODE')=='1':
+        # Upload/preview helpers also belong to the desktop lifecycle, even
+        # outside a queued discovery/render job. cancel_all must own them too.
+        budget=Budget(seconds);identity='process-'+str(id(budget))
+        with _lock:_controls[identity]=budget
+        token=_active.set(budget)
+        try:return process_result(args,seconds)
+        finally:
+            _active.reset(token)
+            with _lock:_controls.pop(identity,None)
     if not budget:
-        return subprocess.run(args, capture_output=True, timeout=seconds)
+        return subprocess.run(args, capture_output=True, timeout=seconds,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' and os.environ.get('RANK_DESKTOP_MODE')=='1' else 0)
     budget.check()
     deadline = time.monotonic()+min(seconds, budget.remaining())
     options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
+    if os.name=='nt' and os.environ.get('RANK_DESKTOP_MODE')=='1':options['creationflags']|=subprocess.CREATE_NO_WINDOW
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **options)
     try:
         while True:

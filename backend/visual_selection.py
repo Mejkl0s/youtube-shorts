@@ -259,9 +259,14 @@ def _select(candidates, topic, language, ranking_criteria):
                       source_url=scene['candidate'].get('source_url', ''), framing='fit', selection_version='visual-event-v2')
         if not 1 <= m.word_count(clip.voiceover) <= 7 or not clip.rank_note:
             raise VisualSelectionError('AI nedodržela krátký komentář a poznámku.')
+        review_provider=_provider.get();review_model=None
+        if os.environ.get('RANK_DESKTOP_MODE')=='1':
+            from .desktop_ai import selected
+            selection=selected()
+            if selection:review_provider=selection['profile']['id'];review_model=selection['model']
         accepted.append((score, {**scene['candidate'], **clip.model_dump(), 'sourceDuration': scene['candidate']['duration'],
                                 'scene_start': scene['a'], 'scene_end': scene['b'], '_cut_scene': True,
-                                'review_required': True, 'visual_review': {'method': 'timestamped-frames-v2','provider':_provider.get(),
+                                'review_required': True, 'visual_review': {'method': 'timestamped-frames-v2','provider':review_provider,'model':review_model,
                                 'confidence': confidence, 'score': score, 'sample_interval': [lower, upper], **observations}}))
     # Keep completed, reviewed results for deadline/failure recovery. Never
     # silently substitute motion-only results into this visual review workflow.

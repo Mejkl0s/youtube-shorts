@@ -1,0 +1,98 @@
+# Ověření desktopové verze
+
+Záznam z 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
+Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
+
+## Implementované části
+
+| Oblast | Implementace |
+|---|---|
+| Windows aplikace | Electron, NSIS, ikony, vlastní okno, přibalený PyInstaller backend a FFmpeg/Node; bez Vite/Renderu. |
+| První spuštění | Pět kroků, lokální/cloudový/kombinovaný režim, více poskytovatelů, opakovatelné předvyplněné nastavení. |
+| Přepínání | Společná konfigurace horní lišty a Nastavení, trvalá volba, vlastní snapshot pro běžící úlohu. |
+| Cloud | OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter a vlastní kompatibilní endpoint; samostatné formáty přenosu. |
+| Lokální AI | Ollama, LM Studio, llama.cpp a vlastní loopback API, skutečné modely z discovery, kontrola obrazové schopnosti. |
+| Přístupové údaje | Windows DPAPI, samostatné úložiště podle poskytovatele a originu serveru, žádný plaintext fallback. |
+| Offline práce | Lokální editor, projekty, média, export, instalované modely/Piper; označené síťové závislosti. |
+| Modely a hardware | Oficiální Ollama pull/delete a Piper manifest, průběh, stop/resume, místo, potvrzení mazání, RAM/CPU/disk a dostupné údaje NVIDIA. |
+| Systémová integrace | Tray, volitelný start po přihlášení, chování zavření, uložení poslední změny, ukončení vlastních procesů. |
+| Data a aktualizace | SQLite, kopie projektů, bezpečný archiv s médii, nedestruktivní migrace; podpisový updater připravený, bez feedu vypnutý. |
+
+Původní střih, vzhled, předlohy, klipy, zvuk, rozmazání/odstranění překryvů
+a omezení finálního videa na nejvýše 40 sekund jsou zachované.
+
+## Automatizované ověření
+
+Základní příkazy z kořene projektu:
+
+```bash
+.venv/bin/python -m pytest -q
+npm run build
+npm --prefix desktop test
+node scripts/visual-selection-browser-test.mjs
+node scripts/compilation-browser-test.mjs
+```
+
+Poslední příkaz potřebuje testovací backend na `127.0.0.1:8000`.
+Na Windows použij místo `.venv/bin/python` cestu `.venv\Scripts\python.exe`.
+
+- Python na Linuxu: **312 testů prošlo** (298,77 s), s jedním upozorněním
+  knihovny Starlette na testovací HTTP klient. Původní regresní sada a desktopové testy adaptérů, klíčů, hranic
+  endpointů, streamů, autentizace, snapshotů, SQLite, archivů a modelů.
+- Node: 5 úspěšných kontrol IPC origin/frame, omezeného rozhraní, externích
+  odkazů a přímého privátního HTTP/multipart transportu. Konfigurace balení
+  prošla také validací schématu electron-builderu.
+- Frontend: TypeScript a produkční Vite build prošly. Fonty z `/api/fonts/`
+  se úmyslně načítají až z místního backendu.
+- Vizuální browser test prošel se skutečným dekódováním a extrakcí snímků,
+  proměnlivými střihy, zvukem, důkazy děje a kontrolou nezměněného projektu
+  při odmítnutí výsledku. AI, hledání a stahování používají lokální fixtures.
+- Kompilační browser test prošel se skutečným uploadem, OCR, pěti scénami,
+  ruční maskou, odstraněním překryvu, uložením, obnovením, MP4 exportem,
+  dávkovým čištěním a mobilním dialogem.
+
+## Skutečný desktop a balení v Linuxovém prostředí
+
+Sestaven byl skutečný PyInstaller sidecar a Electron Linux balíček, nikoli
+Windows instalátor. Jejich velikosti jsou přibližně 651 MB a 927 MB včetně
+rozbalených závislostí; nejsou to odhady velikosti Windows instalátoru.
+
+`scripts/desktop-electron-test.mjs` prošel se skutečným Electronem a přibaleným
+backendem. Ověřil izolovaný preload, autentizaci, průvodce, hybridní konfiguraci,
+synchronizaci modelu, zachování rozpracovaného požadavku, zrušení, simulovaný
+offline stav s funkčním loopbackem, skutečný MP4 se zvukem do 40 sekund,
+nativní export/import projektu, SQLite a obnovení po restartu. Vynucená chyba
+zápisu při importu zachovala původní projekt i následné automatické ukládání.
+Modelové odpovědi pocházely z lokálního protokolového testovacího serveru.
+
+Samostatně prošel start zabaleného produkčního programu s novým uživatelským
+adresářem: ASAR main/preload, vlastní sidecar a vykreslený editor zapsaly stav
+do SQLite. Po násilném ukončení rodiče skončil také jeho vlastní backend.
+Obsah ASAR byl porovnán se zdroji a politika aktualizací uvnitř byla vypnutá.
+Přibalený yt-dlp se spustil přes skutečný frozen CLI dispatch.
+
+Linuxové GUI testy vyžadují virtuální X server. Používají testovací příznak
+`--no-sandbox`, protože v tomto prostředí není dostupný systémový Chromium
+sandbox. Tím se neprokazuje jeho ochrana na úrovni OS. Produkční nastavení
+okna ponechává `sandbox`, `contextIsolation` a `webSecurity` zapnuté a Node
+v rendereru vypnutý; Windows test tento příznak nepřidává.
+
+## Co zde ověřeno nebylo
+
+- Windows `.exe`, instalace, reinstalace, odinstalace, Start menu, start po
+  přihlášení, skutečné Windows DPAPI a různé monitory/DPI. Windows CI obsahuje
+  build a instalační akceptační skript, ale přístup k jeho stavu přes GitHub
+  Actions API zde blokuje síť. Úspěšný vzdálený běh proto není doložený.
+- Živé cloudové volání včetně DeepSeek s platným soukromým klíčem.
+  Testy protokolu nenahrazují ověření účtu, kreditu, konkrétního modelu a jeho
+  výstupní kvality. Žádný placený požadavek nebyl kvůli ověření automaticky spuštěn.
+- Stažení skutečných Ollama/Piper vah a rychlost/kvalita 7B na uživatelově GPU.
+  Modelové registry/Hugging Face jsou zde blokované proxy. Kontrolní součty,
+  TLS ani ochrana před neúplným stažením se kvůli tomu nevypínají.
+- Produkční aktualizace: není dodaný certifikát ani podepsaný distribuční feed.
+  Mechanismus vyžaduje SHA-512 a Windows Authenticode očekávaného vydavatele;
+  do jejich nastavení zůstává neaktivní.
+
+Reprodukovatelný Windows postup a potřebné produkční vstupy jsou popsány
+v návodu. Tento záznam nepovažuje Linuxový balíček za důkaz ověřené distribuce
+pro Windows.

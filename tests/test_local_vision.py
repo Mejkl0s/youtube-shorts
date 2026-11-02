@@ -177,7 +177,7 @@ def test_setup_uses_only_fixed_visible_installer(local_pc,monkeypatch,model):
     import subprocess
     path=local.model_path();path.parent.mkdir();path.write_text(json.dumps({'model':model}))
     monkeypatch.setattr(local,'supported',lambda:True)
-    monkeypatch.setattr(local,'os',types.SimpleNamespace(name='nt'))
+    monkeypatch.setattr(local,'os',types.SimpleNamespace(name='nt',environ=m.os.environ))
     monkeypatch.setattr(local,'_setup_process',None)
     monkeypatch.setattr(subprocess,'CREATE_NEW_CONSOLE',16,raising=False)
     calls=[]

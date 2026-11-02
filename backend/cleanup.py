@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import base64
 import math
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -134,6 +135,9 @@ def overlap(a,b):
 def vision_regions(frames,bounds):
     from . import local_vision
     from . import work_budget as work
+    if os.environ.get('RANK_DESKTOP_MODE')=='1':
+        from .desktop_ai import overlay_review_allowed
+        if not overlay_review_allowed():return [],False
     if not frames or not local_vision.status()['ready']:
         return [],False
     evidence=[{'type':'text','text':f'OVERLAY REVIEW. Three chronological frames of the same clip. Active video bounds x0,y0,x1,y1: {bounds}. All coordinates refer to ONE 720x1280 portrait frame, normalized 0–1.'}]

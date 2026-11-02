@@ -19,6 +19,7 @@ ROOT_FILES = {
     'package.json', 'package-lock.json', 'requirements.txt', 'index.html',
     'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'vite.config.ts',
     'SPUSTIT-WINDOWS.bat', 'OVERIT-WINDOWS.bat', 'WINDOWS.md', 'README.md',
+    'DESKTOP.md', 'DESKTOP-WINDOWS.md', 'DESKTOP-VERIFICATION.md',
 }
 
 
@@ -37,7 +38,7 @@ def source_files(bundle: bytes, commit: str):
             if member.is_dir() or len(parts) < 2:
                 continue
             relative = PurePosixPath(*parts[1:])
-            if not (str(relative) in ROOT_FILES or relative.parts[0] in ('backend', 'src', 'public', 'scripts')):
+            if not (str(relative) in ROOT_FILES or relative.parts[0] in ('backend', 'src', 'public', 'scripts','desktop')):
                 continue
             if any(part.startswith('.') for part in relative.parts):
                 continue

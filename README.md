@@ -2,6 +2,12 @@
 
 A personal AI director, editor and MP4 renderer for ranking Shorts: exactly five clips, #5 → #1, portrait 9:16, sound effects and a short English neural voiceover per clip (1–7 words).
 
+## Windows desktop
+
+The installed Electron edition reuses this editor with a bundled Python backend, native tray/file dialogs, versioned projects, repeatable AI setup wizard and synchronized local/cloud provider selection. DeepSeek, OpenAI, Anthropic, Gemini, OpenRouter and custom APIs use separate adapters. Windows API keys use DPAPI. The web/standalone free defaults below remain in place.
+
+See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md) and [architecture](DESKTOP.md). The NSIS installer is built on Windows using the included CI workflow; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
+
 ## Finished video: at most 40 seconds
 
 The five-clip ranking has a fixed total ceiling of **40 seconds**, not a target to fill. A valid eight- or 37-second ranking stays that length. Individual clips support 1–30 seconds; five clips can therefore total 5–40 seconds. The editor displays the total, disables over-limit export, and the server rejects an over-limit render even for an old browser client. Existing over-limit projects remain editable rather than being silently truncated.

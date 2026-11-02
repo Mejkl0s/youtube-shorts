@@ -27,6 +27,32 @@ def test_real_subprocess_is_stopped_at_total_deadline():
     finally:w._active.reset(token)
 
 
+def test_desktop_shutdown_cancels_helper_outside_queued_job(tmp_path,monkeypatch):
+    import threading
+    monkeypatch.setenv('RANK_DESKTOP_MODE','1')
+    ready=tmp_path/'helper-ready'
+    errors=[]
+    def helper():
+        try:
+            w.process_result([sys.executable,'-c',
+                f'from pathlib import Path;import time;Path({str(ready)!r}).touch();time.sleep(30)'],40)
+        except w.WorkStopped as error:errors.append(error)
+    thread=threading.Thread(target=helper)
+    before=set(w._controls)
+    thread.start()
+    try:
+        deadline=time.monotonic()+5
+        while not ready.exists() and time.monotonic()<deadline:time.sleep(.01)
+        assert ready.exists() and set(w._controls)-before
+        w.cancel_all()
+        thread.join(4)
+        assert not thread.is_alive() and len(errors)==1 and errors[0].cancelled
+        assert set(w._controls)==before
+    finally:
+        w.cancel_all()
+        thread.join(5)
+
+
 @pytest.mark.skipif(os.name=='nt',reason='POSIX process-tree assertion; native taskkill needs Windows validation')
 def test_deadline_terminates_owned_child_process_tree(tmp_path):
     pidfile=tmp_path/'child.pid'

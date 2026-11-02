@@ -1,5 +1,7 @@
 # Rank Studio na Windows
 
+Pro novou **instalovanou desktopovou verzi** se systémovou lištou a průvodcem AI použij [desktopový návod](DESKTOP-WINDOWS.md). Níže je nadále podporovaný postup pro původní místní webovou verzi.
+
 1. Stáhni [celý ZIP aplikace](https://github.com/Mejkl0s/youtube-shorts/archive/refs/heads/main.zip).
 2. Klikni na ZIP pravým tlačítkem → **Extrahovat vše**. Otevři rozbalenou složku.
 3. Dvakrát klikni na **SPUSTIT-WINDOWS.bat**. Soubor spouštěj z rozbalené složky, nikoli uvnitř ZIPu.

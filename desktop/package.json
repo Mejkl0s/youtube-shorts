@@ -1,0 +1,16 @@
+{
+  "name": "rank-studio-desktop",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Rank Studio — Windows video editor with local and cloud AI",
+  "author": "Rank Studio",
+  "license": "UNLICENSED",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "package": "electron-builder --config builder.cjs --win nsis --x64 --publish never"
+  },
+  "dependencies": { "electron-updater": "6.8.11" },
+  "devDependencies": { "electron": "45.2.1", "electron-builder": "26.18.0" }
+}

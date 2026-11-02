@@ -92,18 +92,29 @@ async def login(request):
 
 
 async def owner_access(request, call_next):
+    if os.environ.get('RANK_DESKTOP_MODE')=='1':
+        token=os.environ.get('RANK_DESKTOP_TOKEN','')
+        if not token or not hmac.compare_digest(request.headers.get('x-rank-desktop-token','').encode(),token.encode()):
+            return JSONResponse({'detail':'Desktop vyžaduje vlastní přihlášené okno aplikace.'},status_code=403)
     if os.environ.get('RANK_LOCAL_MODE') == '1':
         if request.url.hostname not in ('127.0.0.1', 'localhost', '::1'):
             return JSONResponse({'detail': 'Lokální studio přijímá jen adresu tohoto počítače.'}, status_code=400)
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not same_origin(request):
             return JSONResponse({'detail': 'Požadavek musí pocházet z lokálního studia.'}, status_code=403)
     if request.url.path == '/api/health':
-        return await call_next(request)
+        response=await call_next(request)
+        response.headers['Cache-Control']='no-store'
+        return response
     password = os.environ.get('STUDIO_PASSWORD', '')
     if not password:
         if os.environ.get('STUDIO_PUBLIC') == '1':
             return JSONResponse({'detail': 'Nastavte STUDIO_PASSWORD na hostingu, aby byl web přístupný pouze majiteli.'}, status_code=503)
-        return await call_next(request)
+        response=await call_next(request)
+        if request.url.path in ('/','/index.html') or request.url.path.startswith('/api/'):
+            response.headers['Cache-Control']='no-store'
+        if os.environ.get('RANK_DESKTOP_MODE')=='1':
+            response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'"
+        return response
     if request.url.path in ('/login', '/auth/login'):
         return await login(request)
     if request.url.path == '/auth/logout' and request.method == 'POST':

@@ -47,6 +47,9 @@ def selected_model():
 
 def status(refresh=False):
     global _status_cache
+    if os.environ.get('RANK_DESKTOP_MODE')=='1':
+        from .desktop_ai import vision_status
+        return vision_status()
     model=selected_model()
     if not supported():
         return {'supported':False,'ready':False,'model':model,'message':'AI zdarma běží na tvém PC, nikoli na bezplatném Renderu.'}
@@ -105,6 +108,7 @@ class ModelChoice(BaseModel):
 def choose_model(body:ModelChoice):
     from . import main as m
     global _status_cache
+    if os.environ.get('RANK_DESKTOP_MODE')=='1':raise HTTPException(409,'V desktopu vyber model přes horní lištu nebo Nastavení → AI modely.')
     if not supported():
         raise HTTPException(409,'Model vyber ve studiu na svém PC.')
     with _setup_lock,m.job_lock:
@@ -133,6 +137,7 @@ def start_setup():
     from . import main as m
     import subprocess
     global _setup_process
+    if os.environ.get('RANK_DESKTOP_MODE')=='1':raise HTTPException(409,'Použij Nastavení → Lokální modely. Desktop nevyžaduje příkazové okno.')
     if not supported():
         raise HTTPException(409,'Přípravu spusť ve studiu na svém PC na adrese 127.0.0.1:8765.')
     if os.name!='nt':
@@ -151,6 +156,9 @@ def start_setup():
 
 
 def _call(prompt,evidence,tokens):
+    if os.environ.get('RANK_DESKTOP_MODE')=='1':
+        from .desktop_ai import request
+        return request(prompt,evidence,tokens)
     require_ready()
     model=selected_model()
     text=[]
