@@ -329,3 +329,6 @@ main { max-width: 1550px; grid-template-columns: minmax(430px,1fr) 350px; gap: 3
 .phone-art .orb { display: none; }
 .phone-art .art-grid { top: 0; height: 100%; transform: none; opacity: .35; background-size: 32px 32px; }
 .phone-art-label { color: #b5c9e4; }
+@media (min-width:721px) {
+  .preview-panel { top: calc(var(--studio-topbar-height,80px) + 18px); max-height: calc(100dvh - var(--studio-topbar-height,80px) - 36px); }
+}

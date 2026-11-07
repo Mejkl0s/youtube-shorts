@@ -46,6 +46,13 @@ async function api<T>(path: string, data?: unknown, multipart = false): Promise<
 }
 
 function App() {
+  useEffect(()=>{
+    const bar=document.querySelector('.topbar');
+    if(!bar)return;
+    const measure=()=>document.documentElement.style.setProperty('--studio-topbar-height',`${bar.getBoundingClientRect().height}px`);
+    const observer=new ResizeObserver(measure);observer.observe(bar);measure();
+    return()=>observer.disconnect();
+  },[]);
   const desktopAI=useDesktopAI();
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);

@@ -177,7 +177,8 @@ def select(candidates,body, report):
                     except visual.VisualSelectionError:
                         # Preserve the audited work without presenting an
                         # unverified full set as a successful ranking.
-                        partial=[audited[row[1]['id']] for row in chosen[:4]]
+                        best=sorted(chosen,key=lambda row:row[0],reverse=True)[:4]
+                        partial=[audited[row[1]['id']] for row in reversed(best)]
                         if work.current():work.current().visual_clips=partial
                         return partial
                     compared.add(signature)
