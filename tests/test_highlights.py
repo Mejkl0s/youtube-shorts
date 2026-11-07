@@ -267,3 +267,25 @@ def test_uncertain_set_is_not_reported_as_five_verified_distinct_incidents(isola
     try:result=h.select(sources,m.DiscoverRequest(topic='winter fails',mode='local',search_depth='thorough'),lambda *args:None)
     finally:work._active.reset(token)
     assert len(result)==4 and budget.visual_clips==result
+
+
+def test_no_search_results_explains_retrieval_failure_instead_of_ai_rejection(isolated,monkeypatch):
+    monkeypatch.setattr(h,'search',lambda body:([],['bing: veřejné vyhledávání nebylo dostupné (HTTP 403).']))
+    monkeypatch.setattr(h,'select',lambda *args:pytest.fail('No source was retrieved'))
+    identity=uuid.uuid4().hex;m.jobs[identity]={'id':identity}
+    h.discover(identity,m.DiscoverRequest(topic='winter fails',mode='local',search_depth='thorough'))
+    result=m.jobs[identity]
+    assert result['status']=='failed' and 'odkazy' in result['message'] and '403' in result['warnings'][0]
+    assert not result['downloaded_sources'] and result['partial_clips']==[]
+
+
+def test_all_downloads_fail_explains_loading_failure_separately(isolated,monkeypatch):
+    monkeypatch.setattr(h,'search',lambda body:(entries(3),[]))
+    def denied(*args):raise m.CandidateDownloadError('blocked','Video není veřejně dostupné.')
+    monkeypatch.setattr(m,'download_candidate',denied)
+    monkeypatch.setattr(h,'select',lambda *args:pytest.fail('No downloadable sources'))
+    identity=uuid.uuid4().hex;m.jobs[identity]={'id':identity}
+    h.discover(identity,m.DiscoverRequest(topic='winter fails',mode='local',search_depth='thorough'))
+    result=m.jobs[identity]
+    assert result['status']=='failed' and '3 odkazů' in result['message'] and 'nepodařilo načíst' in result['message']
+    assert len(result['download_failures'])==3 and result['partial_clips']==[]

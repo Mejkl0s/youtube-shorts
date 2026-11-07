@@ -218,6 +218,9 @@ def discover(job_id, body):
         entries,warnings=search(body)
         for row in entries:stats[m.source_name(row['url'])]['found']+=1
         publish(progress=10,search_results=[{'url':row['url'],'title':row['title']} for row in entries],youtube_fallback=False)
+        if not entries:
+            publish(status='failed',progress=100,partial_clips=[],message='Vyhledávání nevrátilo odpovídající odkazy na videa. Otevři podrobnosti jednotlivých zdrojů: vyhledávač nebo síť mohou být nedostupné. Zatím nebylo posouzené žádné video.')
+            return
         excluded=set()
         for identity in body.exclude_asset_ids:
             try:excluded.add(m.original_hash(identity))
@@ -242,6 +245,9 @@ def discover(job_id, body):
                 if video.get('content_sha256'):excluded.add(video['content_sha256'])
                 candidates.append(video);stats[source]['downloaded']+=1
             publish(progress=10+int(30*(i+1)/max(1,len(entries))))
+        if not candidates:
+            publish(status='failed',progress=100,partial_clips=[],message=f'Našel jsem {len(entries)} odkazů, ale žádné video se nepodařilo načíst. Otevři podrobnosti zdrojů a případně Přihlášení ke zdrojům. AI zatím neměla co posoudit.')
+            return
         def reviewed(candidate,ok):
             row=stats.get(candidate.get('source') or m.source_name(candidate.get('source_url','')),stats['YouTube'])
             row['reviewed']+=1;row['accepted']+=int(ok)
