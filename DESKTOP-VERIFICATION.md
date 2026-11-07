@@ -20,6 +20,15 @@ výřezy s audiem, uložením/obnovou limitu 25 s a rozsahu 100 odkazů. Na pět
 Původní browser test vizuálního výběru také prošel. AI i sociální síť v těchto
 scénářích jsou protokolové fixtures; přesnost živého modelu tím není měřena.
 
+Samostatná kontrola skutečného Electronu navíc obnovila původní projekt
+bez nových polí: všech pět šestisekundových klipů a původní limit 40 s
+zůstaly zachované, export nebyl zablokovaný. Nové hledání používalo důkladný
+rozsah a 100 odkazů. Při živém veřejném hledání dne 7. 11. 2026 vrátily
+Bing, DuckDuckGo i YouTube v tomto prostředí HTTP 403; nebyl nalezen žádný
+odkaz. Tato kontrola tedy nepotvrzuje dostupnost sítí z uživatelova PC.
+Aplikace odděleně hlásí chybějící odkazy, neúspěšné stahování a nedostatek
+obsahově přijatých momentů.
+
 Nový Windows instalátor ověřuje následný CI běh; níže uvedený předchozí
 Windows artefakt 2.0.0 sám neobsahuje změny 2.0.1.
 

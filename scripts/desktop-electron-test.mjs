@@ -70,6 +70,11 @@ try{
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-b');
   await wizard.getByRole('button',{name:'Pokračovat',exact:true}).click();
   await wizard.getByRole('button',{name:'Dokončit',exact:true}).click();await wizard.waitFor({state:'hidden'});
+  const durationLimit=page.getByLabel('Maximální délka projektu',{exact:true});
+  await durationLimit.fill('');await durationLimit.pressSequentially('40');await durationLimit.press('Tab');
+  assert.equal(await durationLimit.inputValue(),'40');
+  await durationLimit.fill('');await durationLimit.pressSequentially('25');await durationLimit.press('Tab');
+  assert.equal(await durationLimit.inputValue(),'25');
   await page.getByText(/AI pomocník pro text ·/).click();
   await page.getByLabel('Zadání textovému AI pomocníkovi',{exact:true}).fill('Write a short original title.');
   await page.getByRole('button',{name:'Odeslat vybranému modelu',exact:true}).click();

@@ -79,6 +79,7 @@ function App() {
   const [candidateCount, setCandidateCount] = useState(window.rankDesktop?100:24);
   const [searchDepth,setSearchDepth]=useState<'quick'|'thorough'>(window.rankDesktop?'thorough':'quick');
   const [maxDuration,setMaxDuration]=useState(window.rankDesktop?25:40);
+  const [durationDraft,setDurationDraft]=useState<string|null>(null);
   const [autoPreview,setAutoPreview]=useState(true);
   const [avoidRepeats,setAvoidRepeats]=useState(true);
   const sourceHistory=useRef<string[]>([]);
@@ -447,7 +448,7 @@ function App() {
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <a className="wordmark" href="/">rank<span>studio</span><span className="beta">STUDIO</span></a>
+        <a className="wordmark" href="/">rank<span>studio</span><span className="beta">{window.rankDesktop?'DESKTOP':'WEB'}</span></a>
         <div className="breadcrumbs"><span>Projekty</span><span>/</span><strong>{restored?'Otevřený projekt':'Nový Short'}</strong></div>
         <DesktopTopbar/><div className="top-actions"><span className="save-status"><span className={saved ? 'dot green' : 'dot'}/>{saved ? 'Uloženo' : restored ? 'Projekt obnoven' : 'Nový projekt'}</span><button className="button secondary save-button" onClick={saveProject} disabled={occupied}><Save size={15}/> Uložit projekt</button>{health?.owner_login&&<form action="/auth/logout" method="post"><button className="button secondary save-button" disabled={occupied}>Odhlásit se</button></form>}</div>
       </header>
@@ -493,7 +494,7 @@ function App() {
             <input ref={fileInput} type="file" multiple accept="video/*,.mp4,.mov,.webm,.mkv" className="hidden" onChange={e => e.target.files && upload(e.target.files, uploadTarget.current)}/>
             {previousClips?.some(Boolean)&&<div className="previous-clips-note"><span>Předchozí klipy jsou uložené zvlášť. Nové hledání je automaticky nepoužije.</span><button className="text-button" disabled={occupied} onClick={restorePreviousClips}>Vrátit předchozí klipy</button></div>}
             {legacyFourSecondCuts&&<div className="legacy-cuts-note" role="status"><strong>Tento projekt stále používá pět čtyřsekundových výřezů.</strong><p>Aktualizace aplikace uložené střihy sama nepřepsala. Obnov celé scény z originálů a zkontroluj jejich pointu.</p><button className="button secondary" disabled={occupied} onClick={recutAll}>Obnovit střihy z originálů</button></div>}
-            <p className={`duration-budget ${overDuration?'over':''}`} role="status">Celé video: {clips.filter(Boolean).reduce((sum,c)=>sum+(c?.duration??0),0).toFixed(1)} / {maxDuration} s · maximální délka, kratší výsledek se nenatahuje.{overDuration?' Překročený limit: uprav střihy nebo vyber jiné celé momenty.':''}</p><label className="duration-limit">Limit tohoto projektu <input aria-label="Maximální délka projektu" type="number" min={5} max={MAX_PROJECT_SECONDS} step={1} disabled={occupied} value={maxDuration} onChange={e=>setMaxDuration(Math.max(5,Math.min(MAX_PROJECT_SECONDS,Number(e.target.value)||25)))}/> s</label><div className="clip-list">
+            <p className={`duration-budget ${overDuration?'over':''}`} role="status">Celé video: {clips.filter(Boolean).reduce((sum,c)=>sum+(c?.duration??0),0).toFixed(1)} / {maxDuration} s · maximální délka, kratší výsledek se nenatahuje.{overDuration?' Překročený limit: uprav střihy nebo vyber jiné celé momenty.':''}</p><label className="duration-limit">Limit tohoto projektu <input aria-label="Maximální délka projektu" type="number" min={5} max={MAX_PROJECT_SECONDS} step={1} disabled={occupied} value={durationDraft??maxDuration} onChange={e=>{const raw=e.target.value;setDurationDraft(raw);const value=Number(raw);if(value>=5&&value<=MAX_PROJECT_SECONDS)setMaxDuration(value);}} onBlur={()=>{if(durationDraft!==null)setMaxDuration(Math.max(5,Math.min(MAX_PROJECT_SECONDS,Number(durationDraft)||25)));setDurationDraft(null);}} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}/> s</label><div className="clip-list">
               {clips.map((clip, index) => <article key={index} className={`clip-card ${selected === index && clip ? 'selected' : ''} ${index === 4 ? 'winner' : ''}`} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) upload(e.dataTransfer.files, index); }}>
                 <div className="rank-block"><span className="rank-hash">#</span>{5-index}{index === 4 && <Trophy size={11}/>}</div>
                 {clip ? <>

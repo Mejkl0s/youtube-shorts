@@ -19,7 +19,7 @@ ROOT_FILES = {
     'package.json', 'package-lock.json', 'requirements.txt', 'index.html',
     'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'vite.config.ts',
     'SPUSTIT-WINDOWS.bat', 'OVERIT-WINDOWS.bat', 'WINDOWS.md', 'README.md',
-    'DESKTOP.md', 'DESKTOP-WINDOWS.md', 'DESKTOP-VERIFICATION.md',
+    'DESKTOP.md', 'DESKTOP-WINDOWS.md', 'DESKTOP-VERIFICATION.md', 'HIGHLIGHTS.md',
 }
 
 
