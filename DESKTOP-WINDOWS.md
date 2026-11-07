@@ -9,13 +9,19 @@ Python ani Render. Technický návrh je v [DESKTOP.md](DESKTOP.md).
 
 ## Instalace a první nastavení
 
-Předchozí ověřená sestava 2.0.0: [stáhnout Windows ZIP, 341 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780/artifacts/13183257915).
+Ověřená sestava **2.0.1**: [stáhnout Windows ZIP, 341 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42324120976/artifacts/13555275766).
 GitHub pro stažení artefaktu vyžaduje přihlášení. ZIP rozbal a spusť
-`Rank-Studio-2.0.0-Setup.exe`. Pokud se přímé stažení neotevře, na
-[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780#artifacts)
+`Rank-Studio-2.0.1-Setup.exe`. Pokud se přímé stažení neotevře, na
+[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42324120976#artifacts)
 dole vyber **Artifacts → Rank-Studio-Windows-x64**.
 
-Výstup Windows buildu je `Rank-Studio-2.0.0-Setup.exe`. Instalátor přidá aplikaci
+Při přechodu z 2.0.0 aplikaci zavři a spusť nový instalátor přes stávající
+instalaci. Projekty a modely zůstávají mimo instalační složku v uživatelských
+datech; nemaž `%APPDATA%\Rank Studio`. Nová verze zachová původní limit
+uložených projektů. Automatický podepsaný aktualizační feed zatím není
+nakonfigurovaný; tento přechod se provádí novým instalátorem.
+
+Výstup Windows buildu je `Rank-Studio-2.0.1-Setup.exe`. Instalátor přidá aplikaci
 do nabídky Start a odinstalaci do Windows. Produkční vydání má mít platný podpis
 vydavatele. Nepodepsaný CI build je vývojový artefakt, ne ověřené produkční vydání.
 Windows instalátor se sestavuje na Windows runneru. Dokončené kontroly a stav

@@ -1,6 +1,6 @@
 # Ověření desktopové verze
 
-Záznam z 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
+Záznam aktualizovaný 7. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
 
 ## Verze 2.0.1 — 7. 11. 2026
@@ -29,8 +29,14 @@ odkaz. Tato kontrola tedy nepotvrzuje dostupnost sítí z uživatelova PC.
 Aplikace odděleně hlásí chybějící odkazy, neúspěšné stahování a nedostatek
 obsahově přijatých momentů.
 
-Nový Windows instalátor ověřuje následný CI běh; níže uvedený předchozí
-Windows artefakt 2.0.0 sám neobsahuje změny 2.0.1.
+Finální Windows běh [42324120976](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42324120976)
+skončil úspěšně. Prošla celá regresní sada, sestavení PyInstaller/NSIS,
+spuštění přibalené aplikace i instalační/reinstalační/odinstalační kontroly.
+V repozitáři je 338 Python scénářů; POSIX kontrola práv se na Windows vynechává.
+Další skutečný export dosáhl přesně **25,0 s včetně audia**, bez překročení
+limitu; desetisekundový výběr se nenatahoval. Kontrola z klávesnice ověřila
+přirozené zadání 40 a 25 sekund. Nativní okno nemělo horizontální přetékání
+na 900/1100/1440 px a náhled zůstával pod skutečnou výškou horní lišty.
 
 ## Implementované části
 
@@ -83,7 +89,7 @@ Na Windows použij místo `.venv/bin/python` cestu `.venv\Scripts\python.exe`.
   ruční maskou, odstraněním překryvu, uložením, obnovením, MP4 exportem,
   dávkovým čištěním a mobilním dialogem.
 
-## Skutečný desktop a balení v Linuxovém prostředí
+## Původní balení 2.0.0 v Linuxovém prostředí
 
 Sestaven byl skutečný PyInstaller sidecar a Electron Linux balíček, nikoli
 Windows instalátor. Jejich velikosti jsou přibližně 651 MB a 927 MB včetně
@@ -111,7 +117,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42324120976)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -125,13 +131,13 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 341 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`c78e8cd0368602d066c29d539c3cdba03f3f6a0c`. Úspěšná reinstalace stejné verze
+`7973f1fe7fd35f2c1f4e65ca47d0b3772689d4c8`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780/artifacts/13183257915)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42324120976/artifacts/13555275766)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`e6328343bc5863cb7bcd63fcba3f1391619fc1542b8c40f1bb22cbba520d53df`.
+`7e451a2ff8207ef19022a308803d80127c9089537b929c8c9cfce48dcf979737`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako
