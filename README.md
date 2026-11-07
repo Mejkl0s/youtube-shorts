@@ -8,6 +8,17 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Short highlights and studio design (2.0.1)
+
+New desktop projects default to thorough visual selection: up to 100 public
+candidate links, up to 24 downloaded videos, all enabled platforms searched
+from the beginning, per-video event review, motion/color activity hints,
+actual-cut audits and duplicate-incident comparison. New selections stay
+under 25 seconds without padding; old projects retain their 40-second ceiling.
+A shared dark studio design covers the editor, settings, setup wizard and
+startup screen, with a persistent preview and per-platform progress counters.
+See [the workflow, limitations and tests](HIGHLIGHTS.md).
+
 ## Finished video: at most 40 seconds
 
 The five-clip ranking has a fixed total ceiling of **40 seconds**, not a target to fill. A valid eight- or 37-second ranking stays that length. Individual clips support 1–30 seconds; five clips can therefore total 5–40 seconds. The editor displays the total, disables over-limit export, and the server rejects an over-limit render even for an old browser client. Existing over-limit projects remain editable rather than being silently truncated.

@@ -3,6 +3,26 @@
 Záznam z 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
 
+## Verze 2.0.1 — 7. 11. 2026
+
+Nový postup a jeho limity jsou v [HIGHLIGHTS.md](HIGHLIGHTS.md). Lokálně prošla
+celá tehdejší sada **330 Python testů**; po doplnění hraničních scénářů prošlo
+**22 cílených testů nového výběru**, včetně skutečného MP4 s audiem. Samostatná
+sada 132 testů ověřila související veřejné hledání a původní lokální/vizuální
+postup. Frontend production build a pět bezpečnostních Node testů prošly.
+
+Skutečně spuštěný Electron prošel průvodcem, přepínáním modelů, zrušením úlohy,
+offline ovládáním, exportem MP4 do nového limitu, archivem, chybou ukládání,
+obnovením projektu i systémovou lištou. Nový browser scénář prošel osmi
+obsahově posouzenými zdroji ze všech tří sítí, skutečnými dvousekundovými
+výřezy s audiem, uložením/obnovou limitu 25 s a rozsahu 100 odkazů. Na pěti
+šířkách (1440, 1100, 900, 720, 390 px) nebylo horizontální přetékání.
+Původní browser test vizuálního výběru také prošel. AI i sociální síť v těchto
+scénářích jsou protokolové fixtures; přesnost živého modelu tím není měřena.
+
+Nový Windows instalátor ověřuje následný CI běh; níže uvedený předchozí
+Windows artefakt 2.0.0 sám neobsahuje změny 2.0.1.
+
 ## Implementované části
 
 | Oblast | Implementace |

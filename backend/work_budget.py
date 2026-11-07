@@ -10,6 +10,7 @@ import time
 
 SEARCH_SECONDS = 300
 LOCAL_SEARCH_SECONDS = 600
+THOROUGH_SEARCH_SECONDS = 1800
 _active = ContextVar('studio_work_budget', default=None)
 _controls = {}
 _lock = threading.Lock()
@@ -125,7 +126,8 @@ def limited_discovery(fn):
     def wrapped(job_id, *args, **kwargs):
         from . import main as m
         mode=getattr(args[0],'mode',None) if args else None
-        budget = reserve(job_id,LOCAL_SEARCH_SECONDS if mode=='local' else SEARCH_SECONDS)
+        thorough=bool(args and getattr(args[0],'search_depth',None)=='thorough')
+        budget = reserve(job_id,THOROUGH_SEARCH_SECONDS if thorough else LOCAL_SEARCH_SECONDS if mode=='local' else SEARCH_SECONDS)
         budget.label = lambda text: m.set_job(job_id, message=text)
         token = _active.set(budget)
         try:

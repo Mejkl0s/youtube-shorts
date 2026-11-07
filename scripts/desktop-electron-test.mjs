@@ -41,6 +41,9 @@ try{
   const security=await app.evaluate(({BrowserWindow})=>{const p=BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();return {sandbox:p.sandbox,contextIsolation:p.contextIsolation,nodeIntegration:p.nodeIntegration};});
   assert.deepEqual(security,{sandbox:true,contextIsolation:true,nodeIntegration:false});
   assert.equal(await page.evaluate(()=>!!window.rankDesktop),true);
+  assert.equal(await page.getByLabel('Rozsah hledání',{exact:true}).inputValue(),'thorough');
+  assert.equal(await page.getByLabel('Počet kandidátů',{exact:true}).inputValue(),'100');
+  assert.equal(await page.getByLabel('Maximální délka projektu',{exact:true}).inputValue(),'25');
   const origin=new URL(page.url()).origin;
   assert.equal((await fetch(origin+'/api/health')).status,403);
   assert.equal(await page.evaluate(async()=> (await fetch('/api/health')).status),200);
@@ -105,7 +108,7 @@ try{
   // Wait for the native DownloadItem to finish before probing its container.
   let probe;
   for(let attempt=0;attempt<40;attempt++){try{probe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_format','-show_streams','-of','json',videoFile],{stdio:['ignore','pipe','ignore']}).toString());break;}catch{await new Promise(resolve=>setTimeout(resolve,200));}}
-  assert.ok(probe&&Number(probe.format.duration)<=40.000001);assert.ok(probe.streams.some(stream=>stream.codec_type==='audio'));
+  assert.ok(probe&&Number(probe.format.duration)<=25.000001);assert.ok(probe.streams.some(stream=>stream.codec_type==='audio'));
   await page.locator('#video-title').fill('Desktop project restored');
   const projectFile=root+'/portable.rankstudio';
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},projectFile);

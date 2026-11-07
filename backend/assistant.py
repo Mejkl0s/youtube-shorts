@@ -23,7 +23,7 @@ class State(BaseModel):
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
     language: Literal['en', 'cs'] = 'en'
     resolution: Literal['720', '1080'] = '1080'
-    candidate_count: int = Field(default=24, ge=8, le=40)
+    candidate_count: int = Field(default=24, ge=8, le=100)
     allow_youtube: bool = True
     avoid_repeats: bool = True
     voice: bool = True
@@ -56,7 +56,7 @@ class Changes(BaseModel):
     ranking_criteria: str | None = Field(default=None, min_length=3, max_length=100)
     language: Literal['en', 'cs'] | None = None
     resolution: Literal['720', '1080'] | None = None
-    candidate_count: int | None = Field(default=None, ge=8, le=40)
+    candidate_count: int | None = Field(default=None, ge=8, le=100)
     allow_youtube: bool | None = None
     avoid_repeats: bool | None = None
     voice: bool | None = None

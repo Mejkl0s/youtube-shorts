@@ -1,13 +1,15 @@
 # Rank Studio pro Windows
 
-Desktop používá původní editor, barvy, předlohy, klipy, rozmazání/odstranění
-překryvů, titulky, efekty, hlasy i export do nejvýše 40 sekund. Běží ve vlastním
-okně a s přibaleným backendem; uživatel nespouští terminál, Python ani Render.
-Technický návrh a hranice jsou v [DESKTOP.md](DESKTOP.md).
+Verze 2.0.1 sjednocuje editor, nastavení a průvodce do tmavého pracovního
+prostředí. Nové důkladné hledání posoudí širší sadu videí a vybírá krátké hlavní
+momenty do **25 sekund celkem**, bez natahování; původní projekty zachovávají
+svůj limit až 40 sekund. Podrobnosti a omezení: [Důkladné hledání](HIGHLIGHTS.md).
+Běží ve vlastním okně s přibaleným backendem; uživatel nespouští terminál,
+Python ani Render. Technický návrh je v [DESKTOP.md](DESKTOP.md).
 
 ## Instalace a první nastavení
 
-Ověřená sestava: [stáhnout Windows ZIP, 341 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780/artifacts/13183257915).
+Předchozí ověřená sestava 2.0.0: [stáhnout Windows ZIP, 341 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780/artifacts/13183257915).
 GitHub pro stažení artefaktu vyžaduje přihlášení. ZIP rozbal a spusť
 `Rank-Studio-2.0.0-Setup.exe`. Pokud se přímé stažení neotevře, na
 [stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/41534137780#artifacts)

@@ -1,6 +1,7 @@
 """Public search and deterministic scene selection. No paid provider calls."""
 from __future__ import annotations
 
+import math
 import re
 import json
 import sys
@@ -178,14 +179,15 @@ def search_warning(engine, source, error):
     return f'{engine}: veřejné vyhledávání pro {source} nebylo dostupné{reason}.'
 
 
-def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False, exclude_urls=()):
+def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False, exclude_urls=(), *, balanced=False, seconds=35):
     from .main import canonical_url, social_url
     sources = [('TikTok', 'site:tiktok.com inurl:video'), ('Instagram', 'site:instagram.com/reel/')]
     if allow_youtube:
         sources.append(('YouTube', 'site:youtube.com'))
     if only_youtube:
         sources = [source for source in sources if source[0] == 'YouTube']
-    phase_end=time.monotonic()+35
+    phase_end=time.monotonic()+seconds
+    source_limit=math.ceil(limit/max(1,len(sources))) if balanced else limit
     seen, warnings = {canonical_url(url) for url in exclude_urls}, []
     unavailable=work.current().unavailable_engines if work.current() else set()
     pools = [[] for _ in sources]
@@ -197,7 +199,7 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
                 if engine in unavailable:
                     break
                 entries = pools[source_index]
-                if len(entries)>=limit or time.monotonic()>=phase_end:
+                if len(entries)>=source_limit or time.monotonic()>=phase_end:
                     continue
                 query = variant + ' ' + restriction
                 try:
@@ -220,7 +222,7 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
                         entries.append({**result, 'url': url[:500], 'title': result['title'][:100] or topic,
                                         'search_score': match * .85 + .15 / (position + 1),
                                         'provider': engine, 'source': source})
-                        if len(entries) >= limit:
+                        if len(entries) >= source_limit:
                             break
                 except WorkStopped:
                     raise
@@ -232,14 +234,14 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
             warnings.append(f'{source}: vyhledávače nevrátily žádný odpovídající odkaz na video.')
     # Search each enabled source before applying the total limit. Interleaving
     # reserves opportunities for Instagram even when TikTok fills its own pool.
-    social_pools = pools if only_youtube else pools[:2]
+    social_pools = pools if only_youtube or balanced else pools[:2]
     entries = [pool[index] for index in range(limit) for pool in social_pools if index < len(pool)]
-    if not only_youtube:
+    if not only_youtube and not balanced:
         entries.extend(row for pool in pools[2:] for row in pool)
     return entries[:limit], list(dict.fromkeys(warnings))
 
 
-def youtube_search(topic: str, limit: int, exclude_urls=()):
+def youtube_search(topic: str, limit: int, exclude_urls=(), *, fallback=True):
     """Independent public YouTube search; social results cannot consume its budget."""
     from . import main as m
     entries, seen, warnings = [], {m.canonical_url(url) for url in exclude_urls}, []
@@ -279,7 +281,7 @@ def youtube_search(topic: str, limit: int, exclude_urls=()):
         except Exception as error:
             warnings.append(search_warning('YouTube', 'YouTube', error))
             break
-    if len(entries) < limit:
+    if fallback and len(entries) < limit:
         # `seen` contains canonical identity tuples, not URL strings. Keep
         # provider inputs as URLs so the fallback can parse them normally.
         options = {'exclude_urls': [*exclude_urls, *(row['url'] for row in entries)]} if exclude_urls else {}

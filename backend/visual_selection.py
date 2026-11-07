@@ -156,6 +156,64 @@ def select(candidates, topic, language, ranking_criteria,provider='openai'):
         _provider.reset(token)
 
 
+def parse_review(reviewed, scenes, intervals):
+    from . import main as m
+    moments = reviewed.get('moments')
+    if not isinstance(moments, list) or len(moments) > SHORTLIST:
+        raise VisualSelectionError('AI nevrátila platnou kontrolu pointy.')
+    accepted, used, physical = [], set(), set()
+    for item in moments:
+        if not isinstance(item, dict):
+            raise VisualSelectionError('AI nevrátila platnou položku kontroly pointy.')
+        index = item.get('scene')
+        if type(index) is not int or index not in intervals or index in used:
+            raise VisualSelectionError('AI opakovala scénu nebo vybrala nezkontrolovaný úsek.')
+        used.add(index)
+        scene = scenes[index]
+        identity = (scene['candidate']['id'], scene['shot'])
+        if identity in physical:
+            raise VisualSelectionError('AI vybrala stejné video ve stejné scéně vícekrát.')
+        physical.add(identity)
+        confidence = number(item.get('confidence'))
+        score = number(item.get('score'))
+        if not 0 <= confidence <= 1 or not 0 <= score <= 100:
+            raise VisualSelectionError('AI vrátila hodnocení mimo rozsah.')
+        if item.get('topic_match') is not True or item.get('complete') is not True or confidence < MIN_CONFIDENCE:
+            continue
+        start, end = number(item.get('start')), number(item.get('end'))
+        lower, upper = intervals[index]
+        if not lower <= start < end <= upper or not MIN_CLIP_SECONDS <= end-start <= 30:
+            raise VisualSelectionError('Střih přesahuje vizuálně zkontrolovaný úsek.')
+        observations, times = {}, []
+        for key in ('setup', 'action', 'outcome'):
+            event = item.get(key)
+            if not isinstance(event, dict) or not isinstance(event.get('observation'), str) or not event['observation'].strip():
+                raise VisualSelectionError('U střihu chybí obrazový důkaz přípravy, akce nebo pointy.')
+            at = number(event.get('time'))
+            times.append(at)
+            observations[key] = {'time': at, 'observation': event['observation'].strip()[:240]}
+        if not start <= times[0] < times[1] < times[2] <= end or times[1]-start < .4 or end-times[1] < .5:
+            raise VisualSelectionError('Střih nezachovává přípravu, hlavní moment a závěr ve správném pořadí.')
+        try:
+            clip = m.Clip(id=scene['candidate']['id'], title=item.get('title', ''), voiceover=item.get('voiceover', ''),
+                          rank_note=item.get('rank_note'), reason=item.get('reason', ''), start=start, duration=end-start,
+                          source_url=scene['candidate'].get('source_url', ''), framing='fit', selection_version='visual-event-v2')
+        except ValueError:
+            raise VisualSelectionError('AI vrátila neplatný název, komentář nebo poznámku momentu.') from None
+        if not 1 <= m.word_count(clip.voiceover) <= 7 or not clip.rank_note:
+            raise VisualSelectionError('AI nedodržela krátký komentář a poznámku.')
+        review_provider=_provider.get();review_model=None
+        if os.environ.get('RANK_DESKTOP_MODE')=='1':
+            from .desktop_ai import selected
+            selection=selected()
+            if selection:review_provider=selection['profile']['id'];review_model=selection['model']
+        accepted.append((score, {**scene['candidate'], **clip.model_dump(), 'sourceDuration': scene['candidate']['duration'],
+                                'scene_start': scene['a'], 'scene_end': scene['b'], '_cut_scene': True,
+                                'review_required': True, 'visual_review': {'method': 'timestamped-frames-v2','provider':review_provider,'model':review_model,
+                                'confidence': confidence, 'score': score, 'sample_interval': [lower, upper], **observations}}))
+    return accepted
+
+
 def _select(candidates, topic, language, ranking_criteria):
     from . import main as m
     scenes = catalogue(candidates)
@@ -218,56 +276,7 @@ def _select(candidates, topic, language, ranking_criteria):
                        '"title":"short label","voiceover":"short observation","rank_note":"short note",'
                        '"reason":"why the visible event deserves this ranking"}],"rejected":[{"scene":1,"reason":"missing outcome"}]}. '
                        'Rejected items must not appear in moments. Fewer than five accepted moments is preferable to guesses.', detailed)
-    moments = reviewed.get('moments')
-    if not isinstance(moments, list) or len(moments) > SHORTLIST:
-        raise VisualSelectionError('AI nevrátila platnou kontrolu pointy.')
-    accepted, used, physical = [], set(), set()
-    for item in moments:
-        if not isinstance(item, dict):
-            raise VisualSelectionError('AI nevrátila platnou položku kontroly pointy.')
-        index = item.get('scene')
-        if type(index) is not int or index not in intervals or index in used:
-            raise VisualSelectionError('AI opakovala scénu nebo vybrala nezkontrolovaný úsek.')
-        used.add(index)
-        scene = scenes[index]
-        identity = (scene['candidate']['id'], scene['shot'])
-        if identity in physical:
-            raise VisualSelectionError('AI vybrala stejné video ve stejné scéně vícekrát.')
-        physical.add(identity)
-        confidence = number(item.get('confidence'))
-        score = number(item.get('score'))
-        if not 0 <= confidence <= 1 or not 0 <= score <= 100:
-            raise VisualSelectionError('AI vrátila hodnocení mimo rozsah.')
-        if item.get('topic_match') is not True or item.get('complete') is not True or confidence < MIN_CONFIDENCE:
-            continue
-        start, end = number(item.get('start')), number(item.get('end'))
-        lower, upper = intervals[index]
-        if not lower <= start < end <= upper or not MIN_CLIP_SECONDS <= end-start <= 30:
-            raise VisualSelectionError('Střih přesahuje vizuálně zkontrolovaný úsek.')
-        observations, times = {}, []
-        for key in ('setup', 'action', 'outcome'):
-            event = item.get(key)
-            if not isinstance(event, dict) or not isinstance(event.get('observation'), str) or not event['observation'].strip():
-                raise VisualSelectionError('U střihu chybí obrazový důkaz přípravy, akce nebo pointy.')
-            at = number(event.get('time'))
-            times.append(at)
-            observations[key] = {'time': at, 'observation': event['observation'].strip()[:240]}
-        if not start <= times[0] < times[1] < times[2] <= end or times[1]-start < .4 or end-times[1] < .5:
-            raise VisualSelectionError('Střih nezachovává přípravu, hlavní moment a závěr ve správném pořadí.')
-        clip = m.Clip(id=scene['candidate']['id'], title=item.get('title', ''), voiceover=item.get('voiceover', ''),
-                      rank_note=item.get('rank_note'), reason=item.get('reason', ''), start=start, duration=end-start,
-                      source_url=scene['candidate'].get('source_url', ''), framing='fit', selection_version='visual-event-v2')
-        if not 1 <= m.word_count(clip.voiceover) <= 7 or not clip.rank_note:
-            raise VisualSelectionError('AI nedodržela krátký komentář a poznámku.')
-        review_provider=_provider.get();review_model=None
-        if os.environ.get('RANK_DESKTOP_MODE')=='1':
-            from .desktop_ai import selected
-            selection=selected()
-            if selection:review_provider=selection['profile']['id'];review_model=selection['model']
-        accepted.append((score, {**scene['candidate'], **clip.model_dump(), 'sourceDuration': scene['candidate']['duration'],
-                                'scene_start': scene['a'], 'scene_end': scene['b'], '_cut_scene': True,
-                                'review_required': True, 'visual_review': {'method': 'timestamped-frames-v2','provider':review_provider,'model':review_model,
-                                'confidence': confidence, 'score': score, 'sample_interval': [lower, upper], **observations}}))
+    accepted = parse_review(reviewed, scenes, intervals)
     # Keep completed, reviewed results for deadline/failure recovery. Never
     # silently substitute motion-only results into this visual review workflow.
     accepted.sort(key=lambda row: row[0])

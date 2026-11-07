@@ -153,6 +153,7 @@ class Clip(BaseModel):
 
 
 class Project(BaseModel):
+    max_duration: float = Field(default=40,ge=5,le=40,allow_inf_nan=False)
     title: str = Field(min_length=1, max_length=100)
     ranking_criteria: str = Field(default='Surprise, timing and skill', min_length=3, max_length=100)
     clips: list[Clip] = Field(min_length=5, max_length=5)
@@ -170,8 +171,8 @@ class Project(BaseModel):
 
     @model_validator(mode='after')
     def valid_project(self):
-        if sum(c.duration for c in self.clips)>MAX_PROJECT_SECONDS+1e-7:
-            raise ValueError('Celé video smí mít nejvýše 40 sekund. Vyber kratší celé momenty nebo uprav střihy; kratší výsledek se nenatahuje.')
+        if sum(c.duration for c in self.clips)>self.max_duration+1e-7:
+            raise ValueError(f'Celé video smí mít nejvýše {self.max_duration:g} sekund. Vyber kratší celé momenty nebo uprav střihy; kratší výsledek se nenatahuje.')
         if self.language not in VOICE_NAMES or self.resolution not in ('1080', '720'):
             raise ValueError('Neplatný jazyk nebo rozlišení.')
         if len({c.id for c in self.clips}) != 5:
@@ -494,8 +495,8 @@ def render(job_id: str, project: Project):
                '-t',str(sum(c.duration for c in project.clips)),
                '-movflags', '+faststart', str(folder / 'ranking.mp4'))
         output_meta = probe(folder / 'ranking.mp4')
-        if float(output_meta['format']['duration'])>MAX_PROJECT_SECONDS+1e-6:
-            raise ValueError('Časování výsledného MP4 překročilo 40 sekund. Uprav hranici posledního střihu a export zopakuj.')
+        if float(output_meta['format']['duration'])>project.max_duration+1e-6:
+            raise ValueError(f'Časování výsledného MP4 překročilo {project.max_duration:g} sekund. Uprav hranici posledního střihu a export zopakuj.')
         set_job(job_id, status='done', progress=100, message='Váš Short je připravený.', download=f'/api/jobs/{job_id}/download', duration=float(output_meta['format']['duration']))
     except Exception as error:
         set_job(job_id, status='failed', message=f'Export se nezdařil: {str(error)[-1000:]}')
@@ -788,7 +789,7 @@ def start_compilation(body: CompilationRequest):
     return dict(jobs[job_id])
 
 
-def scene_windows(path: Path):
+def scene_windows(path: Path, *, full=False):
     """Candidate intervals never cross a detected hard scene change."""
     duration = min(float(probe(path)['format']['duration']), MAX_SOURCE_SECONDS)
     work.stage('Rozpoznávám střihy ve staženém videu…')
@@ -800,9 +801,9 @@ def scene_windows(path: Path):
     for shot, (a, b) in enumerate(zip(cuts, cuts[1:])):
         if b-a < MIN_CLIP_SECONDS:
             continue
-        start,length = action_window(path,a,b)
+        start,length = (a,b-a) if full else action_window(path,a,b)
         windows.append(SceneWindow(start,length,shot,a,b))
-    if len(windows)>24:
+    if not full and len(windows)>24:
         windows = [windows[index] for index in np.linspace(0,len(windows)-1,24).astype(int)]
     return windows
 
@@ -813,6 +814,8 @@ def select_candidates(candidates: list[dict], topic: str, language: str, ranking
 
 
 class DiscoverRequest(BaseModel):
+    search_depth: Literal['quick','thorough'] = 'quick'
+    max_duration: float = Field(default=25,ge=5,le=40,allow_inf_nan=False)
     exclude_notes: list[str] = Field(default_factory=list,max_length=5)
     exclude_urls: list[str] = Field(default_factory=list, max_length=200)
     exclude_asset_ids: list[str] = Field(default_factory=list, max_length=200)
@@ -821,7 +824,7 @@ class DiscoverRequest(BaseModel):
     source: str = 'social'
     allow_youtube: bool = True
     language: str = 'en'
-    candidate_count: int = Field(default=24, ge=8, le=40)
+    candidate_count: int = Field(default=24, ge=8, le=100)
     mode: Literal['free', 'local', 'ai'] = 'free'
     blur_text: bool = True
 
@@ -837,6 +840,8 @@ class DiscoverRequest(BaseModel):
     def valid(self):
         if self.source != 'social' or self.language not in VOICE_NAMES:
             raise ValueError('Neplatný zdroj nebo jazyk.')
+        if self.search_depth=='thorough' and self.max_duration>25:
+            raise ValueError('Důkladný výběr má nejvýše 25 sekund.')
         if any(len(url) > 500 or not social_url(url, True) for url in self.exclude_urls):
             raise ValueError('Historie smí obsahovat pouze adresy podporovaných videí.')
         if any(not re.fullmatch(r'[a-f0-9]{32}', identity) for identity in self.exclude_asset_ids):
@@ -934,6 +939,9 @@ def download_failure(error):
 
 @work.limited_discovery
 def discover(job_id: str, body: DiscoverRequest):
+    if body.search_depth=='thorough':
+        from .highlights import discover as detailed_discovery
+        return detailed_discovery(job_id,body)
     candidates, selected, warnings = [], None, []
     try:
         set_job(job_id, status='searching', progress=3, message=f'Hledám {body.candidate_count} kandidátů podle tématu…')
@@ -1077,6 +1085,8 @@ def discover(job_id: str, body: DiscoverRequest):
 
 @app.post('/api/discover', status_code=202)
 def start_discover(body: DiscoverRequest):
+    if body.search_depth=='thorough' and body.mode=='free':
+        raise HTTPException(409,'Důkladný výběr potřebuje vizuální AI. Zvol Vybraná AI a ověř obrazový model v Nastavení; technický výběr zůstává v rychlém režimu.')
     if body.mode=='ai' and os.environ.get('RANK_FREE_ONLY')=='1':
         raise HTTPException(409,'Placený výběr je vypnutý. Použij AI na mém PC zdarma.')
     if body.mode == 'ai' and not os.environ.get('OPENAI_API_KEY'):
@@ -1088,7 +1098,7 @@ def start_discover(body: DiscoverRequest):
         if any(j['status'] in ('queued', 'rendering', 'searching', 'working') for j in jobs.values()):
             raise HTTPException(409, 'Jeden úkol právě běží. Počkejte na jeho dokončení.')
         job_id = uuid.uuid4().hex
-        limit=work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS
+        limit=work.THOROUGH_SEARCH_SECONDS if body.search_depth=='thorough' else work.LOCAL_SEARCH_SECONDS if body.mode=='local' else work.SEARCH_SECONDS
         jobs[job_id] = {'id': job_id, 'status': 'queued', 'progress': 0, 'message': 'Připravuji hledání…', 'kind': 'discover', 'limit_seconds':limit}
         work.reserve(job_id,limit)
     executor.submit(discover, job_id, body)
