@@ -42,7 +42,7 @@ archivy, systémovou lištu a skutečný MP4 export. Prošel také stávající 
 scénář důkladného hledání se skutečnými zdroji/FFmpeg výřezy a protokolovými
 fixtures pro síť a AI; nejde o nové měření přesnosti modelu.
 
-Prázdný editor při 1440 × 1000 px měl **94,97 % velmi tmavých pixelů**
+Prázdný editor při 1440 × 1000 px měl **přibližně 95 % velmi tmavých pixelů**
 (maximální RGB složka nejvýše 32). Kontrast zlaté vůči panelu je **4,87 : 1**,
 tmavého textu na zlatém tlačítku **5,08 : 1** a tlumeného textu vůči panelu
 **7,78 : 1**. Editor nepřetékal na 1440, 1100, 900, 720 a 390 px.
