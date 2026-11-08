@@ -3,7 +3,7 @@ const publisher=process.env.RANK_PUBLISHER;
 module.exports={
   appId:'cz.rankstudio.desktop',productName:'Rank Studio',copyright:'Rank Studio',
   directories:{output:'../release/windows',buildResources:'assets'},
-  files:['main.cjs','preload.cjs','security.cjs','transport.cjs','updates.cjs','loading.html','assets/icon.png','package.json',
+  files:['main.cjs','preload.cjs','security.cjs','transport.cjs','updates.cjs','loading.html','theme.css','assets/icon.png','package.json',
     {from:'../build',to:'.',filter:['update-policy.json']}],
   extraResources:[{from:'../build/desktop-backend/rank-backend',to:'backend'}],
   asar:true,

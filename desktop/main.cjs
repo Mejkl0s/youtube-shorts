@@ -163,7 +163,7 @@ async function run(){
   fs.mkdirSync(dataDirectory(),{recursive:true});
   if(fs.existsSync(settingsPath()))settings=preferences(JSON.parse(fs.readFileSync(settingsPath(),'utf8')));
   updates=createUpdates(app);bindIPC();Menu.setApplicationMenu(null);
-  window=new BrowserWindow({width:1440,height:960,minWidth:900,minHeight:650,show:false,backgroundColor:'#0c1017',title:'Rank Studio',
+  window=new BrowserWindow({width:1440,height:960,minWidth:900,minHeight:650,show:false,backgroundColor:'#060607',title:'Rank Studio',
     icon:path.join(__dirname,'assets/icon.png'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,partition:'persist:rank-studio'}});
   const ownSession=window.webContents.session;
   await ownSession.setProxy({mode:'direct'});

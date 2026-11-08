@@ -1,15 +1,21 @@
 <!doctype html>
 <html lang="cs">
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rank Studio</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-body{margin:0;background:#0c1017;color:#e8edf5;font:14px 'Segoe UI',system-ui,sans-serif;display:grid;place-content:center;min-height:100vh}
-main{width:340px;padding:34px;border:1px solid #2e3d52;border-radius:18px;background:#141b26;box-shadow:0 20px 70px #0003}
-.brand{display:flex;align-items:center;gap:12px}.mark{display:flex;gap:4px;align-items:flex-end;justify-content:center;background:#a1e7c1;width:37px;height:37px;box-sizing:border-box;padding:9px;border-radius:10px}.mark i{width:4px;height:11px;background:#1c3628;border-radius:1px}.mark i:nth-child(2){height:18px}.mark i:nth-child(3){height:8px}
-strong{font-size:26px;letter-spacing:-1px;font-weight:650}strong span{color:#a0b2c9;font-weight:400}
-p{color:#a0b2c9;font-size:13px;line-height:1.7;margin:27px 0 18px}progress{accent-color:#a1e7c1;width:100%;height:5px;border:0;border-radius:3px;overflow:hidden}small{display:block;color:#728ba8;font-size:11px;margin-top:17px}
+body{margin:0;background:var(--noir-black);color:var(--noir-text);font:14px 'Segoe UI',system-ui,sans-serif;display:grid;place-content:center;min-height:100vh;-webkit-font-smoothing:antialiased}
+main{width:340px;padding:36px;border:1px solid var(--noir-bronze);border-top-color:var(--noir-gold);border-radius:var(--noir-radius-lg);background:var(--noir-panel)}
+.brand{display:flex;align-items:center;gap:12px}.mark{display:flex;gap:4px;align-items:flex-end;justify-content:center;background:var(--noir-black);border:1px solid var(--noir-bronze);width:38px;height:38px;box-sizing:border-box;padding:9px;border-radius:var(--noir-radius)}.mark i{width:4px;height:11px;background:var(--noir-gold);border-radius:1px}.mark i:nth-child(2){height:18px}.mark i:nth-child(3){height:8px}
+strong{font-size:26px;letter-spacing:-1px;font-weight:550}strong span{color:var(--noir-text-secondary);font-weight:350}
+.identity{color:var(--noir-gold);font-size:9px;letter-spacing:2.5px;margin-top:23px}p{color:var(--noir-text-secondary);font-size:13px;line-height:1.7;margin:10px 0 21px}progress{appearance:none;accent-color:var(--noir-gold);width:100%;height:3px;border:0;border-radius:2px;overflow:hidden}progress::-webkit-progress-bar{background:var(--noir-bronze)}progress::-webkit-progress-value{background:var(--noir-gold)}small{display:block;color:var(--noir-text-muted);font-size:11px;margin-top:18px}
+
+progress{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.startup-progress{height:3px;border-radius:2px;background:var(--noir-bronze);overflow:hidden}.startup-progress span{display:block;height:100%;width:28%;background:var(--noir-gold);animation:noir-loading 1400ms ease-in-out infinite}
+@keyframes noir-loading{from{transform:translateX(-100%)}to{transform:translateX(400%)}}
+@media(prefers-reduced-motion:reduce){.startup-progress span{animation:none;transform:translateX(125%)}}
 </style>
-<main><div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><strong>rank<span>studio</span></strong></div><p>Spouštím editor a místní nástroje…</p><progress aria-label="Spouštění aplikace"></progress><small>Za chvíli můžeš pokračovat ve svém projektu.</small></main>
+<main><div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><strong>rank<span>studio</span></strong></div><div class="identity">ULTRA NOIR</div><p>Spouštím editor a místní nástroje…</p><progress aria-label="Spouštění aplikace"></progress><div class="startup-progress" aria-hidden="true"><span></span></div><small>Za chvíli můžeš pokračovat ve svém projektu.</small></main>
 </html>

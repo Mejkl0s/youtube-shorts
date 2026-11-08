@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowDown, ArrowUp, ArrowUpRight, AudioLines, Check, ChevronDown, Clapperboard, Download, Film, FolderOpen, Info, Layers3, LoaderCircle, Mic2, MessageSquare, Paperclip, Send, Pause, Play, Plus, RotateCcw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Trophy, Upload, Volume2, VolumeX, WandSparkles, X, Zap } from 'lucide-react';
+import '../desktop/theme.css';
 import './styles.css';
 import './fonts.css';
 import TemplatePanel from './TemplatePanel';
@@ -448,14 +449,14 @@ function App() {
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <a className="wordmark" href="/">rank<span>studio</span><span className="beta">{window.rankDesktop?'DESKTOP':'WEB'}</span></a>
+        <a className="wordmark" href="/">rank<span>studio</span><span className="beta">ULTRA NOIR</span></a>
         <div className="breadcrumbs"><span>Projekty</span><span>/</span><strong>{restored?'Otevřený projekt':'Nový Short'}</strong></div>
         <DesktopTopbar/><div className="top-actions"><span className="save-status"><span className={saved ? 'dot green' : 'dot'}/>{saved ? 'Uloženo' : restored ? 'Projekt obnoven' : 'Nový projekt'}</span><button className="button secondary save-button" onClick={saveProject} disabled={occupied}><Save size={15}/> Uložit projekt</button>{health?.owner_login&&<form action="/auth/logout" method="post"><button className="button secondary save-button" disabled={occupied}>Odhlásit se</button></form>}</div>
       </header>
       <main>
         <section className="editor">
           <div className="studio-intro">
-            <div><div className="eyebrow"><span className="tiny-spark"><Clapperboard size={13}/></span> TVŮJ PRACOVNÍ PROSTOR</div><h1>Střihové studio<span className="studio-version">2.0.1</span></h1><p>Najdi silné momenty. Dolaď střih. Vytvoř svůj Short.</p></div>
+            <div><div className="eyebrow"><span className="tiny-spark"><Clapperboard size={13}/></span> TVŮJ PRACOVNÍ PROSTOR</div><h1>Střihové studio<span className="studio-version">2.0.2</span></h1><p>Najdi silné momenty. Dolaď střih. Vytvoř svůj Short.</p></div>
             <div className="project-summary"><strong>{time(clips.filter(Boolean).reduce((sum,c)=>sum+(c?.duration??0),0))}<small> / {maxDuration} s</small></strong><span>{ready} z 5 momentů · 9:16</span></div>
           </div>
           <nav className="studio-workflow" aria-label="Pracovní postup">

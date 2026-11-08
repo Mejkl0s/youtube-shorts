@@ -8,6 +8,14 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Ultra Noir visual identity (2.0.2)
+
+The complete editor, settings, wizard and startup screen use a shared
+black/bronze/gold palette. Central tokens live in `desktop/theme.css`;
+forms, dialogs, controls and native branding follow the same identity.
+Video colors and all existing processing/API behavior are preserved.
+See [the design implementation and verification](desktop/ULTRA-NOIR.md).
+
 ## Short highlights and studio design (2.0.1)
 
 New desktop projects default to thorough visual selection: up to 100 public

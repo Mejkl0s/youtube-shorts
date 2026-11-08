@@ -1,0 +1,35 @@
+/* Ultra Noir: shared by the editor and the packaged startup screen.
+   Media, color swatches and exported video retain the project's own colors. */
+:root {
+  color-scheme: dark;
+  --noir-black: #060607;
+  --noir-panel: #0E0D0C;
+  --noir-bronze: #473B2F;
+  --noir-gold: #927C5F;
+  --noir-black-rgb: 6 6 7;
+  --noir-bronze-rgb: 71 59 47;
+  --noir-gold-rgb: 146 124 95;
+  --noir-text: #E9E5DF;
+  --noir-text-secondary: #C9C3BB;
+  --noir-text-muted: #AAA39A;
+  --noir-text-faint: #938B81;
+  --noir-hover: rgb(var(--noir-gold-rgb) / .07);
+  --noir-selected: rgb(var(--noir-gold-rgb) / .10);
+  --noir-divider: rgb(var(--noir-bronze-rgb) / .64);
+  --noir-scrim: rgb(var(--noir-black-rgb) / .86);
+  --noir-shadow-color: rgb(var(--noir-black-rgb) / .60);
+  --noir-focus: 0 0 0 3px rgb(var(--noir-gold-rgb) / .17);
+  --noir-radius-sm: 6px;
+  --noir-radius: 10px;
+  --noir-radius-lg: 14px;
+  --noir-space: 4px;
+  --noir-duration: 180ms;
+  --noir-ease: cubic-bezier(.2,.7,.2,1);
+  --accent: var(--noir-gold);
+  --muted: var(--noir-text-muted);
+  --line: var(--noir-bronze);
+  --surface: var(--noir-panel);
+  --surface-raised: var(--noir-panel);
+  --input: var(--noir-black);
+  --radius: var(--noir-radius);
+}
