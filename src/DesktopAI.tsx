@@ -6,7 +6,7 @@ import './desktop.css';
 export type AIModel={id:string;name:string;vision:boolean|null;size_bytes:number|null;context?:number;pricing?:Record<string,string>};
 export type AIProfile={id:string;name:string;kind:'local'|'cloud';enabled:boolean;endpoint:string;models:AIModel[];vision_overrides:string[];has_key:boolean;checked_at:number|null;error:string|null};
 export type AIConfig={version:number;mode:'local'|'cloud'|'hybrid';wizard_complete:boolean;active:{provider:string;model:string};providers:Record<string,AIProfile>;secure_storage:string};
-type ContextValue={config:AIConfig|null;online:boolean;busy:boolean;error:string;refresh:()=>Promise<void>;update:(patch:Partial<AIConfig>&{provider?:string;model?:string})=>Promise<void>;open:()=>void;wizard:()=>void};
+type ContextValue={config:AIConfig|null;online:boolean;busy:boolean;error:string;refresh:()=>Promise<void>;update:(patch:Partial<AIConfig>&{provider?:string;model?:string},search?:'ai'|'technical')=>Promise<void>;open:()=>void;wizard:()=>void};
 const AIContext=createContext<ContextValue>({config:null,online:true,busy:false,error:'',refresh:async()=>{},update:async()=>{},open:()=>{},wizard:()=>{}});
 export const useDesktopAI=()=>useContext(AIContext);
 const giB=(n:number|null|undefined)=>typeof n==='number'?`${(n/1024**3).toFixed(1)} GB`:'Nelze zjistit';
@@ -14,14 +14,14 @@ const giB=(n:number|null|undefined)=>typeof n==='number'?`${(n/1024**3).toFixed(
 export function DesktopAIProvider({children}:{children:React.ReactNode}){
   const [config,setConfig]=useState<AIConfig|null>(null),[online,setOnline]=useState(navigator.onLine),[busy,setBusy]=useState(false),[error,setError]=useState(''),[show,setShow]=useState(false),[wizard,setWizard]=useState(false);
   async function refresh(){if(!window.rankDesktop)return;const value=await desktopAPI<AIConfig>('/ai/config');setConfig(value);window.dispatchEvent(new Event('rank-desktop-ai-changed'));}
-  async function update(patch:Partial<AIConfig>&{provider?:string;model?:string}){
+  async function update(patch:Partial<AIConfig>&{provider?:string;model?:string},search?:'ai'|'technical'){
     if(!config)return;setBusy(true);setError('');
     const previous=config;
     setConfig({...config,mode:patch.mode??config.mode,active:{provider:patch.provider??config.active.provider,model:patch.model??config.active.model},providers:{...config.providers,...patch.providers}});
     try{
       const value=await desktopAPI<AIConfig>('/ai/config',{mode:patch.mode??config.mode,provider:patch.provider??config.active.provider,model:patch.model??config.active.model,
         wizard_complete:patch.wizard_complete,providers:patch.providers??{}});
-      setConfig(value);window.dispatchEvent(new CustomEvent('rank-desktop-ai-changed',{detail:{selectAI:patch.provider!==undefined||patch.model!==undefined||patch.wizard_complete===true}}));
+      setConfig(value);window.dispatchEvent(new CustomEvent('rank-desktop-ai-changed',{detail:{selectAI:patch.provider!==undefined||patch.model!==undefined||patch.wizard_complete===true,search}}));
     }catch(reason){setConfig(previous);setError((reason as Error).message);throw reason;}finally{setBusy(false);}
   }
   useEffect(()=>{
@@ -45,6 +45,38 @@ export function ModelPicker({prefix='top'}:{prefix?:string}){
     <select title="Výchozí model pro nové požadavky" aria-label={`${prefix} model AI`} value={config.active.model} disabled={busy||!active?.enabled} onChange={event=>change(active.id,event.target.value)}><option value="">Vyber model</option>{config.active.model&&!active?.models.some(m=>m.id===config.active.model)&&<option value={config.active.model}>{config.active.model} · neověřen</option>}{active?.models.map(model=><option key={model.id} value={model.id}>{model.id}{model.vision?' · obraz':''}</option>)}</select>
     <button aria-label="Pokročilé nastavení AI" title="Nastavení → AI modely" onClick={open}><Settings2 size={16}/></button>
   </div>;
+}
+
+export function visionSetupProblem(config:AIConfig):string{
+  const profile=config.providers[config.active.provider];
+  if(!profile?.enabled)return 'Aktivuj poskytovatele AI a ověř jeho připojení.';
+  if(config.mode!=='hybrid'&&profile.kind!==config.mode)return 'Vybraný poskytovatel neodpovídá uloženému režimu AI.';
+  if(!config.active.model)return 'Vyber model pro hledání hlavních momentů.';
+  if(profile.kind==='cloud'&&!profile.has_key)return 'Ulož API klíč vybraného cloudového poskytovatele.';
+  const model=profile.models.find(row=>row.id===config.active.model);
+  if(!model)return 'Ověř připojení a vyber model ze skutečně dostupného seznamu.';
+  if(model.vision!==true&&!profile.vision_overrides.includes(model.id))return 'Vybraný model nemá ověřenou podporu obrázků. Pro hledání momentů vyber vizuální model; textový model lze dál používat pro psaní.';
+  return '';
+}
+
+function AIModeChoices(){
+  const {config,update,busy}=useDesktopAI();if(!config)return null;
+  async function choose(mode:AIConfig['mode']){
+    const rows=Object.values(config!.providers),active=config!.providers[config!.active.provider];
+    const provider=mode==='hybrid'?active:active?.kind===mode&&active.enabled?active:rows.find(p=>p.kind===mode&&p.enabled)||rows.find(p=>p.kind===mode);
+    if(!provider)return;
+    const previous=provider.id===config!.active.provider&&provider.models.some(model=>model.id===config!.active.model)?config!.active.model:undefined;
+    const model=previous??provider.models.find(model=>model.vision===true||provider.vision_overrides.includes(model.id))?.id??provider.models[0]?.id??'';
+    try{await update({mode,provider:provider.id,model});}catch{}
+  }
+  return <div className="desktop-mode-cards">{(['local','cloud','hybrid'] as const).map(mode=><button key={mode} className={config.mode===mode?'selected':''} onClick={()=>choose(mode)} disabled={busy}>{mode==='local'?<Monitor/>:mode==='cloud'?<Cloud/>:<Settings2/>}<strong>{mode==='local'?'Lokální AI':mode==='cloud'?'Cloudová AI':'Kombinovaný režim'}</strong><small>{mode==='local'?'Modely na tomto PC, bez poplatků za API.':mode==='cloud'?'Vlastní klíč vybraného poskytovatele.':'Lokální i cloudové modely. Použije se tvoje uložená volba.'}</small></button>)}</div>;
+}
+
+export function DesktopAISetup(){
+  const {config,open,wizard,busy}=useDesktopAI();if(!window.rankDesktop||!config)return null;
+  const profile=config.providers[config.active.provider],problem=visionSetupProblem(config);
+  const mode=config.mode==='hybrid'?'Kombinovaný režim':config.mode==='cloud'?'Cloudová AI':'Lokální AI';
+  return <section className="desktop-ai-setup" aria-label="Výchozí nastavení AI"><header><div><small>ULOŽENÁ VOLBA PRO HLEDÁNÍ</small><h2>{mode}<span>·</span>{config.active.model||'Model zatím není vybraný'}</h2></div><button className="button secondary" disabled={busy} onClick={open}><Settings2 size={14}/>Nastavení AI</button></header><p>{profile?.name??'Vyber poskytovatele'}{profile?.kind==='cloud'?' · Cloud účtuje požadavky podle svého ceníku.':' · Zvolený lokální model pracuje na tomto počítači.'}</p><details open={!!problem}><summary>Režim a model</summary><AIModeChoices/><ModelPicker prefix="setup"/>{problem&&<p className="desktop-setup-problem" role="status">{problem} <button className="text-button" onClick={wizard}>Dokončit úvodní nastavení</button></p>}</details><small>Změny se ukládají automaticky. „Najít klipy“ použije uložený model; volbu můžeš kdykoli změnit v Nastavení.</small></section>;
 }
 
 export function DesktopTopbar(){
@@ -126,20 +158,22 @@ export function DesktopWritingPanel({history,onAnswer}:{history:{role:string;con
 const tabs=['Obecné','AI modely','Cloudová AI','Lokální AI','Lokální modely','Hardware','Úložiště','Aktualizace','O aplikaci'];
 function DesktopSettings({wizard,close,setWizard}:{wizard:boolean;close:()=>void;setWizard:(value:boolean)=>void}){
   const {config,update,refresh,busy,error}=useDesktopAI(),[tab,setTab]=useState('AI modely'),[step,setStep]=useState(0),[note,setNote]=useState('');if(!config)return null;
-  const profileRows=Object.values(config.providers),selected=config.providers[config.active.provider];
-  async function mode(value:AIConfig['mode']){const provider=value==='hybrid'?selected:profileRows.find(p=>p.kind===value&&p.enabled)||profileRows.find(p=>p.kind===value)!;try{await update({mode:value,provider:provider.id,model:provider.models[0]?.id??''});}catch{}}
-  async function finish(){try{await update({wizard_complete:true});close();}catch{}}
-  const selector=<><ModelPicker prefix="settings"/><p>Výchozí model pro nové požadavky: <strong>{config.active.model||'Nevybrán'}</strong>. Běžící úloha dokončí práci se svým původním modelem.</p><p>Režim: {config.mode==='hybrid'?'Kombinovaný':config.mode==='local'?'Lokální':'Cloudový'}. Cloudové požadavky mohou být zpoplatněné poskytovatelem; žádné automatické přepínání.</p></>;
-  const modes=<div className="desktop-mode-cards">{(['local','cloud','hybrid'] as const).map(value=><button key={value} className={config.mode===value?'selected':''} onClick={()=>mode(value)} disabled={busy}>{value==='local'?<Monitor/>:value==='cloud'?<Cloud/>:<Settings2/>}<strong>{value==='local'?'Lokální AI':value==='cloud'?'Cloudová AI':'Kombinovaný režim'}</strong><small>{value==='local'?'Nainstalované modely na tomto PC. Bez poplatků za API.':value==='cloud'?'Vlastní klíče a účtování zvoleného poskytovatele.':'Lokální i cloudoví poskytovatelé. Přepínáš výslovně.'}</small></button>)}</div>;
+  const profileRows=Object.values(config.providers),problem=visionSetupProblem(config);
+  async function finish(withAI=true){
+    if(withAI&&problem){setNote(problem);setStep(3);return;}
+    try{await update({wizard_complete:true},withAI?'ai':'technical');close();}catch{}
+  }
+  const selector=<><ModelPicker prefix="settings"/><p>Výchozí model pro nové požadavky: <strong>{config.active.model||'Nevybrán'}</strong>. Běžící úloha dokončí práci se svým původním modelem.</p><p>Režim: {config.mode==='hybrid'?'Kombinovaný':config.mode==='local'?'Lokální':'Cloudový'}. Nastavení se průběžně ukládá a použije se i při dalším spuštění. Cloudové požadavky mohou být zpoplatněné poskytovatelem; žádné automatické přepínání.</p></>;
+  const modes=<AIModeChoices/>;
   const detect=<button className="button secondary" disabled={busy} onClick={async()=>{setNote('Hledám služby na známých lokálních adresách…');try{await desktopAPI('/ai/detect',{});await refresh();setNote('Kontrola dokončena. Výsledky najdeš u poskytovatelů.');}catch(reason){setNote((reason as Error).message);}}}>Vyhledat lokální služby</button>;
   return <div className="desktop-settings-backdrop"><section className="desktop-settings" role="dialog" aria-modal="true" aria-label={wizard?'Průvodce nastavením AI':'Nastavení aplikace'}><header><div><small>RANK STUDIO DESKTOP</small><h2>{wizard?'Nastavení AI':'Nastavení'}</h2></div><button aria-label="Zavřít nastavení" onClick={close}><X/></button></header>{error&&<p className="desktop-alert" role="alert">{error}</p>}{note&&<p className="desktop-notice" role="status">{note}</p>}
     {wizard?<div className="desktop-wizard"><ol className="desktop-wizard-steps">{['Režim','Poskytovatelé','Připojení','Model','Dokončení'].map((name,index)=><li className={index===step?'active':''} key={name}>{index+1}. {name}</li>)}</ol>
       {step===0&&<><h3>Jak chceš používat AI?</h3>{modes}<HardwarePanel/></>}
       {step===1&&<><h3>Aktivuj poskytovatele</h3>{profileRows.filter(p=>config.mode==='hybrid'||p.kind===config.mode).map(p=><label className="desktop-provider-toggle" key={p.id}><input type="checkbox" checked={p.enabled} disabled={busy} onChange={event=>update({providers:{[p.id]:{...p,enabled:event.target.checked}}}).catch(()=>{})}/>{p.name} · {p.kind==='local'?'lokální':'cloud'}</label>)}</>}
       {step===2&&<><h3>Připojení a bezpečné klíče</h3><p>{config.secure_storage}</p>{detect}{profileRows.filter(p=>p.enabled&&(config.mode==='hybrid'||p.kind===config.mode)).map(p=><ProfileCard key={p.id} profile={p}/>)}<ModelsPanel/></>}
-      {step===3&&<><h3>Vyber skutečně dostupný model</h3>{selector}<p>Seznam obsahuje pouze modely načtené z API poskytovatele. Pro výběr momentů potřebuješ podporu obrázků.</p></>}
-      {step===4&&<><h3>Připraveno k práci</h3>{selector}<p>Průvodce znovu otevřeš přes Nastavení → AI modely → Spustit průvodce nastavením. Projekty ani uložené klíče se tím nemažou.</p>{!config.active.model&&<p>AI zatím není připravená. Editor a ruční střih můžeš používat i bez ní.</p>}</>}
-      <footer><button className="text-button" onClick={finish}>Přeskočit a otevřít editor</button>{step>0&&<button className="button secondary" onClick={()=>setStep(step-1)}>Zpět</button>}<button className="button primary" disabled={busy} onClick={()=>step===4?finish():setStep(step+1)}>{step===4?'Dokončit':'Pokračovat'}<Check size={14}/></button></footer>
+      {step===3&&<><h3>Vyber skutečně dostupný model</h3>{selector}<p>Seznam obsahuje pouze modely načtené z API poskytovatele. Pro výběr momentů potřebuješ podporu obrázků.</p>{problem&&<p className="desktop-notice" role="status">{problem}</p>}</>}
+      {step===4&&<><h3>Připraveno k práci</h3>{selector}<p>Volba režimu, poskytovatele a modelu se uloží. „Najít klipy“ ji příště použije rovnou. Průvodce znovu otevřeš přes Nastavení → AI modely → Spustit průvodce nastavením. Projekty ani uložené klíče se tím nemažou.</p>{!config.active.model&&<p>AI zatím není připravená. Editor a ruční střih můžeš používat i bez ní.</p>}</>}
+      <footer><button className="text-button" onClick={()=>finish(false)} disabled={busy}>Pokračovat bez obrazové AI</button>{step>0&&<button className="button secondary" onClick={()=>setStep(step-1)}>Zpět</button>}<button className="button primary" disabled={busy||step>=3&&!!problem} onClick={()=>step===4?finish():setStep(step+1)}>{step===4?'Dokončit':'Pokračovat'}<Check size={14}/></button></footer>
     </div>:<div className="desktop-settings-layout"><nav>{tabs.map(name=><button className={tab===name?'active':''} key={name} onClick={()=>setTab(name)}>{name}</button>)}</nav><div className="desktop-settings-content">
       {tab==='Obecné'&&<GeneralPanel/>}
       {tab==='AI modely'&&<><h3>AI modely</h3>{modes}{selector}<button className="button secondary" onClick={()=>{setStep(0);setWizard(true);}}>Spustit průvodce nastavením</button><p>{config.secure_storage}</p></>}

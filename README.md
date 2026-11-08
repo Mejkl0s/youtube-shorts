@@ -8,6 +8,14 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Saved AI setup (2.0.3)
+
+Choose local, cloud or hybrid mode and an image-capable model during initial
+setup. The editor shows the saved selection before the search workflow;
+Settings remains available for later changes. Find clips uses the saved
+provider directly and reports errors inline, without reopening configuration
+based on stale health information. See [the workflow and tests](desktop/AI-SETUP.md).
+
 ## Ultra Noir visual identity (2.0.2)
 
 The complete editor, settings, wizard and startup screen use a shared

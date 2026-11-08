@@ -509,3 +509,20 @@ input[type=checkbox]:checked::before { transform: translateY(-1px) rotate(-45deg
 input[type=checkbox]:hover:not(:disabled) { border-color: var(--noir-gold); }
 input[type=checkbox]:disabled { opacity: .46; cursor: not-allowed; }
 @media(forced-colors:active) { input[type=checkbox] { appearance: auto; -webkit-appearance: auto; } input[type=checkbox]::before { content: none; } }
+.desktop-ai-setup { margin: 0 0 22px; padding: 18px 20px; border: 1px solid var(--noir-bronze); border-radius: var(--noir-radius-lg); background: var(--noir-panel); }
+.desktop-ai-setup > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.desktop-ai-setup > header > div { min-width: 0; }
+.desktop-ai-setup header small { color: var(--noir-gold); font-size: 9px; letter-spacing: 1.4px; }
+.desktop-ai-setup h2 { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; color: var(--noir-text); font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
+.desktop-ai-setup h2 span { color: var(--noir-text-faint); }
+.desktop-ai-setup > p, .desktop-ai-setup > small { display: block; color: var(--noir-text-muted); font-size: 11px; line-height: 1.7; margin: 9px 0 0; }
+.desktop-ai-setup details { border-top: 1px solid var(--noir-divider); margin: 13px 0 0; padding: 12px 0 0; }
+.desktop-ai-setup summary { cursor: pointer; color: var(--noir-text-secondary); font-size: 11px; }
+.desktop-ai-setup .desktop-model-picker { flex-wrap: wrap; margin: 14px 0; }
+.desktop-ai-setup .desktop-mode-cards { margin: 14px 0; }
+.desktop-ai-setup .desktop-mode-cards button { min-height: 112px; }
+.desktop-ai-setup .desktop-mode-cards small { color: var(--noir-text-muted); line-height: 1.6; font-size: 11px; }
+.desktop-setup-problem { color: var(--noir-text-secondary); font-size: 12px; line-height: 1.7; margin: 12px 0; }
+.desktop-setup-problem .text-button { display: inline-flex; color: var(--noir-gold); margin-left: 6px; white-space: normal; }
+@media(max-width:1000px) { .desktop-ai-setup { padding: 16px; } .desktop-ai-setup > header { align-items: flex-start; gap: 10px; } .desktop-ai-setup .desktop-mode-cards { grid-template-columns: 1fr; } .desktop-ai-setup .desktop-mode-cards button { min-height: auto; } }
+@media(max-width:720px) { .desktop-ai-setup > header { flex-wrap: wrap; } .desktop-ai-setup .desktop-model-picker select { max-width: 100%; } }

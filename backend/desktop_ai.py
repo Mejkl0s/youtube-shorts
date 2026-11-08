@@ -146,7 +146,7 @@ def vision_status():
         return {'supported':True,'ready':False,'model':'Nelze načíst','message':str(error)}
     return {'supported':True,'ready':bool(selection and selection.get('vision')),
             'model':config['active']['model'] or 'Nevybrán','provider':config['active']['provider'],
-            'message':('Vybraný model: '+config['active']['model']+'. Poslední ověření je v Nastavení → AI modely.') if selection else
+            'message':('Vybraný model: '+config['active']['model']+'. Poslední ověření je v Nastavení → AI modely.' if selection.get('vision') else 'Vybraný model '+config['active']['model']+' nemá ověřenou podporu obrázků. Pro hledání momentů vyber vizuální model v Nastavení → AI modely.') if selection else
                       'Otevři Nastavení → AI modely a ověř připojení. Lokální provoz je zdarma.'}
 
 

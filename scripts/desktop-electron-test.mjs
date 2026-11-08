@@ -14,7 +14,7 @@ const calls=[],timers=new Set();
 const modelServer=createServer(async(request,response)=>{
   let text='';for await(const part of request)text+=part;
   response.setHeader('content-type','application/json');
-  if(request.url==='/v1/models')return response.end(JSON.stringify({data:[{id:'fixture-vision-a',capabilities:{vision:true}},{id:'fixture-vision-b',capabilities:{vision:true}}]}));
+  if(request.url==='/v1/models')return response.end(JSON.stringify({data:[{id:'fixture-vision-a',capabilities:{vision:true}},{id:'fixture-vision-b',capabilities:{vision:true}},{id:'fixture-text',capabilities:{vision:false}}]}));
   if(request.url==='/v1/chat/completions'){
     const payload=JSON.parse(text);calls.push(payload);
     const slow=JSON.stringify(payload).includes('slow fixture');
@@ -26,15 +26,39 @@ const modelServer=createServer(async(request,response)=>{
 await new Promise(resolve=>modelServer.listen(0,'127.0.0.1',resolve));
 const endpoint=`http://127.0.0.1:${modelServer.address().port}/v1`;
 let app;
-async function launch(){
+async function launch(directory=root){
   app=await electron.launch({executablePath,args:[resolve('desktop'),...(process.platform==='linux'?['--no-sandbox','--disable-gpu','--disable-dev-shm-usage']:[])],
-    env:{...process.env,RANK_DESKTOP_TEST_DATA:root,XDG_CACHE_HOME:process.env.XDG_CACHE_HOME||resolve('.runtime/cache')},timeout:90000});
+    env:{...process.env,RANK_DESKTOP_TEST_DATA:directory,XDG_CACHE_HOME:process.env.XDG_CACHE_HOME||resolve('.runtime/cache')},timeout:90000});
   const page=await app.firstWindow();await page.waitForURL(url=>url.protocol==='http:'&&url.hostname==='127.0.0.1',{timeout:90000});await page.locator('#video-title').waitFor({timeout:90000});return page;
 }
 async function quit(page){
   const closed=app.waitForEvent('close',{timeout:30000});
   await page.evaluate(()=>{window.rankDesktop.quit();});await closed;app=null;
 }
+async function checkSavedSearch(page,model){
+  const health=await page.evaluate(async()=> (await fetch('/api/health')).json());
+  const saved=await page.evaluate(async()=> (await fetch('/api/desktop/ai/config')).json());
+  assert.equal(saved.active.model,model);assert.equal(saved.mode,'hybrid');assert.equal(saved.wizard_complete,true);
+  const attempts=[];
+  await page.route('**/api/health',route=>route.fulfill({json:{...health,local_vision:{...health.local_vision,ready:false}}}));
+  await page.route('**/api/discover',route=>{attempts.push(route.request().postDataJSON());return route.fulfill({status:503,json:{detail:'Fixture search unavailable'}});});
+  const response=page.waitForResponse(r=>r.url().endsWith('/api/health'));
+  await page.evaluate(()=>window.dispatchEvent(new Event('rank-desktop-ai-changed')));await response;await page.waitForTimeout(80);
+  await page.locator('#topic').fill('winter fails');
+  for(let index=0;index<2;index++){
+    await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:'Fixture search unavailable'}).waitFor();
+    assert.equal(attempts.length,index+1);assert.equal(attempts[index].mode,'local');assert.equal(attempts[index].search_depth,'thorough');
+    assert.equal(await page.getByRole('dialog').count(),0);
+    const current=await page.evaluate(async()=> (await fetch('/api/desktop/ai/config')).json());
+    assert.deepEqual(current.active,saved.active);assert.equal(current.mode,saved.mode);
+    await page.getByRole('button',{name:'Zavřít chybu',exact:true}).click();
+  }
+  await page.unroute('**/api/discover');await page.unroute('**/api/health');
+  const refreshed=page.waitForResponse(r=>r.url().endsWith('/api/health'));
+  await page.evaluate(()=>window.dispatchEvent(new Event('rank-desktop-ai-changed')));await refreshed;
+}
+
 try{
   let page=await launch();const errors=[];page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
   assert.equal(await page.evaluate(()=>typeof require),'undefined');
@@ -60,16 +84,32 @@ try{
   await local.getByLabel('Vlastní lokální API endpoint',{exact:true}).fill(endpoint);
   await local.getByRole('button',{name:'Uložit připojení',exact:true}).click();
   await local.getByRole('button',{name:'Ověřit a načíst modely',exact:true}).click();
-  await local.getByText('Připojeno. Ověřeno 2 modelů.',{exact:true}).waitFor();
+  await local.getByText('Připojeno. Ověřeno 3 modelů.',{exact:true}).waitFor();
   const deepseek=wizard.locator('.desktop-provider-card').filter({has:page.getByText('DeepSeek',{exact:true})});
   await deepseek.getByLabel('DeepSeek API klíč',{exact:true}).fill('fixture-must-not-be-plaintext');
   await deepseek.getByRole('button',{name:'Uložit klíč',exact:true}).click();await deepseek.getByText('Klíč uložen.',{exact:true}).waitFor();
   await wizard.getByRole('button',{name:'Pokračovat',exact:true}).click();
   await page.getByLabel('settings poskytovatel AI',{exact:true}).selectOption('local');
+  await page.getByLabel('settings model AI',{exact:true}).selectOption('fixture-text');
+  assert.equal(await wizard.getByRole('button',{name:'Pokračovat',exact:true}).isDisabled(),true);
+  await wizard.getByText(/Vybraný model nemá ověřenou podporu obrázků/).waitFor();
   await page.getByLabel('settings model AI',{exact:true}).selectOption('fixture-vision-b');
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-b');
   await wizard.getByRole('button',{name:'Pokračovat',exact:true}).click();
   await wizard.getByRole('button',{name:'Dokončit',exact:true}).click();await wizard.waitFor({state:'hidden'});
+  const setup=page.getByRole('region',{name:'Výchozí nastavení AI'});
+  await setup.getByText('Režim a model',{exact:true}).click();
+  await setup.getByRole('button',{name:/Kombinovaný režim/}).click();
+  assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-b');
+  await setup.getByText('Režim a model',{exact:true}).click();
+  await checkSavedSearch(page,'fixture-vision-b');
+  await page.getByLabel('top model AI',{exact:true}).selectOption('fixture-text');
+  await page.locator('#topic').fill('winter fails');
+  await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'podporu obrázků'}).waitFor();
+  assert.equal(await page.getByRole('dialog').count(),0);
+  await page.getByLabel('top model AI',{exact:true}).selectOption('fixture-vision-b');
+  await page.getByRole('button',{name:'Zavřít chybu',exact:true}).click();
   const durationLimit=page.getByLabel('Maximální délka projektu',{exact:true});
   await durationLimit.fill('');await durationLimit.pressSequentially('40');await durationLimit.press('Tab');
   assert.equal(await durationLimit.inputValue(),'40');
@@ -164,6 +204,7 @@ try{
   assert.equal(await page.getByRole('dialog',{name:'Průvodce nastavením AI'}).count(),0);
   await page.waitForFunction(()=>document.querySelector('#video-title')?.value==='Desktop project immediate save');
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-a');
+  await checkSavedSearch(page,'fixture-vision-a');
   await page.getByRole('button',{name:'Pokročilé nastavení AI',exact:true}).click();
   await page.getByRole('button',{name:'Spustit průvodce nastavením',exact:true}).click();await page.getByRole('dialog',{name:'Průvodce nastavením AI'}).waitFor();
   assert.equal(await page.getByRole('button',{name:/Kombinovaný režim/}).getAttribute('class'),'selected');
@@ -174,8 +215,29 @@ try{
   assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isVisible()),false);
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show());
   await page.evaluate(settings=>window.rankDesktop.preferences({...settings,closeBehavior:'quit'}),prefs.settings);
-  await quit(page);assert.deepEqual(errors,[]);assert.ok(calls.length>=3);
-  console.log('Actual Electron passed: isolated preload, token authentication, wizard/hybrid configuration, provider discovery, live model switching with per-job snapshot, cancellation, local work with offline UI, immediate-close persistence, restart, repeat wizard and tray close behavior. AI replies were local fixtures. Windows installer/signature verification is a separate native acceptance check.');
+  await quit(page);assert.ok(calls.length>=3);
+  const technicalRoot=root+'-without-ai';
+  page=await launch(technicalRoot);page.on('pageerror',error=>errors.push(error.message));
+  const technicalWizard=page.getByRole('dialog',{name:'Průvodce nastavením AI'});await technicalWizard.waitFor();
+  await technicalWizard.getByRole('button',{name:'Pokračovat bez obrazové AI',exact:true}).click();
+  await technicalWizard.waitFor({state:'hidden'});
+  await page.waitForFunction(()=>document.querySelector('#search-mode')?.value==='free'&&document.querySelector('[aria-label="Rozsah hledání"]')?.value==='quick');
+  await quit(page);page=await launch(technicalRoot);page.on('pageerror',error=>errors.push(error.message));
+  assert.equal(await page.getByRole('dialog').count(),0);
+  assert.equal(await page.locator('#search-mode').inputValue(),'free');
+  assert.equal(await page.getByLabel('Rozsah hledání',{exact:true}).inputValue(),'quick');
+  const technicalAttempts=[];
+  await page.route('**/api/discover',route=>{technicalAttempts.push(route.request().postDataJSON());return route.fulfill({status:503,json:{detail:'Fixture technical search unavailable'}});});
+  await page.locator('#topic').fill('winter fails');
+  for(let index=0;index<2;index++){
+    await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:'Fixture technical search unavailable'}).waitFor();
+    assert.equal(technicalAttempts[index].mode,'free');assert.equal(technicalAttempts[index].search_depth,'quick');
+    assert.equal(await page.getByRole('dialog').count(),0);
+    await page.getByRole('button',{name:'Zavřít chybu',exact:true}).click();
+  }
+  await quit(page);assert.deepEqual(errors,[]);
+  console.log('Actual Electron passed: isolated preload, token authentication, wizard/hybrid configuration, provider discovery, saved search without repeated settings (also after restart and with stale health), upfront vision validation, live model switching with per-job snapshot, cancellation, local work with offline UI, immediate-close persistence, restart, repeat wizard and tray close behavior. AI replies were local fixtures. Windows installer/signature verification is a separate native acceptance check.');
 }finally{
   if(app){try{await app.evaluate(({app})=>app.exit(1));}catch{}}
   for(const timer of timers)clearTimeout(timer);modelServer.closeAllConnections();await new Promise(resolve=>modelServer.close(resolve));

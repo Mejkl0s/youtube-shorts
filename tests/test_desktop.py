@@ -125,7 +125,11 @@ def test_deepseek_is_usable_for_text_but_never_receives_video_frames(desktop,mon
     with pytest.raises(providers.ProviderError,match='podporu obrázků'):
         ai.request('Judge video',[{'type':'image_url','image_url':{'url':'data:image/jpeg;base64,ZmFrZQ=='}}],100)
     assert calls==[]
-    assert not m.local_vision.status()['ready']
+    status=m.local_vision.status()
+    assert not status['ready'] and 'podporu obrázků' in status['message']
+    response=desktop.post('/api/discover',json={'topic':'winter fails','mode':'local','search_depth':'thorough'})
+    assert response.status_code==409 and 'podporu obrázků' in response.json()['detail']
+    assert calls==[]
 
 
 def test_model_choice_is_verified_persistent_and_does_not_silently_change_provider(desktop,monkeypatch):
@@ -381,3 +385,18 @@ def test_local_stream_rejects_model_replaced_with_cloud_alias(desktop,monkeypatc
     monkeypatch.setattr(httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(respond),**kwargs))
     with pytest.raises(providers.ProviderError,match='cloudový alias'):
         list(providers.stream(ai.snapshot(),[{'role':'user','content':'Return JSON'}]))
+
+
+@pytest.mark.parametrize('mode,identity',[('local','local'),('cloud','openai'),('hybrid','local')])
+def test_discovery_uses_saved_visual_selection_without_reconfiguring(desktop,monkeypatch,mode,identity):
+    data=configured(identity,'fixture-saved-vision',True)
+    data.update(mode=mode,wizard_complete=True);ai.save(data)
+    submissions=[]
+    monkeypatch.setattr(m,'executor',types.SimpleNamespace(submit=lambda fn,*args,**kwargs:submissions.append(args)))
+    monkeypatch.setattr(m.work,'reserve',lambda *args,**kwargs:None)
+    response=desktop.post('/api/discover',json={'topic':'winter fails','mode':'local','search_depth':'thorough'})
+    assert response.status_code==202,response.text
+    assert len(submissions)==1 and submissions[0][1].mode=='local'
+    selected=ai.snapshot()
+    assert selected['model']=='fixture-saved-vision' and selected['profile']['id']==identity
+    assert ai.load()['mode']==mode and ai.load()['wizard_complete']
