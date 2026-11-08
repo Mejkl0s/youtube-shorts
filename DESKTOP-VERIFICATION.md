@@ -3,6 +3,27 @@
 Záznam aktualizovaný 8. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
 
+## Verze 2.0.3 — uložené nastavení AI, 8. 11. 2026
+
+[Popis postupu](desktop/AI-SETUP.md). Uložený režim/model je v kartě před
+hledáním a zůstává měnitelný v Nastavení. Hledání neotevírá dialog kvůli
+starému klientskému `/health`; backend ověří aktuální uloženou volbu.
+Kombinovaný režim zachová platný vybraný model. Průvodce kontroluje podporu
+obrázků před dokončením, nebo výslovně uloží technický výběr bez obrazové AI.
+
+Lokálně prošlo 60 Python kontrol desktopu, pět bezpečnostních Node testů,
+frontend build a browser scénář skutečného střihu. Skutečný Electron ověřil
+opakované hledání při záměrně neaktuálním `/health`, uloženou volbu po restartu,
+chybový stav bez přesměrování do Nastavení, počáteční kontrolu textového modelu
+a uložené přeskočení obrazové AI. Prošel i původní MP4/export/archive/tray scénář.
+Síť/AI jsou v automatizovaných scénářích protokolové fixtures.
+
+Windows běh [42483492682](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42483492682)
+skončil úspěšně: kompletní regrese, PyInstaller/NSIS, přibalená aplikace,
+instalace, spuštění, reinstalace a odinstalace se zachováním dat.
+[Instalační ZIP 2.0.3](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42483492682/artifacts/13619141185) má 341 MB; GitHub vyžaduje přihlášení.
+SHA-256 ZIPu: `415e1cab7152f4175bbc33f8f9c881eb970c9a1c98d8e955ef5b5beff0094192`. Sestava zůstává nepodepsaná.
+
 ## Verze 2.0.2 Ultra Noir — 8. 11. 2026
 
 Vizuální implementace a centrální tokeny jsou popsané v
@@ -136,7 +157,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42434685221)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42483492682)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -150,13 +171,13 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 341 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`1b316dac2dcb4df509251747234b7189640178df`. Úspěšná reinstalace stejné verze
+`0e98fc755fd0bc0ca7e66490d3f9888bd27d4523`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42434685221/artifacts/13598817445)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42483492682/artifacts/13619141185)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`8700ffd35570554e111d3d456c2902cf7d12502d919e7c55d05ccb1ec572ca87`.
+`415e1cab7152f4175bbc33f8f9c881eb970c9a1c98d8e955ef5b5beff0094192`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako
