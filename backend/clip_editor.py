@@ -125,7 +125,9 @@ def recut_all(job_id, rows):
             cut=m.materialize_scenes([item])[0]
             created.append(m.DATA/'media'/cut['id'])
             video=next(s for s in m.probe(path)['streams'] if s['codec_type']=='video')
-            cut.update({key:getattr(old,key) for key in ('title','voiceover','narration_mode','rank_note','source_url')})
+            cut.update({key:getattr(old,key) for key in ('title','voiceover','narration_mode','rank_note','rank_note_auto','source_url','end_audio')})
+            if old.rank_note_auto:
+                cut.update(rank_note='',rank_note_auto=False)
             cut['blur_regions']=reframe_regions(old.blur_regions,video['width'],video['height'],old.framing,'fit')
             result.append(cut)
         m.Project(title='Obnovené scény',clips=result,voice=False)

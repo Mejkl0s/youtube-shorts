@@ -8,6 +8,12 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Clip audio, ranking colors and contextual notes (2.0.4)
+
+[Editor controls](desktop/EDITOR-POLISH.md): per-clip ending-audio choices,
+individual number colors, full-width workspace and animated notes grounded
+in each actual cut. Random stock reactions are no longer assigned.
+
 ## Saved AI setup (2.0.3)
 
 Choose local, cloud or hybrid mode and an image-capable model during initial
@@ -100,7 +106,7 @@ The source montage player only plays original audio. **Připravit voiceover zdar
 
 The video contains the main heading, numbers and short notes beside the numbers. Source titles in lime, criteria at the bottom and the preview's studio footer/watermark/dots are removed, including when restoring older projects with `show_label`/`show_criteria` enabled. The active medal number has no automatic gray background; the optional explicit badge preset remains available. Source text already burned into a downloaded video is handled by the source blur editor.
 
-Each clip has an editable **Poznámka u čísla** (`rank_note`, at most four words / 40 characters). New selections receive varied short English/Czech reactions from a local bank. There are no duplicates within the five, and the next set avoids the previous set even when intervening source downloads generate their own labels. **Obměnit poznámky** explicitly requests another set. These are editable reactions, not AI descriptions of the footage. Existing saved notes stay unchanged on reload, reorder and export. Notes follow their clips during reorder and persist with the project. An explicit empty note stays empty. **Poznámky u čísel** controls their visibility (`captions` in the API). Column view shows the note beside each position; single view shows the current clip's note. Voiceover text is independent and no longer printed at the bottom. Preview and actual MP4 use the same note text and bundled template font. Legacy caption placement and source-label fields remain accepted for old API projects but do not add overlays.
+Each clip has an editable **Poznámka u čísla** (`rank_note`, at most four words / 40 characters). Visual selection writes notes from each event's frame evidence. **Poznámky podle klipů** explicitly inspects the current cuts with the selected visual AI; unclear or generic responses preserve the old notes. Technical selections and uploads leave notes empty rather than inventing stock reactions. Automatic notes are invalidated when the cut changes; manual notes remain editable. Notes follow clips on reorder and persist with the project. In the column view each note animates in when its clip begins and remains through the end; future notes stay hidden. Single-number view shows the current note. Animation, visibility (`captions`) and individual number colors are adjustable in **Finální doladění**. Voiceover text remains independent. Preview and MP4 use the same note text and bundled font; legacy caption placement/source-label fields do not add overlays. [Detailed controls and limits](desktop/EDITOR-POLISH.md).
 
 ## Windows desktop launch
 

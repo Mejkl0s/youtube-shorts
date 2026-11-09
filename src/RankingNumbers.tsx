@@ -1,7 +1,7 @@
 import {useLayoutEffect,useRef} from 'react';
 import {rankMarkers,type Layout} from './template';
 
-function Note({text,font}:{text:string;font:string}){
+function Note({text,font,progress}:{text:string;font:string;progress:number}){
   const ref=useRef<HTMLSpanElement>(null);
   useLayoutEffect(()=>{
     const el=ref.current!;
@@ -10,15 +10,15 @@ function Note({text,font}:{text:string;font:string}){
     let active=true;document.fonts.ready.then(()=>{if(active)fit();});
     return()=>{active=false;observer.disconnect();};
   },[text,font]);
-  return <span ref={ref} className="phone-rank-note">{text}</span>;
+  return <span ref={ref} className="phone-rank-note" style={{opacity:progress,transform:`translateX(${(progress-1)*2.5}cqw)`}}>{text}</span>;
 }
 
-export default function RankingNumbers({layout,activeRank,notes={}}:{layout:Layout;activeRank:number;notes?:Record<number,string>}){
+export default function RankingNumbers({layout,activeRank,time=1,notes={}}:{layout:Layout;activeRank:number;time?:number;notes?:Record<number,string>}){
   const column=layout.rank_display!=='single';
   return <div className={`${column?'phone-ranking-column':'phone-ranking-single'}${layout.rank_palette!=='custom'?' rank-medals':''}`} role="list" aria-label={column?'Pořadí 1 až 5':'Aktuální pořadí'}>
     {rankMarkers(layout,activeRank).map(marker=><div className="phone-rank-row" role="listitem" key={marker.rank} style={{top:`${marker.y*100}%`,left:`${layout.rank_x*100}%`}}>
       <div data-rank={marker.rank} aria-current={marker.active?'true':undefined} className={`phone-rank rank-${layout.rank_style??'outline'}${marker.active?' active':''}`} style={{top:`${marker.y*100}%`,left:`${layout.rank_x*100}%`,fontSize:`${marker.size*100}cqw`,color:`#${marker.color}${marker.alpha<1?'B8':''}`}}>{marker.text}</div>
-      {notes[marker.rank]&&<Note text={notes[marker.rank]} font={layout.font}/>}
+      {notes[marker.rank]&&marker.rank>=activeRank&&<Note text={notes[marker.rank]} font={layout.font} progress={marker.rank!==activeRank||layout.note_animation===false?1:Math.min(1,Math.max(0,(time-.12)/.24))}/>}
     </div>)}
   </div>;
 }

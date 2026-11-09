@@ -196,11 +196,13 @@ def parse_review(reviewed, scenes, intervals):
             raise VisualSelectionError('Střih nezachovává přípravu, hlavní moment a závěr ve správném pořadí.')
         try:
             clip = m.Clip(id=scene['candidate']['id'], title=item.get('title', ''), voiceover=item.get('voiceover', ''),
-                          rank_note=item.get('rank_note'), reason=item.get('reason', ''), start=start, duration=end-start,
+                          rank_note=item.get('rank_note'), rank_note_auto=True, reason=item.get('reason', ''), start=start, duration=end-start,
                           source_url=scene['candidate'].get('source_url', ''), framing='fit', selection_version='visual-event-v2')
         except ValueError:
             raise VisualSelectionError('AI vrátila neplatný název, komentář nebo poznámku momentu.') from None
-        if not 1 <= m.word_count(clip.voiceover) <= 7 or not clip.rank_note:
+        from .rank_notes import GENERIC_NOTES
+        if (not 1 <= m.word_count(clip.voiceover) <= 7 or not clip.rank_note
+                or clip.rank_note.casefold().rstrip('!.…') in GENERIC_NOTES):
             raise VisualSelectionError('AI nedodržela krátký komentář a poznámku.')
         review_provider=_provider.get();review_model=None
         if os.environ.get('RANK_DESKTOP_MODE')=='1':

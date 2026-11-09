@@ -47,7 +47,9 @@ class Layout(BaseModel):
     title_style: Literal['outline', 'shadow', 'plain', 'box'] = 'outline'
     title_highlights: list[TitleHighlight] = Field(default_factory=list, max_length=50)
     rank_color: str = 'CAFA63'
-    rank_palette: Literal['medals', 'custom'] = 'medals'
+    rank_palette: Literal['medals', 'custom', 'individual'] = 'medals'
+    rank_colors: dict[int, str] = Field(default_factory=lambda: dict(MEDAL_COLORS), max_length=5)
+    note_animation: bool = True
     caption_color: str = 'FFFFFF'
     title_y: float = Field(default=0.0615, ge=0.01, le=0.35)
     title_size: float = Field(default=0.0454, ge=0.02, le=0.085)
@@ -68,20 +70,28 @@ class Layout(BaseModel):
 
     def rank_markers(self, active_rank: int):
         def paint(rank):
+            if self.rank_palette == 'individual':
+                return {'color': self.rank_colors.get(rank, MEDAL_COLORS[rank]), 'alpha': 1, 'active': rank == active_rank}
             if self.rank_palette == 'medals':
                 return {'color': MEDAL_COLORS[rank], 'alpha': 1, 'active': rank == active_rank}
             return {'color': self.rank_color if rank == active_rank else 'FFFFFF',
                     'alpha': 1 if rank == active_rank else .72, 'active': rank == active_rank}
         if self.rank_display == 'single':
             return [{'rank': active_rank, 'text': f'#{active_rank}', 'y': self.rank_y,
-                     'size': self.rank_size, 'color': MEDAL_COLORS[active_rank] if self.rank_palette == 'medals' else self.rank_color,
-                     'alpha': 1, 'active': True}]
+                     'size': self.rank_size, **paint(active_rank)}]
         # Fit all five rows even when a saved template moves the column down
         # or requests an oversized number. Fractions match the browser preview.
         gap = min(.12, (.88 - self.rank_y) / 4.8)
         size = min(self.rank_size, .115, gap * 16 / 9 * .8)
         return [{'rank': rank, 'text': f'{rank}.', 'y': self.rank_y + (rank-1)*gap,
                  'size': size, **paint(rank)} for rank in range(1, 6)]
+
+    @field_validator('rank_colors')
+    @classmethod
+    def individual_colors(cls, value):
+        if any(rank not in range(1, 6) for rank in value):
+            raise ValueError('Barvy pořadí patří číslům 1 až 5.')
+        return {rank: color_hex(color) for rank, color in value.items()}
 
     @field_validator('title_color', 'rank_color', 'caption_color')
     @classmethod

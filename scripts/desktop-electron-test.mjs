@@ -11,12 +11,17 @@ import {randomUUID} from 'node:crypto';
 const require=createRequire(import.meta.url),executablePath=require('../desktop/node_modules/electron');
 const root=resolve('.runtime/desktop-electron-'+randomUUID());await mkdir(root,{recursive:true});
 const calls=[],timers=new Set();
+const noteTexts=['Colors change direction','Shapes cross screen','Pattern shifts sideways','Blocks move together','Colors rotate again'];let noteIndex=0;
 const modelServer=createServer(async(request,response)=>{
   let text='';for await(const part of request)text+=part;
   response.setHeader('content-type','application/json');
   if(request.url==='/v1/models')return response.end(JSON.stringify({data:[{id:'fixture-vision-a',capabilities:{vision:true}},{id:'fixture-vision-b',capabilities:{vision:true}},{id:'fixture-text',capabilities:{vision:false}}]}));
   if(request.url==='/v1/chat/completions'){
     const payload=JSON.parse(text);calls.push(payload);
+    if(JSON.stringify(payload).includes('RANK NOTE REVIEW')){
+      assert.ok(payload.messages.some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image_url')));
+      return response.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({visible:true,note:noteTexts[noteIndex++%noteTexts.length]})}}]}));
+    }
     const slow=JSON.stringify(payload).includes('slow fixture');
     const timer=setTimeout(()=>{timers.delete(timer);response.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({text:'Fixture answer '+payload.model})}}]}));},slow?20000:900);
     timers.add(timer);response.on('close',()=>{clearTimeout(timer);timers.delete(timer);});return;
@@ -152,6 +157,15 @@ try{
   await page.locator('.desktop-text-result').filter({hasText:'Fixture answer fixture-vision-a'}).waitFor({timeout:20000});
   await page.getByRole('button',{name:/Vyzkoušet syntetickou ukázku/}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.clip-thumb img').length===5,{},{timeout:60000});
+  assert.equal(await page.getByLabel('Poznámka u čísla 5',{exact:true}).inputValue(),'');
+  await page.getByRole('button',{name:'Poznámky podle klipů',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('input[aria-label="Poznámka u čísla 1"]')?.value==='Colors rotate again',{},{timeout:60000});
+  for(let index=0;index<5;index++)assert.equal(await page.getByLabel(`Poznámka u čísla ${5-index}`,{exact:true}).inputValue(),noteTexts[index]);
+  assert.equal(await page.locator('.phone-rank-note').count(),1);
+  await page.getByLabel('Náhled pozice 4',{exact:true}).click();assert.equal(await page.locator('.phone-rank-note').count(),2);
+  await page.getByLabel('Barevný režim čísel',{exact:true}).selectOption('individual');
+  await page.getByLabel('Barva čísla 1',{exact:true}).evaluate(el=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'#11cc77');el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
+  assert.equal(await page.locator('[data-rank="1"]').evaluate(el=>getComputedStyle(el).color),'rgb(17, 204, 119)');
   await page.getByLabel('Voiceover',{exact:true}).uncheck();
   await page.locator('#resolution').selectOption('720');
   const videoFile=root+'/native-export.mp4';
@@ -204,6 +218,9 @@ try{
   assert.equal(await page.getByRole('dialog',{name:'Průvodce nastavením AI'}).count(),0);
   await page.waitForFunction(()=>document.querySelector('#video-title')?.value==='Desktop project immediate save');
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-a');
+  assert.equal(await page.getByLabel('Barevný režim čísel',{exact:true}).inputValue(),'individual');
+  assert.equal(await page.getByLabel('Barva čísla 1',{exact:true}).inputValue(),'#11cc77');
+  assert.equal(await page.getByLabel('Poznámka u čísla 5',{exact:true}).inputValue(),noteTexts[0]);
   await checkSavedSearch(page,'fixture-vision-a');
   await page.getByRole('button',{name:'Pokročilé nastavení AI',exact:true}).click();
   await page.getByRole('button',{name:'Spustit průvodce nastavením',exact:true}).click();await page.getByRole('dialog',{name:'Průvodce nastavením AI'}).waitFor();
@@ -237,7 +254,7 @@ try{
     await page.getByRole('button',{name:'Zavřít chybu',exact:true}).click();
   }
   await quit(page);assert.deepEqual(errors,[]);
-  console.log('Actual Electron passed: isolated preload, token authentication, wizard/hybrid configuration, provider discovery, saved search without repeated settings (also after restart and with stale health), upfront vision validation, live model switching with per-job snapshot, cancellation, local work with offline UI, immediate-close persistence, restart, repeat wizard and tray close behavior. AI replies were local fixtures. Windows installer/signature verification is a separate native acceptance check.');
+  console.log('Actual Electron passed: isolated preload, token authentication, wizard/hybrid configuration, provider discovery, saved search without repeated settings (also after restart and with stale health), upfront vision validation, live model switching with per-job snapshot, cancellation, local work with offline UI, contextual notes per actual cut, individual rank colors, MP4/archive export, immediate-close persistence, restart, repeat wizard and tray close behavior. AI replies were local fixtures. Windows installer/signature verification is a separate native acceptance check.');
 }finally{
   if(app){try{await app.evaluate(({app})=>app.exit(1));}catch{}}
   for(const timer of timers)clearTimeout(timer);modelServer.closeAllConnections();await new Promise(resolve=>modelServer.close(resolve));

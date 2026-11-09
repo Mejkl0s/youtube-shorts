@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 from backend import main as m
 from backend import free_search as f
 from backend.clip_editor import recut_all
-from backend.rank_notes import NOTE_BANK, fresh_notes
 from backend.scene_context import reframe_regions
 from test_workflow import isolated
 
@@ -116,13 +115,12 @@ def test_reframing_keeps_blur_on_same_source_pixels():
         assert abs(restored[0][key]-mask[key])<.00001
 
 
-def test_notes_change_between_selections_without_repeats(isolated):
-    first=fresh_notes(5,'en')
-    for _ in range(20):fresh_notes(1,'en')  # intervening candidate downloads
-    second=fresh_notes(5,'en')
-    assert len(set(first))==len(set(second))==5 and not set(first)&set(second)
-    assert all(m.word_count(text)<=4 and len(text)<=40 for bank in NOTE_BANK.values() for text in bank)
+def test_technical_selection_never_invents_notes(isolated):
+    clips = [{'rank_note': 'Wait for it', 'selection_version': 'whole-scene-v1'},
+             {'rank_note': 'Skater lands sideways', 'selection_version': 'visual-event-v2'}]
+    m.assign_notes(clips)
+    assert clips[0]['rank_note'] == ''
+    assert clips[1]['rank_note'] == 'Skater lands sideways'
     client=TestClient(m.app)
-    response=client.post('/api/rank-notes',json={'language':'cs','exclude':first})
-    assert response.status_code==200 and len(set(response.json()['notes']))==5
-
+    response=client.post('/api/rank-notes',json={'language':'cs','count':5})
+    assert response.status_code==422  # Actual clips are required, no random bank.

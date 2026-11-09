@@ -27,7 +27,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .style import FONTS, Layout, VoiceSettings, voice_available, filter_path
 from .title_render import render_title
 from .cleanup import BlurRegion, blur_filters, detect_text
-from .rank_notes import fresh_notes, note_geometry
+from .rank_notes import note_geometry, describe_clips
+from .audio_tail import tail_filter
 from .scene_context import MAX_CLIP_SECONDS, portrait_filter, action_window
 from .timeline import MIN_CLIP_SECONDS, MAX_PROJECT_SECONDS, FPS
 from .access import owner_access
@@ -116,7 +117,7 @@ def register(path: Path, asset_id: str, name: str, *, fast_preview=False):
         ffmpeg('-i',str(path),'-map','0:v:0','-map','0:a?','-c','copy','-movflags','+faststart',str(folder/'preview.mp4'),timeout=60)
     else:
         ffmpeg('-i', str(path), '-t', str(MAX_SOURCE_SECONDS), '-vf', 'scale=640:1138:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1', '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(folder / 'preview.mp4'), timeout=360)
-    result = {'id': asset_id, 'name': name, 'duration': duration, 'framing': 'fit', 'preview_framing': 'original', 'rank_note': fresh_notes(1)[0], 'has_audio': any(s['codec_type'] == 'audio' for s in metadata['streams']), 'url': f'/media/{asset_id}/preview.mp4', 'thumbnail': f'/media/{asset_id}/thumb.jpg'}
+    result = {'id': asset_id, 'name': name, 'duration': duration, 'framing': 'fit', 'preview_framing': 'original', 'rank_note': '', 'has_audio': any(s['codec_type'] == 'audio' for s in metadata['streams']), 'url': f'/media/{asset_id}/preview.mp4', 'thumbnail': f'/media/{asset_id}/thumb.jpg'}
     result['content_sha256'] = file_hash(path)
     (folder / 'metadata.json').write_text(json.dumps(result))
     return result
@@ -136,6 +137,8 @@ class Clip(BaseModel):
     framing: Literal['fit','fill'] = 'fill'
     blur_regions: list[BlurRegion] = Field(default_factory=list, max_length=8)
     rank_note: str | None = Field(default=None, max_length=40)
+    end_audio: Literal['auto', 'keep', 'mute'] = 'auto'
+    rank_note_auto: bool = False
 
     @field_validator('rank_note')
     @classmethod
@@ -177,10 +180,9 @@ class Project(BaseModel):
             raise ValueError('Neplatný jazyk nebo rozlišení.')
         if len({c.id for c in self.clips}) != 5:
             raise ValueError('Nahrajte pět různých klipů.')
-        missing = fresh_notes(sum(c.rank_note is None for c in self.clips), self.language, [c.rank_note for c in self.clips])
         for index, clip in enumerate(self.clips):
             if clip.rank_note is None:
-                clip.rank_note = missing.pop()
+                clip.rank_note = ''
             if clip.narration_mode == 'rank':
                 clip.voiceover = rank_lines(self.language)[index]
         if self.voice and any(not c.voiceover.strip() or not word_count(c.voiceover) for c in self.clips):
@@ -413,7 +415,8 @@ def render(job_id: str, project: Project):
             filters, audio_inputs = [], []
             next_input = 2
             if meta['has_audio']:
-                filters.append(f'[0:a]atrim=duration={duration},asetpts=PTS-STARTPTS,volume={project.original_volume},apad,atrim=duration={duration}[original]')
+                ending = tail_filter(source, clip.start, duration, clip.end_audio)
+                filters.append(f'[0:a]atrim=duration={duration},asetpts=PTS-STARTPTS,{ending}volume={project.original_volume},apad,atrim=duration={duration}[original]')
                 audio_inputs.append('[original]')
             if project.voice:
                 voice_path = folder / f'voice-{rank}.wav'
@@ -467,11 +470,17 @@ def render(job_id: str, project: Project):
                 marker_decoration = rank_decoration
                 video += f",drawtext=fontfile={font}:text='{marker['text']}':fontsize={int(width*marker['size'])}:fontcolor=0x{marker['color']}@{marker['alpha']}:x={int(width*layout.rank_x)}:y={int(height*marker['y'])}:borderw={rank_border}:bordercolor=black{marker_decoration}"
                 note = project.clips[5-marker['rank']].rank_note
-                if project.captions and note:
+                if project.captions and note and marker['rank'] >= rank:
                     notefile = folder / f"note-{marker['rank']}.txt"
                     notefile.write_text(note, encoding='utf-8')
                     note_x, note_y, note_size = note_geometry(note, FONTS[layout.font], marker, width, height, layout.rank_x)
-                    video += ',' + draw_text(notefile, note_size, str(note_y), 'white', str(note_x))
+                    note_filter = draw_text(notefile, note_size, str(note_y), 'white', str(note_x))
+                    if layout.note_animation and marker['rank'] == rank:
+                        progress = 'min(1,max(0,(t-0.12)/0.24))'
+                        slide = max(1, round(width*.025))
+                        note_filter = draw_text(notefile, note_size, str(note_y), 'white', f"'{note_x}-{slide}*(1-{progress})'")
+                        note_filter += f":alpha='{progress}'"
+                    video += ',' + note_filter
             filters.append(video + '[video]')
             out = folder / f'clip-{rank}.mp4'
             ffmpeg(*inputs, '-filter_complex_threads', '2', '-filter_complex', ';'.join(filters), '-map', '[video]', '-map', '[audio]', '-t', str(duration), '-c:v', 'libx264', '-r','30','-fps_mode','cfr', '-threads', '2', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2', '-movflags', '+faststart', str(out),cwd=folder)
@@ -669,6 +678,7 @@ def materialize_scenes(clips):
                       'selection_version': row.get('selection_version'),
                       'visual_review': row.get('visual_review'),
                       'rank_note': row.get('rank_note',meta.get('rank_note')),
+                      'rank_note_auto': row.get('rank_note_auto',False),
                       'source_url': row.get('source_url',''), 'review_required': row.get('review_required', False)}
             meta.update(origin)
             (folder/'metadata.json').write_text(json.dumps(meta))
@@ -682,20 +692,55 @@ def materialize_scenes(clips):
 
 
 def assign_notes(clips, language='en', exclude=()):
-    missing=[clip for clip in clips if clip.get('selection_version')!='visual-event-v2' or not clip.get('rank_note')]
-    for clip,note in zip(missing,fresh_notes(len(missing),language,exclude)):
-        clip['rank_note']=note
+    # A technical selection cannot describe the event. Never invent a reaction.
+    for clip in clips:
+        if clip.get('selection_version') != 'visual-event-v2':
+            clip['rank_note'] = ''
 
 
 class NotesRequest(BaseModel):
     language: Literal['en','cs'] = 'en'
-    count: int = Field(default=5,ge=1,le=5)
-    exclude: list[str] = Field(default_factory=list,max_length=30)
+    clips: list[Clip] = Field(min_length=1, max_length=5)
+    mode: Literal['local'] = 'local'
 
 
-@app.post('/api/rank-notes')
+@work.limited_discovery
+def create_rank_notes(job_id, body):
+    try:
+        set_job(job_id, status='working', progress=5, message='AI prohlíží jednotlivé výřezy…')
+        notes = describe_clips(body.clips, body.language)
+        clips = []
+        for clip, note in zip(body.clips, notes):
+            meta = asset(clip.id)
+            clips.append({**meta, **clip.model_dump(), 'rank_note': note, 'rank_note_auto': True,
+                          'sourceDuration': meta['duration']})
+        set_job(job_id, status='done', progress=100, clips=clips,
+                message='Poznámky vytvořené podle snímků každého výřezu. Zkontroluj je u klipů.')
+    except WorkStopped:
+        raise
+    except Exception as error:
+        set_job(job_id, status='failed', message=f'Poznámky nebyly změněny: {str(error)[:300]}')
+
+
+@app.post('/api/rank-notes', status_code=202)
 def new_notes(body: NotesRequest):
-    return {'notes': fresh_notes(body.count,body.language,body.exclude)}
+    try:
+        local_vision.require_ready()
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+    for clip in body.clips:
+        meta = asset(clip.id)
+        if clip.start + clip.duration > meta['duration'] + .05:
+            raise HTTPException(400, 'Výřez přesahuje délku zdroje.')
+    with job_lock:
+        if any(j['status'] in ('queued', 'rendering', 'searching', 'working') for j in jobs.values()):
+            raise HTTPException(409, 'Jeden úkol právě běží. Počkej na dokončení.')
+        job_id = uuid.uuid4().hex
+        jobs[job_id] = {'id': job_id, 'status': 'queued', 'progress': 0,
+                        'kind': 'rank-notes', 'message': 'Připravuji poznámky podle obrazu…'}
+        work.reserve(job_id, work.LOCAL_SEARCH_SECONDS)
+    executor.submit(create_rank_notes, job_id, body)
+    return dict(jobs[job_id])
 
 
 def add_cleanup(clips, warnings):

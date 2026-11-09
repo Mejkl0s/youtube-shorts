@@ -54,11 +54,11 @@ def test_no_recognized_text_retains_user_layout_and_reports_limit(isolated):
     client = TestClient(m.app)
     ref = client.post('/api/templates/upload', files={'file': ('blank.png', image.read_bytes(), 'image/png')}).json()
     expected = Layout(rank_color='FF00AA', rank_y=.42)
-    response = client.post(f'/api/templates/{ref["id"]}/analyze', json={'base_layout': expected.model_dump()})
+    response = client.post(f'/api/templates/{ref["id"]}/analyze', json={'base_layout': expected.model_dump(mode='json')})
     assert response.status_code == 200
     result = response.json()
     assert result['analyzed'] is False and not result['detected']
-    assert result['layout'] == expected.model_dump()
+    assert result['layout'] == expected.model_dump(mode='json')
     assert 'nepodařilo' in result['notes']
 
 
@@ -83,9 +83,9 @@ def test_saved_manual_style_and_instructions_reach_assistant(isolated, monkeypat
     client = TestClient(m.app)
     ref = client.post('/api/templates/upload', files={'file': ('ref.png', (isolated / 'reference.png').read_bytes(), 'image/png')}).json()
     settings = Layout(rank_color='FF00AA', title_align='left', title_x=.12, caption_align='right', caption_x=.1)
-    result = client.post(f'/api/templates/{ref["id"]}/settings', json={'layout': settings.model_dump(), 'instructions': 'Keep the pink ranking marker.'})
+    result = client.post(f'/api/templates/{ref["id"]}/settings', json={'layout': settings.model_dump(mode='json'), 'instructions': 'Keep the pink ranking marker.'})
     assert result.status_code == 200 and result.json()['analysis_mode'] == 'manual'
-    assert a.reference(ref['id'])['layout'] == settings.model_dump()
+    assert a.reference(ref['id'])['layout'] == settings.model_dump(mode='json')
     payloads = []
     def planned(payload):
         payloads.append(payload)
@@ -107,7 +107,7 @@ def test_template_position_color_and_alignment_are_used_in_actual_mp4(isolated):
         folder.mkdir()
         shutil.copyfile(source, folder / 'source')
         m.register(folder / 'source', asset_id, 'Moment')
-        clips.append(m.Clip(id=asset_id, title='Moment', voiceover='Timing makes this moment stand out.', duration=2))
+        clips.append(m.Clip(id=asset_id, title='Moment', voiceover='Timing makes this moment stand out.', rank_note='Black frame', duration=2))
     layout = Layout(rank_display='single', rank_palette='custom', rank_color='FF00AA', rank_x=.62, rank_y=.34, title_align='left', title_x=.12,
                     caption_align='right', caption_x=.1, show_label=False, show_criteria=False)
     job_id = uuid.uuid4().hex

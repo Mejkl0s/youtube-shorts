@@ -3,7 +3,7 @@ export {FONT_CATALOG};
 export type FontKey='bold'|'condensed'|'serif'|'arial-compatible'|'times-compatible'|'calibri-compatible'|'anton'|'bebas-neue'|'poppins'|'lato'|'archivo-black'|'barlow-condensed';
 export type TitleHighlight={word:string;color:string};
 export type Layout = {
-  font:FontKey; title_font:'inherit'|FontKey; title_color:string; title_style:'outline'|'shadow'|'plain'|'box'; title_highlights:TitleHighlight[]; rank_color:string; rank_palette:'medals'|'custom'; caption_color:string;
+  font:FontKey; title_font:'inherit'|FontKey; title_color:string; title_style:'outline'|'shadow'|'plain'|'box'; title_highlights:TitleHighlight[]; rank_color:string; rank_palette:'medals'|'custom'|'individual'; rank_colors?:Record<number,string>; note_animation?:boolean; caption_color:string;
   title_y:number; title_size:number; title_align:'left'|'center'|'right'; title_x:number;
   rank_x:number; rank_y:number; rank_size:number; rank_style:'outline'|'badge'|'plain'; rank_display:'column'|'single'; caption_y:number; caption_size:number;
   caption_align:'left'|'center'|'right'; caption_x:number; header_darkness:number; show_label:boolean; show_criteria:boolean;
@@ -18,7 +18,7 @@ export const fontFamily=(font:FontKey)=>{const entry=FONT_CATALOG.find(item=>ite
 export const MEDAL_COLORS:Record<number,string>={1:'FFD34E',2:'C5CBD3',3:'CD965D',4:'FFFFFF',5:'FFFFFF'};
 
 export function rankMarkers(layout:Layout,activeRank:number){
-  const paint=(rank:number)=>layout.rank_palette!=='custom'?{color:MEDAL_COLORS[rank],alpha:1}:{color:rank===activeRank?layout.rank_color:'FFFFFF',alpha:rank===activeRank?1:.72};
+  const paint=(rank:number)=>layout.rank_palette==='individual'?{color:layout.rank_colors?.[rank]??MEDAL_COLORS[rank],alpha:1}:layout.rank_palette!=='custom'?{color:MEDAL_COLORS[rank],alpha:1}:{color:rank===activeRank?layout.rank_color:'FFFFFF',alpha:rank===activeRank?1:.72};
   if(layout.rank_display==='single')return [{rank:activeRank,text:`#${activeRank}`,y:layout.rank_y,size:layout.rank_size,active:true,...paint(activeRank),alpha:1}];
   const gap=Math.min(.12,(.88-layout.rank_y)/4.8);
   const size=Math.min(layout.rank_size,.115,gap*16/9*.8);
