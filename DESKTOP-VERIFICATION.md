@@ -1,7 +1,30 @@
 # Ověření desktopové verze
 
-Záznam aktualizovaný 9. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
+Záznam aktualizovaný 10. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
+
+## Verze 2.0.5 — hlas u krátkých klipů, 10. 11. 2026
+
+[Podrobnosti časování](desktop/VOICE-TIMING.md). Výpočet používá řeč po odstranění
+okrajového ticha, zachová vnitřní pauzy a zmenší úvodní odklad před případným
+zrychlením nejvýše 1,25×. Krátký střih může použít jednoznačný kratší ekvivalent
+uvedení pořadí, včetně staršího uloženého standardního textu bez příznaku režimu.
+Použitou krátkou variantu oznámí u hotové úlohy. Vlastní komentář se bez původního
+výslovného povolení k úpravě nepřepisuje. Obraz a délky střihů zůstávají stejné.
+
+Lokálně prošlo 19 cílených Python kontrol hlasu a dosavadního zkrácení asistenta,
+dvě následné kontroly staršího uloženého uvedení pořadí v angličtině/češtině,
+frontend build, pět Node bezpečnostních testů a osm testů lokální aktualizace.
+Browser skutečně vytvořil zvukový náhled MP4 s pěti klipy včetně jednosekundové
+#4, slyšitelným hlasem i efekty a původní délkou 10,3 s. Bylo ověřeno i oznámení
+kratšího uvedení pořadí. Zdroj syntézy v těchto scénářích je protokolová fixture,
+ne ověření dostupnosti Microsoft Edge u uživatele nebo kvality skutečného hlasu.
+
+Windows běh [42719087748](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748)
+skončil úspěšně: kompletní regrese finálního zdroje, PyInstaller/NSIS, skutečná
+přibalená aplikace, instalace, spuštění, reinstalace a odinstalace se zachováním dat.
+[Instalační ZIP 2.0.5](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748/artifacts/13719748204) má 341 MB; GitHub vyžaduje přihlášení.
+SHA-256 ZIPu: `f9e3cee5968eb23b8980ac930c56b6eab355a738ff3e07cc5389e48b43b4bf4b`. Sestava zůstává nepodepsaná.
 
 ## Verze 2.0.4 — zvuk klipů, barvy a poznámky, 9. 11. 2026
 
@@ -186,7 +209,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42710179673)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -200,13 +223,13 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 341 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`37bf457ff672ad16078c646637c4849aa84d1705`. Úspěšná reinstalace stejné verze
+`b60b1b23c42f7d012b66874e23ff24ade11c12f8`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42710179673/artifacts/13715793915)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748/artifacts/13719748204)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`20963b0997d8b66ed4b38ed8d5fb20a7ab54618a751bfc40982e56b3a467ae58`.
+`f9e3cee5968eb23b8980ac930c56b6eab355a738ff3e07cc5389e48b43b4bf4b`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako

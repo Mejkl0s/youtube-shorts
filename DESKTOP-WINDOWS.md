@@ -1,8 +1,12 @@
 # Rank Studio pro Windows
 
-Verze **2.0.4** přidává volby koncového zvuku u každého klipu, barvu každého
-pořadového čísla, editor přes šířku okna a animované poznámky podle skutečných
-výřezů. [Podrobný postup a omezení](desktop/EDITOR-POLISH.md).
+Verze **2.0.5** opravuje časování voiceoveru u krátkých klipů: odstraní okrajové
+ticho z TTS a upraví nástup hlasu. U nejkratších uvedení pořadí může použít
+krátkou variantu bez prodlužování videa nebo useknutí řeči.
+[Postup a omezení hlasu](desktop/VOICE-TIMING.md).
+
+Volby koncového zvuku, individuální barvy čísel, plná šířka editoru a animované
+poznámky zůstávají zachované. [Podrobnosti editoru](desktop/EDITOR-POLISH.md).
 Výběr AI z úvodního nastavení zůstává uložený a používá se přímo při hledání. Režim, poskytovatele a model uvidíš hned nad pracovním postupem;
 později je změníš přes **Nastavení AI**. „Najít klipy“ už Nastavení automaticky
 neotevírá. [Postup nastavení](desktop/AI-SETUP.md).
@@ -15,10 +19,10 @@ Python ani Render. Technický návrh je v [DESKTOP.md](DESKTOP.md).
 
 ## Instalace a první nastavení
 
-Ověřená sestava **2.0.4**: [stáhnout Windows ZIP, 341 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42710179673/artifacts/13715793915).
+Ověřená sestava **2.0.5**: [stáhnout Windows ZIP, 341 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748/artifacts/13719748204).
 GitHub pro stažení artefaktu vyžaduje přihlášení. ZIP rozbal a spusť
-`Rank-Studio-2.0.4-Setup.exe`. Pokud se přímé stažení neotevře, na
-[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42710179673#artifacts)
+`Rank-Studio-2.0.5-Setup.exe`. Pokud se přímé stažení neotevře, na
+[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748#artifacts)
 dole vyber **Artifacts → Rank-Studio-Windows-x64**.
 
 Při přechodu ze starší verze aplikaci zavři a spusť nový instalátor přes stávající
@@ -27,7 +31,7 @@ datech; nemaž `%APPDATA%\Rank Studio`. Nová verze zachová původní limit
 uložených projektů. Automatický podepsaný aktualizační feed zatím není
 nakonfigurovaný; tento přechod se provádí novým instalátorem.
 
-Výstup Windows buildu je `Rank-Studio-2.0.4-Setup.exe`. Instalátor přidá aplikaci
+Výstup Windows buildu je `Rank-Studio-2.0.5-Setup.exe`. Instalátor přidá aplikaci
 do nabídky Start a odinstalaci do Windows. Produkční vydání má mít platný podpis
 vydavatele. Nepodepsaný CI build je vývojový artefakt, ne ověřené produkční vydání.
 Windows instalátor se sestavuje na Windows runneru. Dokončené kontroly a stav
