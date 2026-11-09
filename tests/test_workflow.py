@@ -283,7 +283,8 @@ def test_assistant_shortens_long_narration_instead_of_rushing_voice(isolated, mo
             output.setnchannels(1)
             output.setsampwidth(2)
             output.setframerate(24000)
-            output.writeframes(np.zeros(int(24000*seconds), dtype='<i2').tobytes())
+            samples = np.sin(2*np.pi*440*np.arange(int(24000*seconds))/24000)*6000
+            output.writeframes(samples.astype('<i2').tobytes())
     monkeypatch.setattr(m, 'synthesize', speech)
     monkeypatch.setattr(m, 'ai_request', lambda *args, **kwargs: {'line': 'Perfect timing.'})
     project = m.Project(title='TIMING RANKING', clips=clips, auto_shorten=True, resolution='720')

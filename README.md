@@ -8,6 +8,12 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Voice timing for short clips (2.0.5)
+
+[Voice timing fix](desktop/VOICE-TIMING.md): remove boundary silence from TTS,
+adapt the lead-in and use a compact rank announcement when needed, preserving
+complete speech and the original cuts. Preview includes voice and enabled SFX.
+
 ## Clip audio, ranking colors and contextual notes (2.0.4)
 
 [Editor controls](desktop/EDITOR-POLISH.md): per-clip ending-audio choices,

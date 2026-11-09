@@ -467,7 +467,7 @@ function App() {
       <main>
         <section className="editor">
           <div className="studio-intro">
-            <div><div className="eyebrow"><span className="tiny-spark"><Clapperboard size={13}/></span> TVŮJ PRACOVNÍ PROSTOR</div><h1>Střihové studio<span className="studio-version">2.0.4</span></h1><p>Najdi silné momenty. Dolaď střih. Vytvoř svůj Short.</p></div>
+            <div><div className="eyebrow"><span className="tiny-spark"><Clapperboard size={13}/></span> TVŮJ PRACOVNÍ PROSTOR</div><h1>Střihové studio<span className="studio-version">2.0.5</span></h1><p>Najdi silné momenty. Dolaď střih. Vytvoř svůj Short.</p></div>
             <div className="project-summary"><strong>{time(clips.filter(Boolean).reduce((sum,c)=>sum+(c?.duration??0),0))}<small> / {maxDuration} s</small></strong><span>{ready} z 5 momentů · 9:16</span></div>
           </div>
           <DesktopAISetup/>
