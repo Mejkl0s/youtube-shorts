@@ -1,7 +1,36 @@
 # Ověření desktopové verze
 
-Záznam aktualizovaný 10. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
+Záznam aktualizovaný 11. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
+
+## Verze 2.0.6 — celé názvy a emoji, 11. 11. 2026
+
+[Podrobnosti čištění](desktop/COMPLETE-BLUR.md). OCR kombinuje oba režimy,
+ponechává slabší slova a interpunkci ve spolehlivě ukotveném řádku, spojuje jeho
+části a přidává okraje pro stíny/kontury. Navazující světlé/barevné emoji se
+rozšiřují podle geometrie a časové stálosti. Vizuální AI podporuje samostatný
+typ emoji a krátkodobé překryvy. Silnější rozmazání je omezené na vybrané
+oblasti; vlastní nadpis a pořadí se vykreslují až poté. Ruční okraje lze zvětšit.
+
+Windows balíček obsahuje Tesseract 5.4.0 s DLL, jazykovými daty, dostupnými
+licenčními soubory a manifestem. Zdroj pochází z checksumem ověřeného OCR
+instalátoru. Backend nastaví vlastní program i jazyky před systémovým OCR.
+
+Lokálně prošlo 364 regresních kontrol před posledním rozšířením světlých
+symbolů, šest následných cílených kontrol, frontend build, pět Node testů a
+osm testů aktualizace. Skutečné OCR a MP4 ověřují celý titul i dvě emoji,
+lokální rozmazání a ostré vlastní nadpisy. Browser ověřil detekci, zvětšení
+masky, uložení a export bez AI. Nativní aplikace ověřila stejné reálné OCR,
+uložení projektu a MP4. Obsahový model emoji je v jednotkové kontrole fixture;
+nejde o záruku rozpoznání každého překryvu ve všech snímcích.
+
+Windows běh [43039110590](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43039110590)
+skončil úspěšně: kompletní regrese finálního zdroje, přibalení a spuštění OCR,
+PyInstaller/NSIS, nativní aplikace a instalační/reinstalační scénář se zachováním
+dat. Nativní test úmyslně nastavil neplatné vnější TESSDATA_PREFIX a provedl
+skutečné OCR celého názvu i emoji přibaleným nástrojem.
+[Instalační ZIP 2.0.6](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43039110590/artifacts/13863974742) má 422 MB; GitHub vyžaduje přihlášení.
+SHA-256 ZIPu: `2e4825552f8e1d360437d17b029cff028922070e68e560bdccd34a87dc87b1de`. Sestava zůstává nepodepsaná.
 
 ## Verze 2.0.5 — hlas u krátkých klipů, 10. 11. 2026
 
@@ -209,7 +238,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43039110590)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -220,16 +249,16 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | PyInstaller backend a NSIS `.exe` | Sestaveny na Windows. |
 | Celý Electron scénář s přibaleným Windows backendem | Prošel na Windows, včetně kompaktního okna, MP4 exportu, archivů, simulované chyby uložení, restartu a chování systémové lišty. |
 | Instalace, spuštění, reinstalace, zachování dat, odinstalace | Prošly; ověřen Start menu zástupce, skutečné spuštění a SQLite stav, normální ukončení, zachování databáze i dalšího uživatelského souboru po reinstalaci a odinstalaci. |
-| Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 341 MB. |
+| Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 422 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`b60b1b23c42f7d012b66874e23ff24ade11c12f8`. Úspěšná reinstalace stejné verze
+`4d36763d399de406f1a769cf28522ef73edead35`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/42719087748/artifacts/13719748204)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43039110590/artifacts/13863974742)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`f9e3cee5968eb23b8980ac930c56b6eab355a738ff3e07cc5389e48b43b4bf4b`.
+`2e4825552f8e1d360437d17b029cff028922070e68e560bdccd34a87dc87b1de`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako
