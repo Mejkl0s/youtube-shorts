@@ -203,7 +203,7 @@ def health():
         ai_ready=bool(selected_ai)
         if selected_ai and selected_ai['profile']['id'] not in ('ollama','lmstudio','llamacpp','local'):paid=True
     else:ai_ready=paid and bool(os.environ.get('OPENAI_API_KEY'))
-    return {'status': 'ok', 'studio': 'rank-studio', 'desktop':desktop, 'free_only':not paid, 'local_mode': os.environ.get('RANK_LOCAL_MODE') == '1', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'free_voice': free_voice_available(), 'template_ocr': bool(shutil.which('tesseract')), 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'local_vision': local_vision.status(), 'ai_scripts': ai_ready, 'elevenlabs': paid and bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
+    return {'status': 'ok', 'studio': 'rank-studio', 'desktop':desktop, 'free_only':not paid, 'local_mode': os.environ.get('RANK_LOCAL_MODE') == '1', 'owner_login': bool(os.environ.get('STUDIO_PASSWORD')), 'ffmpeg': bool(shutil.which('ffmpeg')), 'free_search': True, 'free_voice': free_voice_available(), 'template_ocr': bool(shutil.which('tesseract')), 'template_ocr_bundled':os.environ.get('RANK_BUNDLED_OCR')=='1', 'voices': {lang: (MODELS / f'{name}.onnx').exists() and (MODELS / f'{name}.onnx.json').exists() for lang, name in VOICE_NAMES.items()}, 'local_vision': local_vision.status(), 'ai_scripts': ai_ready, 'elevenlabs': paid and bool(os.environ.get('ELEVENLABS_API_KEY')), 'reference_voice': bool(os.environ.get('ELEVENLABS_VOICE_ID'))}
 
 
 @app.get('/api/fonts/{name}')

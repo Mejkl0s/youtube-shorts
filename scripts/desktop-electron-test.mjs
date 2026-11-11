@@ -33,7 +33,7 @@ const endpoint=`http://127.0.0.1:${modelServer.address().port}/v1`;
 let app;
 async function launch(directory=root){
   app=await electron.launch({executablePath,args:[resolve('desktop'),...(process.platform==='linux'?['--no-sandbox','--disable-gpu','--disable-dev-shm-usage']:[])],
-    env:{...process.env,RANK_DESKTOP_TEST_DATA:directory,XDG_CACHE_HOME:process.env.XDG_CACHE_HOME||resolve('.runtime/cache')},timeout:90000});
+    env:{...process.env,...(process.platform==='win32'&&process.env.RANK_DESKTOP_BACKEND?{TESSDATA_PREFIX:'rank-missing-fixture-language-directory'}:{}),RANK_DESKTOP_TEST_DATA:directory,XDG_CACHE_HOME:process.env.XDG_CACHE_HOME||resolve('.runtime/cache')},timeout:90000});
   const page=await app.firstWindow();await page.waitForURL(url=>url.protocol==='http:'&&url.hostname==='127.0.0.1',{timeout:90000});await page.locator('#video-title').waitFor({timeout:90000});return page;
 }
 async function quit(page){
@@ -107,6 +107,30 @@ try{
   await setup.getByRole('button',{name:/Kombinovaný režim/}).click();
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-b');
   await setup.getByText('Režim a model',{exact:true}).click();
+
+  const ocrHealth=await page.evaluate(async()=> (await fetch('/api/health')).json());
+  if(process.platform==='win32'&&process.env.RANK_DESKTOP_BACKEND)assert.equal(ocrHealth.template_ocr_bundled,true);
+  assert.equal(ocrHealth.template_ocr,true);
+  const captionImage=root+'/caption.png',captionVideo=root+'/caption.mp4';
+  const fixturePython=resolve('.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python');
+  execFileSync(fixturePython,['-c',`from PIL import Image,ImageDraw,ImageFont
+import sys
+im=Image.new('RGB',(720,1280),(15,25,75));d=ImageDraw.Draw(im);f=ImageFont.truetype(sys.argv[2],42)
+d.text((50,290),'FUNNY KID FAILS',font=f,fill='white',stroke_width=2,stroke_fill='black')
+for x in (530,598):
+ d.ellipse((x-28,290,x+28,346),fill=(255,205,0),outline='black',width=2)
+ d.ellipse((x-12,303,x-7,311),fill='black');d.ellipse((x+7,303,x+12,311),fill='black')
+ d.arc((x-14,311,x+14,334),0,180,fill='black',width=3)
+im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]);
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-loop','1','-i',captionImage,'-t','1','-r','15','-c:v','libx264','-pix_fmt','yuv420p',captionVideo]);
+  const captionData=(await readFile(captionVideo)).toString('base64');
+  const cleanup=await page.evaluate(async bytes=>{
+    const data=Uint8Array.from(atob(bytes),c=>c.charCodeAt(0)),form=new FormData();form.append('file',new Blob([data],{type:'video/mp4'}),'caption.mp4');
+    const upload=await fetch('/api/upload',{method:'POST',body:form});if(!upload.ok)throw Error('Fixture upload failed');const clip=await upload.json();
+    const response=await fetch('/api/blur-suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:clip.id,start:0,duration:1,framing:'fit'})});
+    return {status:response.status,...await response.json()};
+  },captionData);
+  assert.equal(cleanup.status,200);assert.ok(cleanup.regions.some(r=>r.x*720<55&&(r.x+r.w)*720>626&&r.y*1280<299&&(r.y+r.h)*1280>344));
   await checkSavedSearch(page,'fixture-vision-b');
   await page.getByLabel('top model AI',{exact:true}).selectOption('fixture-text');
   await page.locator('#topic').fill('winter fails');
@@ -254,7 +278,7 @@ try{
     await page.getByRole('button',{name:'Zavřít chybu',exact:true}).click();
   }
   await quit(page);assert.deepEqual(errors,[]);
-  console.log('Actual Electron passed: isolated preload, token authentication, wizard/hybrid configuration, provider discovery, saved search without repeated settings (also after restart and with stale health), upfront vision validation, live model switching with per-job snapshot, cancellation, local work with offline UI, contextual notes per actual cut, individual rank colors, MP4/archive export, immediate-close persistence, restart, repeat wizard and tray close behavior. AI replies were local fixtures. Windows installer/signature verification is a separate native acceptance check.');
+  console.log('Actual Electron passed: isolated preload, token authentication, wizard/hybrid configuration, provider discovery, saved search without repeated settings (also after restart and with stale health), upfront vision validation, live model switching with per-job snapshot, cancellation, local work with offline UI, bundled OCR with isolated language path and complete titles/emoji, contextual notes per actual cut, individual rank colors, MP4/archive export, immediate-close persistence, restart, repeat wizard and tray close behavior. AI replies were local fixtures. Windows installer/signature verification is a separate native acceptance check.');
 }finally{
   if(app){try{await app.evaluate(({app})=>app.exit(1));}catch{}}
   for(const timer of timers)clearTimeout(timer);modelServer.closeAllConnections();await new Promise(resolve=>modelServer.close(resolve));

@@ -19,7 +19,7 @@ page.on('dialog',dialog=>dialog.accept());
 try{
   await page.goto(base);
   await page.getByRole('textbox',{name:'Co dnes rankujeme?',exact:true}).fill('ranking funniest winter fails');
-  assert.equal(await page.getByRole('checkbox',{name:'Automaticky upravit nápisy, loga a černé bloky'}).isChecked(),true);
+  assert.equal(await page.getByRole('checkbox',{name:'Automaticky upravit celé nápisy, emoji, loga a černé bloky'}).isChecked(),true);
   const chooser=page.waitForEvent('filechooser');
   await page.getByRole('button',{name:'Nahrát a rozstříhat kompilaci',exact:true}).click();
   await (await chooser).setFiles(fixture);
@@ -68,7 +68,7 @@ try{
   assert.equal(video.status(),200);
   assert.ok((await video.body()).length>10000);
   await page.locator('.clip-card').first().getByRole('button',{name:/Rozmazání/}).click();
-  await page.getByRole('button',{name:'Najít nápisy, loga a bloky',exact:true}).click();
+  await page.getByRole('button',{name:'Najít celé nápisy, emoji, loga a bloky',exact:true}).click();
   await page.getByRole('button',{name:'Použít úpravy obrazu',exact:true}).waitFor();
   await page.waitForFunction(()=>!document.querySelector('.cleanup-controls .primary-button')?.disabled,{},{timeout:30000});
   assert.ok(await page.locator('.cleanup-region').count()>=1);

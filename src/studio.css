@@ -545,3 +545,5 @@ input[type=checkbox]:disabled { opacity: .46; cursor: not-allowed; }
 @media(max-width:1000px) { .clip-end-audio { flex-wrap: wrap; gap: 5px; } .rank-appearance > label { flex-wrap: wrap; } }
 
 @media(prefers-reduced-motion:reduce) { .phone-rank-note { transform: none !important; opacity: 1 !important; } }
+
+.cleanup-screen { container-type: inline-size; }

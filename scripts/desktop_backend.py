@@ -16,11 +16,17 @@ def main():
     # Environment API keys are not imported into the desktop provider vault.
     for key in list(os.environ):
         if key.endswith('_API_KEY') or key in ('STUDIO_USERNAME','OPENAI_BASE_URL'):os.environ.pop(key,None)
+    os.environ['RANK_BUNDLED_OCR']='0'
     if getattr(sys,'frozen',False):
         resources=Path(sys._MEIPASS)
         os.environ['PATH']=str(resources/'bin')+os.pathsep+os.environ.get('PATH','')
+        bundled=resources/'ocr'
+        if (bundled/'tesseract.exe').is_file():
+            os.environ['PATH']=str(bundled)+os.pathsep+os.environ['PATH']
+            os.environ['TESSDATA_PREFIX']=str(bundled/'tessdata')
+            os.environ['RANK_BUNDLED_OCR']='1'
     else:sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
-    if os.name=='nt':
+    if os.name=='nt' and os.environ['RANK_BUNDLED_OCR']!='1':
         ocr=Path(os.environ.get('ProgramFiles','C:\\Program Files'))/'Tesseract-OCR'
         if (ocr/'tesseract.exe').is_file():os.environ['PATH']=str(ocr)+os.pathsep+os.environ.get('PATH','')
     import uvicorn

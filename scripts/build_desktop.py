@@ -102,6 +102,38 @@ def policy(signed=False):
     return signing and bool(publisher)
 
 
+def stage_ocr():
+    """Use the distribution installed from the checksum-verified OCR installer."""
+    source=Path(os.environ.get('RANK_OCR_SOURCE',''))
+    if not os.environ.get('RANK_OCR_SOURCE') or not (source/'tesseract.exe').is_file():
+        raise RuntimeError('Windows build potřebuje RANK_OCR_SOURCE z ověřené instalace Tesseract 5.4.0.')
+    if not (source/'tessdata/eng.traineddata').is_file():
+        raise RuntimeError('V OCR distribuci chybí anglická jazyková data.')
+    target=TOOLS/'ocr'
+    if target.exists():shutil.rmtree(target)
+    target.mkdir(parents=True)
+    for item in source.iterdir():
+        if item.is_file() and (item.name=='tesseract.exe' or item.suffix.lower() in ('.dll','.txt','.md') or item.name.upper().startswith(('LICENSE','COPYING','NOTICE'))):
+            shutil.copy2(item,target/item.name)
+    (target/'tessdata').mkdir()
+    for name in ('eng.traineddata','osd.traineddata'):
+        if (source/'tessdata'/name).is_file():shutil.copy2(source/'tessdata'/name,target/'tessdata'/name)
+    for name in ('configs','tessconfigs'):
+        if (source/'tessdata'/name).is_dir():shutil.copytree(source/'tessdata'/name,target/'tessdata'/name)
+    for name in ('doc','licenses'):
+        if (source/name).is_dir():shutil.copytree(source/name,target/name)
+    version=subprocess.check_output([str(target/'tesseract.exe'),'--version'],text=True,stderr=subprocess.STDOUT)
+    if '5.4.0' not in version:raise RuntimeError('OCR distribuce není ověřená verze 5.4.0.')
+    languages=subprocess.check_output([str(target/'tesseract.exe'),'--tessdata-dir',str(target/'tessdata'),'--list-langs'],text=True)
+    if 'eng' not in languages.split():raise RuntimeError('Přibalené OCR nenačetlo jazyková data.')
+    (target/'SOURCES.txt').write_text('Tesseract 5.4.0: https://github.com/tesseract-ocr/tesseract/tree/5.4.0\n'
+        'Verified Windows distribution: https://github.com/UB-Mannheim/tesseract/releases/tag/v5.4.0.20240606\n'
+        'Installer SHA-256: C885FFF6998E0608BA4BB8AB51436E1C6775C2BAFC2559A19B423E18678B60C9\n',encoding='utf-8')
+    checks={str(item.relative_to(target)):digest(item) for item in target.rglob('*') if item.is_file()}
+    (target/'SHA256SUMS.json').write_text(json.dumps(checks,indent=2),encoding='utf-8')
+    return target
+
+
 def build_backend(binary):
     separator=';' if os.name=='nt' else ':'
     args=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--console','--name','rank-backend',
@@ -110,6 +142,7 @@ def build_backend(binary):
           '--add-data',str(ROOT/'backend/fonts')+separator+'backend/fonts',
           '--add-data',str(TOOLS/'licenses')+separator+'licenses',
           '--hidden-import','scripts.download_models']
+    if os.name=='nt':args.extend(['--add-data',str(stage_ocr())+separator+'ocr'])
     for package in COLLECT:args.extend(['--collect-all',package])
     for executable in binary.iterdir():args.extend(['--add-binary',str(executable)+separator+'bin'])
     args.append(ROOT/'scripts/desktop_backend.py');run(args)

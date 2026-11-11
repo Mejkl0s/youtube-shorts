@@ -8,6 +8,12 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Complete titles and emoji blur (2.0.6)
+
+[Complete overlay cleanup](desktop/COMPLETE-BLUR.md): full OCR rows with weaker
+words, nearby persistent emoji, stronger region-sized blur and editable margins.
+Windows bundles verified Tesseract plus language data for local OCR.
+
 ## Voice timing for short clips (2.0.5)
 
 [Voice timing fix](desktop/VOICE-TIMING.md): remove boundary silence from TTS,

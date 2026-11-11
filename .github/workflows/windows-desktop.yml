@@ -60,6 +60,7 @@ jobs:
             $rankOcrBinary = Join-Path $env:ProgramFiles 'Tesseract-OCR\tesseract.exe'
           }
           if (-not (Test-Path -LiteralPath $rankOcrBinary)) { throw 'Verified OCR installer did not create its executable.' }
+          Add-Content -Path $env:GITHUB_ENV -Value "RANK_OCR_SOURCE=$(Split-Path -Parent $rankOcrBinary)"
           & $rankOcrBinary --version
           if ($LASTEXITCODE -ne 0) { throw 'OCR fixture dependency did not start.' }
           Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $rankOcrBinary)
