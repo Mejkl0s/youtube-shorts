@@ -129,7 +129,7 @@ def stage_ocr():
     (target/'SOURCES.txt').write_text('Tesseract 5.4.0: https://github.com/tesseract-ocr/tesseract/tree/5.4.0\n'
         'Verified Windows distribution: https://github.com/UB-Mannheim/tesseract/releases/tag/v5.4.0.20240606\n'
         'Installer SHA-256: C885FFF6998E0608BA4BB8AB51436E1C6775C2BAFC2559A19B423E18678B60C9\n',encoding='utf-8')
-    checks={str(item.relative_to(target)):digest(item) for item in target.rglob('*') if item.is_file()}
+    checks={item.relative_to(target).as_posix():digest(item) for item in target.rglob('*') if item.is_file()}
     (target/'SHA256SUMS.json').write_text(json.dumps(checks,indent=2),encoding='utf-8')
     return target
 
