@@ -1,14 +1,16 @@
 # Rank Studio pro Windows
 
-Verze **2.0.7** omezuje rozmazání na malé oblasti kolem nápisů. Staré široké
-pruhy se v náhledu i exportu automaticky vynechají. Nové efekty se umísťují
-k hlavnímu momentu, respektují původní zvuk a ztiší se pod hlasem.
-[Postup přesného čištění a časování efektů](desktop/PRECISE-EDITING.md).
+Verze **2.0.8** vybírá typy efektů podle konkrétních obrazových událostí.
+Vizuální model navrhne dějové body a ověří je na detailnějších snímcích.
+Počet zvuků se řídí dějem a délkou klipu; pevný limit dvou efektů je odstraněný.
+[Postup výběru a úpravy efektů](desktop/SOUND-DIRECTOR.md).
 
-U uloženého projektu lze **Odebrat přerostlé masky** nebo **Přepočítat malé masky**.
-U každého klipu zvol automatické časování efektů, vlastní čas nebo vypnutí.
-Po změně vytvoř nový **náhled se zvukem**; jeho **Časování efektů** ukazuje
-skutečně použité časy. Původní MP4 se zpětně nepřepisuje.
+U klipu ponech **AI plán podle děje** a použij vybraný model s podporou obrázků.
+Po vytvoření náhledu otevři **Časování efektů** a případně **Upravit plán klipu**:
+každému zvuku lze změnit typ, čas a sílu, přidat jej nebo odebrat. Ověřený plán
+se pro stejný výřez a model použije znovu bez opakovaného obrazového volání.
+Bez připraveného obrazového modelu zůstává konzervativní varianta. Úzké masky
+z verze 2.0.7 a uložené projekty zůstávají zachované.
 Výběr AI z úvodního nastavení zůstává uložený a používá se přímo při hledání. Režim, poskytovatele a model uvidíš hned nad pracovním postupem;
 později je změníš přes **Nastavení AI**. „Najít klipy“ už Nastavení automaticky
 neotevírá. [Postup nastavení](desktop/AI-SETUP.md).
@@ -21,10 +23,10 @@ Python ani Render. Technický návrh je v [DESKTOP.md](DESKTOP.md).
 
 ## Instalace a první nastavení
 
-Ověřená sestava **2.0.7**: [stáhnout Windows ZIP, 422 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948/artifacts/13976256832).
+Ověřená sestava **2.0.8**: [stáhnout Windows ZIP, 422 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588/artifacts/13983342487).
 GitHub pro stažení artefaktu vyžaduje přihlášení. ZIP rozbal a spusť
-`Rank-Studio-2.0.7-Setup.exe`. Pokud se přímé stažení neotevře, na
-[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948#artifacts)
+`Rank-Studio-2.0.8-Setup.exe`. Pokud se přímé stažení neotevře, na
+[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588#artifacts)
 dole vyber **Artifacts → Rank-Studio-Windows-x64**.
 
 Při přechodu ze starší verze aplikaci zavři a spusť nový instalátor přes stávající
@@ -33,7 +35,7 @@ datech; nemaž `%APPDATA%\Rank Studio`. Nová verze zachová původní limit
 uložených projektů. Automatický podepsaný aktualizační feed zatím není
 nakonfigurovaný; tento přechod se provádí novým instalátorem.
 
-Výstup Windows buildu je `Rank-Studio-2.0.7-Setup.exe`. Instalátor přidá aplikaci
+Výstup Windows buildu je `Rank-Studio-2.0.8-Setup.exe`. Instalátor přidá aplikaci
 do nabídky Start a odinstalaci do Windows. Produkční vydání má mít platný podpis
 vydavatele. Nepodepsaný CI build je vývojový artefakt, ne ověřené produkční vydání.
 Windows instalátor se sestavuje na Windows runneru. Dokončené kontroly a stav

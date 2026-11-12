@@ -3,6 +3,35 @@
 Záznam aktualizovaný 12. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
 
+## Verze 2.0.8 — efekty podle konkrétního děje, 12. 11. 2026
+
+[Popis režimu](desktop/SOUND-DIRECTOR.md). Vybraný obrazový model navrhuje
+události s odpovídajícími typy zvuku a ověřuje je v detailních snímcích,
+po nejvýše dvou kandidátech v požadavku. Typ a dějová role musí souhlasit,
+čas musí být v ověřeném výřezu a nejisté události se odmítnou. Více než dva
+různé efekty je možné při zachování pauz, omezení opakování a souběhu.
+Příprava může vyústit do důrazu stejného okamžiku. Mix respektuje řeč i
+výrazný původní zvuk; nulová hlasitost nevyvolává obrazové plánování.
+
+U každého návrhu je typ, čas a konkrétní pozorování. Převod na vlastní plán
+umožní změnu jednotlivých zvuků a jejich uložení. Ověřená mezipaměť rozlišuje
+zdroj, výřez a poskytovatele/model; neobsahuje API klíč. Výpadek modelu vede
+ke konzervativní variantě bez přepnutí poskytovatele a neblokuje export.
+
+Lokálně prošlo 380 regresních kontrol před poslední kontrolou souběžné přípravy,
+osm následných cílených kontrol, frontend build, pět Node testů a osm testů
+aktualizace. Testy používají skutečné snímky, zvuk a MP4; modelové odpovědi
+jsou protokolové fixtures, nikoli důkaz kvality konkrétního modelu. Nativní
+scénář ověřil plán čtyř různých efektů, export a úpravu typu zachovanou v archivu
+i po restartu. Původní browser scénář malých masek a časovaného audio exportu
+nadále prošel. Úzké masky nebyly rozšiřovány.
+
+Windows běh [43303319588](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588)
+skončil úspěšně: kompletní regrese finálního zdroje, PyInstaller/NSIS, přibalené
+OCR a nativní aplikace, instalace, reinstalace a odinstalace se zachováním dat.
+[Instalační ZIP 2.0.8](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588/artifacts/13983342487) má 422 MB; GitHub vyžaduje přihlášení.
+SHA-256 ZIPu: `cc0d27e381e9e4da03de117be57953c1237747d72bedb5bd14a145edf5535551`. Sestava zůstává nepodepsaná.
+
 ## Verze 2.0.7 — přesné masky a časované efekty, 12. 11. 2026
 
 [Pravidla a použití](desktop/PRECISE-EDITING.md). OCR odděluje základní linie
@@ -266,7 +295,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -280,13 +309,13 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 422 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`f5879a27326b1766550895da256c9b17caf095b2`. Úspěšná reinstalace stejné verze
+`6cbcdd35e49465cd5c27daea2e72da6e9319f326`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948/artifacts/13976256832)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588/artifacts/13983342487)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`bb04746ccef4c4bb31d75d7c94b0a2605d46173aecd5a7e1e976cb60daffc39f`.
+`cc0d27e381e9e4da03de117be57953c1237747d72bedb5bd14a145edf5535551`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako
