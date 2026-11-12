@@ -3,6 +3,29 @@ import math
 import wave
 
 import numpy as np
+from pydantic import BaseModel,Field
+from typing import Literal
+from .sound_director import directed_events,balance_events,LENGTHS
+
+
+class EffectCue(BaseModel):
+    kind: Literal['whoosh','accent','chime','pop','rise','stop']
+    at: float = Field(ge=0,le=30,allow_inf_nan=False)
+    gain: float = Field(default=.65,ge=.1,le=1,allow_inf_nan=False)
+
+
+def mix_plan(events,clip,metadata,path,original_gain):
+    levels=source_levels(path,clip.start,clip.duration,metadata.get('has_audio',False))*original_gain
+    result=[]
+    for event in events:
+        near=levels[max(0,int((event['at']-.08)/.02)):int((event['at']+.15)/.02)]
+        baseline=levels[max(0,int((event['at']-.6)/.02)):max(0,int((event['at']-.12)/.02))]
+        transient=bool(len(near) and near.max()>max(.12,float(np.median(baseline))*2 if len(baseline) else .12))
+        if transient and event['kind'] in ('accent','stop'):continue
+        adjusted=dict(event)
+        if len(near) and near.max()>.12:adjusted['gain']*=.5
+        result.append(adjusted)
+    return balance_events(result,clip.duration)
 
 
 def _number(value):
@@ -53,6 +76,27 @@ def source_levels(path,start,duration,has_audio):
 def plan_effects(clip,metadata,path,rank,original_gain=1.):
     result={'rank':rank,'source':'none','events':[],'reason':'Bez jasného momentu ponechán původní zvuk.'}
     if clip.effects_mode=='off':return {**result,'reason':'Efekty u tohoto klipu jsou vypnuté.'}
+    if clip.effects_mode=='custom':
+        cues=[]
+        for cue in clip.effect_cues:
+            length=LENGTHS[cue.kind];lead=length if cue.kind in ('whoosh','rise') else .02
+            start=cue.at-lead
+            if start>=.025 and start+length<=clip.duration-.025:
+                cues.append({'kind':cue.kind,'at':cue.at,'start':start,'duration':length,'gain':cue.gain,'observation':'Ručně zvolený efekt.'})
+        return {**result,'source':'custom','events':balance_events(cues,clip.duration),'reason':'Vlastní plán efektů.'}
+    if clip.effects_mode=='auto':
+        try:
+            events,selection=directed_events(clip,metadata,path)
+            if events is not None:
+                return {**result,'source':'director','provider':selection['provider'],'model':selection['model'],
+                        'events':mix_plan(events,clip,metadata,path,original_gain),
+                        'reason':'Efekty podle ověřených obrazových momentů.' if events else 'AI nenašla vhodný doložený okamžik pro další efekt.'}
+        except Exception as error:
+            from .work_budget import WorkStopped
+            if isinstance(error,WorkStopped):raise
+            from . import work_budget as work
+            if work.current():work.current().unavailable_engines.add('sound-director')
+            result['notice']='Obrazový plán efektů není dostupný; použit konzervativní odhad nebo původní zvuk.'
     trusted=visual_moment(clip,metadata)
     if clip.effects_mode=='manual':
         action=min(clip.duration-.12,max(.12,clip.effect_at));outcome=None;source='manual'
@@ -78,7 +122,7 @@ def plan_effects(clip,metadata,path,rank,original_gain=1.):
         if rank==1 and outcome is not None and outcome-action>=.8 and outcome<=clip.duration-.35 and not loud:
             add('chime',outcome,.55)
         elif action>=.65:add('whoosh',action,.45 if loud else .65)
-    result['events']=sorted(events,key=lambda e:e['start'])[:2]
+    result['events']=sorted(events,key=lambda e:e['start'])
     if loud:result['reason']='Důležitý původní zvuk zůstává dominantní; další úder se nepřidává.'
     return result
 
@@ -94,6 +138,15 @@ def render_effects(path,duration,plan,rank,voice_window=None):
         elif event['kind']=='accent':
             envelope=np.minimum(1,t/.02)*np.exp(-np.maximum(0,t-.02)*32)
             signal=(np.sin(2*np.pi*(220*t-200*t*t))*.20+np.sin(2*np.pi*980*t)*.025)*envelope
+        elif event['kind']=='pop':
+            envelope=np.minimum(1,t/.008)*np.exp(-t*38)
+            signal=np.sin(2*np.pi*(620*t-1600*t*t))*.18*envelope
+        elif event['kind']=='rise':
+            envelope=np.sin(np.pi*t/(2*length))**2
+            signal=(np.sin(2*np.pi*(180*t+900*t*t))*.07+np.sin(2*np.pi*360*t)*.025)*envelope
+        elif event['kind']=='stop':
+            envelope=np.minimum(1,t/.012)*(1-t/length)**2
+            signal=(np.sin(2*np.pi*(650*t-1100*t*t))*.13+np.sin(2*np.pi*(130*t-180*t*t))*.035)*envelope
         else:
             envelope=np.minimum(1,t/.015)*(1-t/length)**2
             signal=sum(np.sin(2*np.pi*f*t) for f in (659.25,783.99,987.77))*.04*envelope

@@ -8,6 +8,13 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Context-aware sound direction (2.0.8)
+
+[Sound director](desktop/SOUND-DIRECTOR.md) uses the selected visual model to
+propose and verify distinct scene beats, select matching effect types and build
+a flexible multi-cue plan. Every cue can be edited; verified plans are reused
+for the same cut/model. Native audio, voice ducking and tight blur remain.
+
 ## Precise masks and event-relative sound design (2.0.7)
 
 [Precise editing](desktop/PRECISE-EDITING.md): small text-only cleanup budgets,

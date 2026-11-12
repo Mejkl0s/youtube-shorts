@@ -22,6 +22,17 @@ const modelServer=createServer(async(request,response)=>{
       assert.ok(payload.messages.some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image_url')));
       return response.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({visible:true,note:noteTexts[noteIndex++%noteTexts.length]})}}]}));
     }
+    if(JSON.stringify(payload).includes('SOUND DIRECTOR')){
+      const blocks=payload.messages.flatMap(m=>Array.isArray(m.content)?m.content:[]);
+      assert.ok(blocks.some(b=>b.type==='image_url'));
+      const verify=JSON.stringify(payload).includes('VERIFY.');
+      const beats=verify?blocks.filter(b=>b.type==='text'&&b.text.startsWith('Candidate ')).map(b=>{const match=b.text.match(/^Candidate (\d+): (.*)\. Check actual/s),beat=JSON.parse(match[2]);return {candidate:Number(match[1]),accepted:true,time:beat.at,role:beat.role,effect:beat.kind,confidence:.96,observation:beat.observation};}):[
+        {time:.7,role:'motion',effect:'whoosh',confidence:.96,observation:'Pattern moves.'},
+        {time:1.4,role:'reveal',effect:'pop',confidence:.96,observation:'New pattern appears.'},
+        {time:2.1,role:'stop',effect:'stop',confidence:.96,observation:'Pattern pauses.'},
+        {time:3.2,role:'resolution',effect:'chime',confidence:.96,observation:'Result visible.'}];
+      return response.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({beats})}}]}));
+    }
     const slow=JSON.stringify(payload).includes('slow fixture');
     const timer=setTimeout(()=>{timers.delete(timer);response.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({text:'Fixture answer '+payload.model})}}]}));},slow?20000:900);
     timers.add(timer);response.on('close',()=>{clearTimeout(timer);timers.delete(timer);});return;
@@ -199,12 +210,19 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialogSync=()=>file;},videoFile);
   await page.getByRole('button',{name:'Exportovat Short',exact:true}).click();
   await page.getByRole('link',{name:'Stáhnout Short',exact:true}).waitFor({timeout:90000});
+  await page.getByText('Časování efektů',{exact:true}).click();
+  assert.ok((await page.locator('.effects-timeline').innerText()).includes('Překvapení · pop'));
+  const soundPlan=await page.evaluate(async()=>{const jobs=await fetch('/api/jobs/'+document.querySelector('a.export-button').getAttribute('href').split('/').at(-2));return (await jobs.json()).effects_plan;});
+  assert.ok(soundPlan.some(p=>p.source==='director'&&p.events.length>2));
   await page.getByRole('link',{name:'Stáhnout Short',exact:true}).click();
   for(let attempt=0;attempt<900;attempt++){try{if((await stat(videoFile)).size>1000)break;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}
   // Wait for the native DownloadItem to finish before probing its container.
   let probe;
   for(let attempt=0;attempt<40;attempt++){try{probe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_format','-show_streams','-of','json',videoFile],{stdio:['ignore','pipe','ignore']}).toString());break;}catch{await new Promise(resolve=>setTimeout(resolve,200));}}
   assert.ok(probe&&Number(probe.format.duration)<=25.000001);assert.ok(probe.streams.some(stream=>stream.codec_type==='audio'));
+  await page.getByRole('button',{name:'Upravit plán klipu #4',exact:true}).click();
+  assert.equal(await page.getByLabel('Načasování efektů klipu 4',{exact:true}).inputValue(),'custom');
+  await page.getByLabel('Typ efektu 1 klipu 4',{exact:true}).selectOption('rise');
   await page.locator('#video-title').fill('Desktop project restored');
   const projectFile=root+'/portable.rankstudio';
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},projectFile);
@@ -247,6 +265,8 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-a');
   assert.equal(await page.getByLabel('Načasování efektů klipu 5',{exact:true}).inputValue(),'manual');
   assert.equal(await page.getByLabel('Moment efektu klipu 5',{exact:true}).inputValue(),'1.7');
+  assert.equal(await page.getByLabel('Načasování efektů klipu 4',{exact:true}).inputValue(),'custom');
+  assert.equal(await page.getByLabel('Typ efektu 1 klipu 4',{exact:true}).inputValue(),'rise');
   assert.equal(await page.getByLabel('Barevný režim čísel',{exact:true}).inputValue(),'individual');
   assert.equal(await page.getByLabel('Barva čísla 1',{exact:true}).inputValue(),'#11cc77');
   assert.equal(await page.getByLabel('Poznámka u čísla 5',{exact:true}).inputValue(),noteTexts[0]);

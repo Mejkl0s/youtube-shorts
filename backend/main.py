@@ -28,7 +28,7 @@ from .style import FONTS, Layout, VoiceSettings, voice_available, filter_path
 from .title_render import render_title
 from .cleanup import BlurRegion, blur_filters, detect_text
 from .blur_safety import safe_regions
-from .sound_design import plan_effects, render_effects
+from .sound_design import plan_effects, render_effects, EffectCue
 from .rank_notes import note_geometry, describe_clips
 from .audio_tail import tail_filter
 from .speech_fit import trim_speech, placement, short_rank_line
@@ -142,7 +142,8 @@ class Clip(BaseModel):
     rank_note: str | None = Field(default=None, max_length=40)
     end_audio: Literal['auto', 'keep', 'mute'] = 'auto'
     rank_note_auto: bool = False
-    effects_mode: Literal['auto','manual','off'] = 'auto'
+    effects_mode: Literal['auto','manual','custom','off'] = 'auto'
+    effect_cues: list[EffectCue] = Field(default_factory=list,max_length=12)
     effect_at: float = Field(default=.5,ge=0,le=30,allow_inf_nan=False)
 
     @field_validator('rank_note')
@@ -442,10 +443,12 @@ def render(job_id: str, project: Project):
                 filters.append(f'[{next_input}:a]atempo={speed},volume={project.voice_volume},adelay={delay}:all=1,apad,atrim=duration={duration}[voice]')
                 audio_inputs.append('[voice]')
                 next_input += 1
-            if project.effects:
+            if project.effects and project.effects_volume>0:
                 sfx_path = folder / f'effect-{rank}.wav'
                 sound_plan=plan_effects(clip,meta,source,rank,project.original_volume)
+                sound_plan.update(asset_id=clip.id,clip_start=clip.start,clip_duration=clip.duration)
                 effects_plan.append(sound_plan)
+                if sound_plan.get('notice'):warnings.append(f"Klip #{rank}: {sound_plan['notice']}")
                 render_effects(sfx_path,duration,sound_plan,rank,voice_window)
                 inputs += ['-i', str(sfx_path)]
                 filters.append(f'[{next_input}:a]volume={project.effects_volume},apad,atrim=duration={duration}[sfx]')
