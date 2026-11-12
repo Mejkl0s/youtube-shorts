@@ -27,6 +27,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .style import FONTS, Layout, VoiceSettings, voice_available, filter_path
 from .title_render import render_title
 from .cleanup import BlurRegion, blur_filters, detect_text
+from .blur_safety import safe_regions
+from .sound_design import plan_effects, render_effects
 from .rank_notes import note_geometry, describe_clips
 from .audio_tail import tail_filter
 from .speech_fit import trim_speech, placement, short_rank_line
@@ -140,6 +142,8 @@ class Clip(BaseModel):
     rank_note: str | None = Field(default=None, max_length=40)
     end_audio: Literal['auto', 'keep', 'mute'] = 'auto'
     rank_note_auto: bool = False
+    effects_mode: Literal['auto','manual','off'] = 'auto'
+    effect_at: float = Field(default=.5,ge=0,le=30,allow_inf_nan=False)
 
     @field_validator('rank_note')
     @classmethod
@@ -363,21 +367,6 @@ def voice_preview(body: VoiceRequest):
     return {'url': f'/media/{name}'}
 
 
-def effect(output: Path, rank: int):
-    rate = 44100
-    t = np.arange(int(rate * 0.6)) / rate
-    rng = np.random.default_rng(rank)
-    sweep = np.sin(2 * np.pi * (220 * t + 1000 * t * t))
-    sound = (rng.normal(0, 0.15, len(t)) + 0.6 * sweep) * np.exp(-7 * t)
-    if rank == 1:
-        sound = sum(np.sin(2 * np.pi * f * t) for f in [523.25, 659.25, 783.99]) / 4 * np.exp(-3 * t)
-    with wave.open(str(output), 'wb') as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(rate)
-        wav.writeframes((np.clip(sound, -1, 1) * 32767).astype('<i2').tobytes())
-
-
 def set_job(job_id: str, **changes):
     with job_lock:
         jobs[job_id].update(changes)
@@ -407,6 +396,7 @@ def render(job_id: str, project: Project):
         render_title(project.title, project.layout, width, height, fonts=FONTS).save(title_layer)
         rendered = []
         warnings = []
+        effects_plan = []
         for index, clip in enumerate(project.clips):
             rank = 5 - index
             set_job(job_id, status='rendering', progress=5 + index * 18, message=f'Zpracovávám klip #{rank}…')
@@ -416,6 +406,7 @@ def render(job_id: str, project: Project):
             inputs = ['-ss', str(clip.start), '-i', str(source), '-loop', '1', '-framerate', '30', '-i', str(title_layer)]
             filters, audio_inputs = [], []
             next_input = 2
+            voice_window = None
             if meta['has_audio']:
                 ending = tail_filter(source, clip.start, duration, clip.end_audio)
                 filters.append(f'[0:a]atrim=duration={duration},asetpts=PTS-STARTPTS,{ending}volume={project.original_volume},apad,atrim=duration={duration}[original]')
@@ -446,13 +437,16 @@ def render(job_id: str, project: Project):
                 if timing is None:
                     raise ValueError(f'Voiceover klipu #{rank} má po odstranění ticha {speech_duration:.1f} s a nevejde se do {duration:g} s. Zkrať jeho text nebo použij Uvedení pořadí zdarma. Klip nebyl prodloužen a řeč nebyla useknuta.')
                 speed, delay = timing
+                voice_window=(delay/1000,delay/1000+speech_duration/speed) if project.voice_volume>.01 else None
                 inputs += ['-i', str(voice_path)]
                 filters.append(f'[{next_input}:a]atempo={speed},volume={project.voice_volume},adelay={delay}:all=1,apad,atrim=duration={duration}[voice]')
                 audio_inputs.append('[voice]')
                 next_input += 1
             if project.effects:
                 sfx_path = folder / f'effect-{rank}.wav'
-                effect(sfx_path, rank)
+                sound_plan=plan_effects(clip,meta,source,rank,project.original_volume)
+                effects_plan.append(sound_plan)
+                render_effects(sfx_path,duration,sound_plan,rank,voice_window)
                 inputs += ['-i', str(sfx_path)]
                 filters.append(f'[{next_input}:a]volume={project.effects_volume},apad,atrim=duration={duration}[sfx]')
                 audio_inputs.append('[sfx]')
@@ -466,6 +460,7 @@ def render(job_id: str, project: Project):
                 return f'drawtext=fontfile={font}:textfile={filter_path(file.name)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y}:borderw={int(3*scale)}:bordercolor=black@0.6:line_spacing={int(8*scale)}'
             video = f'[0:v]{portrait_filter(width,height,clip.framing)},fps=30,tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},setpts=PTS-STARTPTS[source_clean]'
             filters.append(video)
+            if len(safe_regions(clip.blur_regions))<len(clip.blur_regions):warnings.append(f'Klip #{rank}: velké nebo souhrnně příliš rozsáhlé masky byly vynechány. Přepočítej rozmazání.')
             cleanup_filters, clean = blur_filters(clip.blur_regions, width, height)
             filters.extend(cleanup_filters)
             filters.append(f'[{clean}]drawbox=x=0:y=0:w=iw:h={int(310*scale)}:color=black@{layout.header_darkness}:t=fill[title_base]')
@@ -516,7 +511,7 @@ def render(job_id: str, project: Project):
         output_meta = probe(folder / 'ranking.mp4')
         if float(output_meta['format']['duration'])>project.max_duration+1e-6:
             raise ValueError(f'Časování výsledného MP4 překročilo {project.max_duration:g} sekund. Uprav hranici posledního střihu a export zopakuj.')
-        set_job(job_id, status='done', progress=100, message='Váš Short je připravený.', warnings=warnings, download=f'/api/jobs/{job_id}/download', duration=float(output_meta['format']['duration']))
+        set_job(job_id, status='done', progress=100, message='Váš Short je připravený.', warnings=warnings, effects_plan=effects_plan, download=f'/api/jobs/{job_id}/download', duration=float(output_meta['format']['duration']))
     except Exception as error:
         set_job(job_id, status='failed', message=f'Export se nezdařil: {str(error)[-1000:]}')
     finally:

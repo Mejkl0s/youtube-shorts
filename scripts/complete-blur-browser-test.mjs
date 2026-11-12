@@ -34,7 +34,7 @@ try{
  await page.waitForFunction(()=>document.querySelectorAll('.clip-thumb img').length===5,{},{timeout:60000});
  await page.locator('.clip-card').first().getByRole('button',{name:/^Rozmazání/}).click();
  const dialog=page.getByRole('dialog',{name:'Rozmazání klipu 5',exact:true});await dialog.waitFor();
- await dialog.getByRole('button',{name:'Najít celé nápisy, emoji, loga a bloky',exact:true}).click();
+ await dialog.getByRole('button',{name:'Najít nápisy, emoji a malá loga',exact:true}).click();
  await dialog.locator('.cleanup-region').first().waitFor({timeout:60000});
  const box=await dialog.locator('.cleanup-region').first().boundingBox();
  await dialog.getByRole('button',{name:'Zvětšit oblast 1',exact:true}).click();
@@ -44,16 +44,28 @@ try{
  await page.waitForFunction(()=>document.querySelectorAll('.clip-thumb img').length===5);
  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('rank-studio-project')));
  const regions=state.clips[0].blur_regions;
- assert.ok(regions.some(r=>r.x*720<52&&(r.x+r.w)*720>626&&r.y*1280<299&&(r.y+r.h)*1280>344));
+ for(const [x,y] of [[55,305],[450,326],[530,320],[622,340]])assert.ok(regions.some(r=>r.x*720<=x&&(r.x+r.w)*720>=x&&r.y*1280<=y&&(r.y+r.h)*1280>=y));
+ assert.ok(regions.every(r=>r.h<=.075&&r.w*r.h<=.04));
+ await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('rank-studio-project'));s.clips[0].blur_regions.push({x:0,y:.2,w:1,h:.2,origin:'auto'});localStorage.setItem('rank-studio-project',JSON.stringify(s));});
+ await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.clip-thumb img').length===5);
+ assert.equal(await page.locator('.phone .source-cleanup-masks span').count(),regions.length);
+ await page.getByRole('button',{name:'Odebrat přerostlé masky',exact:true}).click();
  assert.ok(await page.locator('.phone .source-cleanup-masks span').first().evaluate(el=>getComputedStyle(el).backdropFilter.includes('blur(')));
- for(const [role,name] of [['switch','AI voiceover'],['switch','Zvukové efekty'],['switch','Poznámky u čísel']]){const toggle=page.getByRole(role,{name,exact:true});if(await toggle.getAttribute('aria-checked')==='true')await toggle.click();}
+ for(const [role,name] of [['switch','AI voiceover'],['switch','Poznámky u čísel']]){const toggle=page.getByRole(role,{name,exact:true});if(await toggle.getAttribute('aria-checked')==='true')await toggle.click();}
+ for(let rank=1;rank<=5;rank++){await page.getByLabel(`Načasování efektů klipu ${rank}`,{exact:true}).selectOption('manual');await page.getByLabel(`Moment efektu klipu ${rank}`,{exact:true}).fill('0.65');}
+ const fx=page.getByRole('switch',{name:'Zvukové efekty',exact:true});if(await fx.getAttribute('aria-checked')!=='true')await fx.click();
  await page.locator('#resolution').selectOption('720');await page.getByRole('button',{name:'Vytvořit náhled se zvukem',exact:true}).click();
  const finished=page.getByRole('region',{name:'Hotové video',exact:true});await finished.waitFor({timeout:90000});
  const url=await page.getByLabel('Přehrávač hotového Shortu',{exact:true}).getAttribute('src');const response=await fetch(base+url);assert.equal(response.status,200);
- assert.ok((await response.arrayBuffer()).byteLength>1000);
+ const bytes=Buffer.from(await response.arrayBuffer());assert.ok(bytes.byteLength>1000);
+ const output=root+'/precise.mp4';await (await import('node:fs/promises')).writeFile(output,bytes);
+ const sound=execFileSync('ffmpeg',['-v','error','-i',output,'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1']);
+ const level=(a,b)=>{let sum=0,n=0;for(let i=Math.round(a*8000)*2;i<Math.round(b*8000)*2;i+=2){sum+=Math.abs(sound.readInt16LE(i));n++;}return sum/n;};
+ assert.ok(level(.1,.35)<5);assert.ok(level(.63,.76)>200);
+ await finished.getByText('Časování efektů',{exact:true}).click();assert.ok((await finished.innerText()).includes('0.65 s'));
  assert.deepEqual(errors,[]);
  await mkdir('.runtime/screenshots',{recursive:true});
  await page.locator('.clip-card').first().getByRole('button',{name:/^Rozmazání/}).click();
  await page.getByRole('dialog',{name:'Rozmazání klipu 5',exact:true}).screenshot({path:'.runtime/screenshots/complete-title-and-emoji-blur.png'});
- console.log('Complete blur passed: actual title/emoji OCR, editable wider masks, preview blur, saved regions and real MP4 export; no AI provider used.');
+ console.log('Precise blur and SFX passed: legacy bands disabled, effects at selected moment, actual title/emoji OCR, editable wider masks, preview blur, saved regions and real MP4 export; no AI provider used.');
 }catch(error){console.error(logs);throw error;}finally{if(browser)await browser.close();server.kill('SIGTERM');}

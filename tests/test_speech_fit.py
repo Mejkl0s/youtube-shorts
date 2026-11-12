@@ -53,7 +53,7 @@ def test_real_mp4_fits_padded_announcements_and_short_rank_fallback_with_effects
         # #4 also represents an older saved announcement without its rank flag.
         legacy=len(clips)==1
         clips.append({**meta,'title':'Short event','voiceover':m.rank_lines(language)[1] if legacy else '',
-                      'narration_mode':'custom' if legacy else 'rank','duration':duration})
+                      'narration_mode':'custom' if legacy else 'rank','duration':duration,'effects_mode':'manual','effect_at':.65})
     def speech(text,language,path,config=None):
         calls.append(text)
         padded_voice(path,seconds=1.5 if text in ('Number four.','Čtvrté místo.') else .45 if text in ('Four.','Čtvrté.') else .85)
@@ -74,7 +74,8 @@ def test_real_mp4_fits_padded_announcements_and_short_rank_fallback_with_effects
     for duration in durations:
         beginning=samples[round((offset+.02)*24000):round((offset+.12)*24000)]
         voice=samples[round((offset+.5)*24000):round((offset+.7)*24000)]
-        assert np.abs(beginning).mean()>100  # Added effect is present.
+        assert np.abs(beginning).mean()<10  # No arbitrary effect at the cut boundary.
+        assert m.jobs[job]['effects_plan'][durations.index(duration)]['events']
         assert np.abs(voice).mean()>300  # Complete voiced line, not just SFX.
         offset+=duration
 

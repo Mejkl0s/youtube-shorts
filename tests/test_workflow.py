@@ -53,7 +53,7 @@ def test_real_export_five_segments_with_original_effects(isolated):
     for color in colors:
         asset_id = uuid.uuid4().hex
         make_source(isolated / 'media' / asset_id, color)
-        clips.append({'id': asset_id, 'title': f'{color} moment', 'voiceover': 'The timing makes this moment stand out.', 'duration': 2, 'start': 0.5})
+        clips.append({'id': asset_id, 'title': f'{color} moment', 'voiceover': 'The timing makes this moment stand out.', 'duration': 2, 'start': 0.5, 'effects_mode':'manual','effect_at':1})
     client = TestClient(m.app)
     response = client.post('/api/render', json={'title': "TOP 5: YOU'RE #1 [100%]", 'ranking_criteria': 'Timing and surprise', 'clips': clips, 'voice': False, 'effects': True, 'captions': True, 'resolution': '720'})
     assert response.status_code == 202, response.text
@@ -79,7 +79,10 @@ def test_real_export_five_segments_with_original_effects(isolated):
         sample = np.frombuffer(pixels, dtype=np.uint8).reshape(-1, 3).mean(axis=0)
         assert max(abs(sample - color)) < 18, (index, sample, color)
     raw_audio = m.ffmpeg('-i', str(output), '-vn', '-ac', '1', '-f', 's16le', 'pipe:1')
-    assert np.abs(np.frombuffer(raw_audio, dtype='<i2').astype(float)).mean() > 100
+    sound=np.frombuffer(raw_audio,dtype='<i2').astype(float)
+    for index in range(5):
+        assert np.abs(sound[int((index*2+.95)*44100):int((index*2+1.12)*44100)]).mean()>300
+        assert np.abs(sound[int((index*2+.1)*44100):int((index*2+.7)*44100)]).max()<10
     download = client.get(f'/api/jobs/{job_id}/download')
     assert download.status_code == 200 and download.headers['content-type'] == 'video/mp4'
     assert download.content == output.read_bytes()

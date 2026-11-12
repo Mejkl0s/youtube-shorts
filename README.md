@@ -8,6 +8,12 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Precise masks and event-relative sound design (2.0.7)
+
+[Precise editing](desktop/PRECISE-EDITING.md): small text-only cleanup budgets,
+legacy band protection and sparse effects placed at the actual event. Per-clip
+manual timing, native-audio priority and voice ducking are included.
+
 ## Complete titles and emoji blur (2.0.6)
 
 [Complete overlay cleanup](desktop/COMPLETE-BLUR.md): full OCR rows with weaker

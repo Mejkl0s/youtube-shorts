@@ -547,3 +547,9 @@ input[type=checkbox]:disabled { opacity: .46; cursor: not-allowed; }
 @media(prefers-reduced-motion:reduce) { .phone-rank-note { transform: none !important; opacity: 1 !important; } }
 
 .cleanup-screen { container-type: inline-size; }
+
+.effect-time { width: 64px; padding: 6px; background: var(--noir-panel); color: var(--noir-text); border: 1px solid var(--noir-bronze); border-radius: 5px; }
+.effects-timeline { font-size: 11px; line-height: 1.6; color: var(--noir-text-secondary); }
+.effects-timeline > div { padding: 10px 0; border-top: 1px solid var(--noir-bronze); }
+
+.cleanup-methods > div { display: grid; gap: 6px; }

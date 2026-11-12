@@ -7,7 +7,7 @@ import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 from backend import main as m,cleanup as c
-from backend.overlay_geometry import join_rows, colored_symbols, persistent_symbols, complete_caption
+from backend.overlay_geometry import join_rows, colored_symbols, persistent_symbols, complete_caption, caption_boxes
 from test_workflow import isolated
 
 
@@ -47,9 +47,11 @@ def test_complete_row_includes_two_unreadable_emoji_but_not_distant_scene_object
     draw.ellipse((640,800,700,860),fill='orange')
     groups=[colored_symbols(image,(0,0,1,1)) for _ in range(3)]
     stable=persistent_symbols(groups)
-    box=complete_caption((50,298,452,333),stable,(0,0,1,1))
-    assert box['right']*720>628 and box['bottom']*1280>346
-    assert box['bottom']*1280<400
+    boxes=caption_boxes((50,298,452,333),stable,(0,0,1,1))
+    assert len(boxes)==3
+    assert max(box['right']*720 for box in boxes)>=628
+    assert all(box['bottom']*1280<360 for box in boxes)
+    assert boxes[0]['bottom']*1280<340
     assert complete_caption((1,10,100,40),[],(0,0,1,1))['x']==0
     # A moving bright ball in only one frame cannot extend the caption.
     assert persistent_symbols([[(500,300,550,350)],[],[]])==[]
@@ -77,7 +79,7 @@ def test_real_ocr_detects_complete_title_and_emoji_and_real_export_hides_them(is
     regions,message=c.detect_text(source,0,1.2,'fit')
     for point in ((52,302),(450,326),(505,292),(555,344),(574,292),(624,344)):
         assert any(covers(r,*point) for r in regions),(point,regions,message)
-    assert sum(r['w']*r['h'] for r in regions)<=.35
+    assert sum(r['w']*r['h'] for r in regions)<=.085
     clips=[]
     for _ in range(5):
         identity=uuid.uuid4().hex;folder=isolated/'media'/identity;folder.mkdir()

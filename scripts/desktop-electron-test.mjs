@@ -130,7 +130,8 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
     const response=await fetch('/api/blur-suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:clip.id,start:0,duration:1,framing:'fit'})});
     return {status:response.status,...await response.json()};
   },captionData);
-  assert.equal(cleanup.status,200);assert.ok(cleanup.regions.some(r=>r.x*720<55&&(r.x+r.w)*720>626&&r.y*1280<299&&(r.y+r.h)*1280>344));
+  assert.equal(cleanup.status,200);for(const [x,y] of [[55,305],[450,326],[530,320],[622,340]])assert.ok(cleanup.regions.some(r=>r.x*720<=x&&(r.x+r.w)*720>=x&&r.y*1280<=y&&(r.y+r.h)*1280>=y));
+  assert.ok(cleanup.regions.every(r=>r.h<=.075&&r.w*r.h<=.04));
   await checkSavedSearch(page,'fixture-vision-b');
   await page.getByLabel('top model AI',{exact:true}).selectOption('fixture-text');
   await page.locator('#topic').fill('winter fails');
@@ -191,6 +192,8 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   await page.getByLabel('Barva čísla 1',{exact:true}).evaluate(el=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'#11cc77');el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
   assert.equal(await page.locator('[data-rank="1"]').evaluate(el=>getComputedStyle(el).color),'rgb(17, 204, 119)');
   await page.getByLabel('Voiceover',{exact:true}).uncheck();
+  await page.getByLabel('Načasování efektů klipu 5',{exact:true}).selectOption('manual');
+  await page.getByLabel('Moment efektu klipu 5',{exact:true}).fill('1.7');
   await page.locator('#resolution').selectOption('720');
   const videoFile=root+'/native-export.mp4';
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialogSync=()=>file;},videoFile);
@@ -242,6 +245,8 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   assert.equal(await page.getByRole('dialog',{name:'Průvodce nastavením AI'}).count(),0);
   await page.waitForFunction(()=>document.querySelector('#video-title')?.value==='Desktop project immediate save');
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-a');
+  assert.equal(await page.getByLabel('Načasování efektů klipu 5',{exact:true}).inputValue(),'manual');
+  assert.equal(await page.getByLabel('Moment efektu klipu 5',{exact:true}).inputValue(),'1.7');
   assert.equal(await page.getByLabel('Barevný režim čísel',{exact:true}).inputValue(),'individual');
   assert.equal(await page.getByLabel('Barva čísla 1',{exact:true}).inputValue(),'#11cc77');
   assert.equal(await page.getByLabel('Poznámka u čísla 5',{exact:true}).inputValue(),noteTexts[0]);

@@ -55,7 +55,7 @@ try{
   page.on('request',r=>{if(r.method()==='POST'){if(r.url().endsWith('/api/discover'))searches.push(r.postDataJSON());if(r.url().endsWith('/api/render'))renders.push(r.postDataJSON());}});
   await page.goto(base);
   await page.locator('#topic').fill('ranking funniest winter fails');
-  await page.getByLabel('Automaticky upravit celé nápisy, emoji, loga a černé bloky').uncheck();
+  await page.getByLabel('Automaticky rozmazat nápisy, emoji a malá loga').uncheck();
   await page.locator('#resolution').selectOption('720');
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
   const player=page.getByLabel('Přehrávač hotového Shortu',{exact:true});

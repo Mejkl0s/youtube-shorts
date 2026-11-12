@@ -81,7 +81,7 @@ def test_cleanup_keeps_black_detection_without_ocr_and_does_not_mark_motion(isol
     monkeypatch.setattr(c.shutil,'which',lambda _:None)
     monkeypatch.setattr(c,'vision_regions',lambda *args:([],False))
     regions,_=c.detect_text(source,0,1,'fit')
-    assert regions and any(r['kind']=='block' and r['method']=='remove' for r in regions)
+    assert regions==[]  # Broad opaque graphics are no longer automatic blur targets.
 
 
 def test_local_logo_coordinates_are_validated_and_own_padding_ignored(monkeypatch):
@@ -104,7 +104,7 @@ def test_remove_interpolates_black_block_and_own_overlays_remain_sharp(isolated)
                  '-vf','drawbox=x=40:y=120:w=80:h=50:color=black:t=fill','-c:v','libx264','-f','mp4',str(folder/'source'))
         meta=m.register(folder/'source',identity,'Blocked',fast_preview=True)
         clips.append({**meta,'title':'Moment','voiceover':'','start':0,'duration':1.6,
-                      'blur_regions':[{'x':.2,'y':.35,'w':.5,'h':.21,'method':'remove'}]})
+                      'blur_regions':[{'x':.2,'y':.35,'w':.5,'h':.21,'method':'remove','allow_large':True}]})
     identity=uuid.uuid4().hex;m.jobs[identity]={'id':identity}
     m.render(identity,m.Project(title='MY TITLE',clips=clips,voice=False,effects=False,captions=False,resolution='720'))
     assert m.jobs[identity]['status']=='done',m.jobs[identity]

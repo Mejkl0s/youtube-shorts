@@ -122,7 +122,7 @@ def test_blur_is_local_and_rendered_own_title_remains_sharp(isolated):
                  "drawgrid=w=8:h=8:t=2:c=white",'-c:v','libx264','-f','mp4',str(folder/'source'))
         meta=m.register(folder/'source',folder.name,'Grid')
         clips.append({**meta,'title':'Grid','voiceover':'','start':0,'duration':2,
-                      'blur_regions':[{'x':.1,'y':.02,'w':.8,'h':.95}]})
+                      'blur_regions':[{'x':.1,'y':.02,'w':.8,'h':.95,'allow_large':True}]})
     project=m.Project(title='MY WINTER FAILS',clips=clips,voice=False,effects=False,captions=False,resolution='720',
                       layout=m.Layout(header_darkness=0,title_style='plain',rank_style='plain',show_label=False,show_criteria=False))
     job_id=uuid.uuid4().hex
@@ -159,7 +159,7 @@ def test_cleanup_endpoint_validates_asset_and_bounds_and_manual_works_without_oc
     monkeypatch.setattr('backend.cleanup.shutil.which',lambda _:None)
     response=client.post('/api/blur-suggestions',json={'id':meta['id'],'duration':2})
     assert response.status_code==200 and response.json()['regions']==[]
-    filters,_=blur_filters([BlurRegion(x=.1,y=.2,w=.3,h=.1)],720,1280)
+    filters,_=blur_filters([BlurRegion(x=.1,y=.2,w=.3,h=.1,allow_large=True)],720,1280)
     assert 'gblur' in ';'.join(filters)
 
 

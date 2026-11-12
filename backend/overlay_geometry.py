@@ -3,24 +3,21 @@ import numpy as np
 
 
 def join_rows(lines):
+    # Split malformed OCR lines into separate baselines before grouping words.
+    words=[tuple(word) for line in lines for word in line if 8<=word[3]<=76 and 2<=word[2]<=640]
     rows=[]
-    for words in lines:
-        x=min(p[0] for p in words);y=min(p[1] for p in words)
-        right=max(p[0]+p[2] for p in words);bottom=max(p[1]+p[3] for p in words)
-        pending=(x,y,right,bottom)
-        while True:
-            match=None
-            for i,other in enumerate(rows):
-                a,b,c,d=pending;e,f,g,h=other
-                height=min(d-b,h-f)
-                vertical=min(d,h)-max(b,f)
-                gap=max(0,e-c,a-g)
-                if vertical>=height*.5 and gap<=max(d-b,h-f)*2.1:
-                    match=i;break
-            if match is None:break
-            other=rows.pop(match)
-            pending=(min(pending[0],other[0]),min(pending[1],other[1]),max(pending[2],other[2]),max(pending[3],other[3]))
-        rows.append(pending)
+    for x,y,w,h in sorted(set(words),key=lambda r:(r[1]+r[3]/2,r[0])):
+        pending=(x,y,x+w,y+h)
+        match=None
+        for i,(a,b,c,d) in enumerate(rows):
+            low=min(h,d-b);high=max(h,d-b)
+            if high>low*1.6 or abs((y+h/2)-(b+d)/2)>low*.3:continue
+            if min(y+h,d)-max(y,b)<low*.65:continue
+            if max(0,a-(x+w),x-c)>high*1.3:continue
+            match=i;break
+        if match is None:rows.append(pending)
+        else:
+            a,b,c,d=rows[match];rows[match]=(min(a,x),min(b,y),max(c,x+w),max(d,y+h))
     return rows
 
 
@@ -61,20 +58,26 @@ def persistent_symbols(groups):
 
 
 def complete_caption(row,symbols,bounds):
+    # A text row stays a text row. Emoji never increase its height or union
+    # separate rows into the large horizontal bands seen in legacy projects.
     x,y,right,bottom=row;line_h=bottom-y
-    # Include adjacent emoji and colored punctuation, but stop before unrelated
-    # objects or a chain extending more than six letter heights past the row.
-    changed=True
-    while changed:
-        changed=False
-        for a,b,c,d in symbols:
-            if not .4*line_h<=d-b<=2.2*line_h:continue
-            if min(bottom,d)-max(y,b)<min(bottom-y,d-b)*.35:continue
-            if max(0,a-right,x-c)>line_h*1.8:continue
-            if a<row[0]-line_h*6 or c>row[2]+line_h*6:continue
-            expanded=(min(x,a),min(y,b),max(right,c),max(bottom,d))
-            if expanded!=(x,y,right,bottom):x,y,right,bottom=expanded;changed=True
-    pad_x=max(12,line_h*.32);pad_y=max(10,line_h*.25)
-    return {'x':max(bounds[0],(x-pad_x)/720),'y':max(bounds[1],(y-pad_y)/1280),
-            'right':min(bounds[2],(right+pad_x)/720),'bottom':min(bounds[3],(bottom+pad_y)/1280),
+    px=min(8,max(4,line_h*.12));py=min(6,max(3,line_h*.1))
+    return {'x':max(bounds[0],(x-px)/720),'y':max(bounds[1],(y-py)/1280),
+            'right':min(bounds[2],(right+px)/720),'bottom':min(bounds[3],(bottom+py)/1280),
             'method':'blur','kind':'text'}
+
+
+def caption_boxes(row,symbols,bounds):
+    result=[complete_caption(row,[],bounds)]
+    x,y,right,bottom=row;h=bottom-y
+    for a,b,c,d in sorted(symbols,key=lambda box:box[0]):
+        if len(result)>=3:break
+        if not .6*h<=d-b<=1.8*h or not .7<=(c-a)/(d-b)<=1.4:continue
+        if min(bottom,d)-max(y,b)<min(h,d-b)*.6:continue
+        if max(0,a-right,x-c)>h*1.8 or a<row[0]-h*2 or c>row[2]+h*6:continue
+        if a>=x and c<=right:continue
+        result.append({'x':max(bounds[0],(a-4)/720),'y':max(bounds[1],(b-4)/1280),
+                       'right':min(bounds[2],(c+4)/720),'bottom':min(bounds[3],(d+4)/1280),
+                       'method':'blur','kind':'emoji'})
+        x=min(x,a);right=max(right,c)
+    return result

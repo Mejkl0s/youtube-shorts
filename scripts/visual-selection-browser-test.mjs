@@ -81,7 +81,7 @@ try{
   await page.locator('#topic').fill('winter fails');
   await page.getByLabel('Po hledání vytvořit hotový náhled').uncheck();
   await page.getByLabel('Voiceover',{exact:true}).uncheck();
-  await page.getByLabel('Automaticky upravit celé nápisy, emoji, loga a černé bloky').uncheck();
+  await page.getByLabel('Automaticky rozmazat nápisy, emoji a malá loga').uncheck();
   await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.visual-evidence').length===5,{},{timeout:90000});
   const lengths=await page.getByLabel(/Délka klipu/).evaluateAll(inputs=>inputs.map(i=>Number(i.value)));

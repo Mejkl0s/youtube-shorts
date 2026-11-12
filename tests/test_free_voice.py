@@ -85,7 +85,7 @@ def test_keyless_voice_is_actually_mixed_into_five_clip_mp4_export(isolated, mon
         directory.mkdir()
         shutil.copyfile(source, directory/'source')
         m.register(directory/'source', identity, 'Timing')
-        clips.append({'id': identity, 'title': 'Timing', 'voiceover': '', 'narration_mode': 'rank', 'duration': 2})
+        clips.append({'id': identity, 'title': 'Timing', 'voiceover': '', 'narration_mode': 'rank', 'duration': 2, 'effects_mode':'manual','effect_at':.65})
     client = TestClient(m.app)
     result = client.post('/api/render', json={'title': 'FREE VOICE TOP FIVE', 'clips': clips, 'voice': True, 'effects': effects, 'resolution': '720', 'layout': {'rank_display': 'single', 'rank_palette': 'custom', 'rank_style': rank_style, 'rank_size': .18, 'rank_color': 'FFD84D'}, 'voice_settings': {'provider': 'edge', 'voice': 'free_male', 'speed': .95}})
     assert result.status_code == 202, result.text
@@ -108,7 +108,8 @@ def test_keyless_voice_is_actually_mixed_into_five_clip_mp4_export(isolated, mon
         beginning = samples[int((index*2+.02)*44100):int((index*2+.17)*44100)]
         speech = samples[int((index*2+.7)*44100):int((index*2+.85)*44100)]
         assert np.abs(speech).mean() > 300
-        assert (np.abs(beginning).mean() > 100) == effects
+        assert np.abs(beginning).mean()<10
+        if effects:assert job['effects_plan'][index]['events'][0]['at']==.65
     # Inspect the actual encoded rank region, not a mocked FFmpeg command.
     pixels = m.ffmpeg('-ss', '1', '-i', str(output), '-frames:v', '1', '-vf',
                       'crop=250:150:20:215,format=rgb24', '-f', 'rawvideo', 'pipe:1')

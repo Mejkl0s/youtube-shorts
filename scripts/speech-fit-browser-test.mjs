@@ -37,6 +37,7 @@ try{
  for(const [index,seconds] of [4.1,1,2,1.2,2].entries())await page.getByLabel(`Délka klipu ${5-index}`,{exact:true}).fill(String(seconds));
  await page.getByRole('button',{name:'Uvedení pořadí zdarma',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('input[aria-label="Voiceover klipu 4"]')?.value==='Number four.');
+ for(let rank=1;rank<=5;rank++){await page.getByLabel(`Načasování efektů klipu ${rank}`,{exact:true}).selectOption('manual');await page.getByLabel(`Moment efektu klipu ${rank}`,{exact:true}).fill('0.65');}
  await page.locator('#resolution').selectOption('720');
  await page.getByRole('switch',{name:'AI voiceover',exact:true}).check();await page.getByRole('switch',{name:'Zvukové efekty',exact:true}).check();
  await page.getByRole('button',{name:'Vytvořit náhled se zvukem',exact:true}).click();
@@ -49,7 +50,7 @@ try{
  assert.ok(Math.abs(Number(probe.format.duration)-10.3)<.08);assert.ok(probe.streams.some(s=>s.codec_type==='audio'));
  const pcm=execFileSync('ffmpeg',['-v','error','-i',file,'-vn','-ac','1','-ar','24000','-f','s16le','pipe:1']);
  const amplitude=(start,end)=>{let total=0,count=0;for(let at=Math.round(start*24000)*2;at<Math.round(end*24000)*2;at+=2){total+=Math.abs(pcm.readInt16LE(at));count++;}return total/count;};
- assert.ok(amplitude(4.12,4.22)>100);assert.ok(amplitude(4.6,4.8)>300);
+ assert.ok(amplitude(4.12,4.22)<10);assert.ok(amplitude(4.6,4.8)>300);
  assert.deepEqual(JSON.parse(await readFile(root+'/calls.json','utf8')),['Number five.','Number four.','Four.','Number three.','Number two.','Number one.']);
  assert.equal(await page.getByRole('alert').count(),0);assert.deepEqual(errors,[]);
  await mkdir('.runtime/screenshots',{recursive:true});await finished.screenshot({path:'.runtime/screenshots/speech-fit-preview.png'});

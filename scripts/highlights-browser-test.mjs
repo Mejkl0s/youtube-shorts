@@ -50,7 +50,7 @@ try{
  await page.getByLabel('Rozsah hledání',{exact:true}).selectOption('thorough');
  assert.equal(await page.getByLabel('Počet kandidátů',{exact:true}).inputValue(),'100');
  assert.equal(await page.locator('#search-mode').inputValue(),'local');
- await page.getByLabel('Po hledání vytvořit hotový náhled').uncheck();await page.getByLabel('Voiceover',{exact:true}).uncheck();await page.getByLabel('Automaticky upravit celé nápisy, emoji, loga a černé bloky').uncheck();
+ await page.getByLabel('Po hledání vytvořit hotový náhled').uncheck();await page.getByLabel('Voiceover',{exact:true}).uncheck();await page.getByLabel('Automaticky rozmazat nápisy, emoji a malá loga').uncheck();
  await page.getByRole('button',{name:'Najít klipy',exact:true}).click();
  await page.waitForFunction(()=>document.querySelectorAll('.visual-evidence').length===5,{},{timeout:120000});
  assert.equal(await page.getByLabel('Maximální délka projektu',{exact:true}).inputValue(),'25');

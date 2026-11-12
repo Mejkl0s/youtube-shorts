@@ -1,10 +1,15 @@
 import {useEffect,useRef,useState} from 'react';
 
-export type BlurRegion={x:number;y:number;w:number;h:number;origin?:'auto'|'manual';method?:'blur'|'remove';kind?:'text'|'emoji'|'logo'|'block'|'other'};
+export type BlurRegion={x:number;y:number;w:number;h:number;origin?:'auto'|'manual';method?:'blur'|'remove';allow_large?:boolean;kind?:'text'|'emoji'|'logo'|'block'|'other'};
 type Source={framing?:'fit'|'fill';id:string;url:string;start:number;duration:number;blur_regions?:BlurRegion[]};
 
+export function safeBlurRegions(regions:BlurRegion[]=[]){
+  let area=0;
+  return regions.filter(r=>{const explicit=(r.origin??'manual')==='manual'&&r.allow_large;const size=r.w*r.h;if(!explicit&&(r.w>.9||r.h>.075||size>.04||r.kind==='block'||area+size>.085+1e-8))return false;if(!explicit)area+=size;return true;});
+}
+
 export function BlurMasks({regions=[]}:{regions?:BlurRegion[]}){
-  return <div className="source-cleanup-masks" aria-hidden="true">{regions.map((r,i)=><span key={i} style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.w*100}%`,height:`${r.h*100}%`,backdropFilter:`blur(max(8px,${r.h*89}cqw))`,WebkitBackdropFilter:`blur(max(8px,${r.h*89}cqw))`}}/>)}</div>;
+  return <div className="source-cleanup-masks" aria-hidden="true">{safeBlurRegions(regions).map((r,i)=><span key={i} style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.w*100}%`,height:`${r.h*100}%`,backdropFilter:`blur(max(8px,${r.h*89}cqw))`,WebkitBackdropFilter:`blur(max(8px,${r.h*89}cqw))`}}/>)}</div>;
 }
 
 export default function ClipCleanup({clip,rank,onClose,onApply,detect}:{clip:Source;rank:number;onClose:()=>void;onApply:(regions:BlurRegion[])=>void;detect:()=>Promise<{regions:BlurRegion[];message:string}>}){
@@ -38,10 +43,10 @@ export default function ClipCleanup({clip,rank,onClose,onApply,detect}:{clip:Sou
       <BlurMasks regions={regions}/>
       {regions.map((r,i)=><button className="cleanup-region" key={i} aria-label={`Odebrat rozmazání ${i+1}`} disabled={busy} style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.w*100}%`,height:`${r.h*100}%`}} onPointerDown={e=>e.stopPropagation()} onClick={()=>setRegions(old=>old.filter((_,index)=>index!==i))}><span>{i+1} ×</span></button>)}
       {draft&&<div className="cleanup-draft" style={{left:`${draft.x*100}%`,top:`${draft.y*100}%`,width:`${draft.w*100}%`,height:`${draft.h*100}%`}}/>}
-    </div><div className="cleanup-controls"><p role="status">{message}</p><p>Masky překrývají původní obraz. Vlastní nadpis, čísla a titulky zůstanou ostré. Odstranění doplní plochu z okolí; skrytý obraz se neobnoví. Hotový výsledek ověř v MP4, pracovní náhled ukazuje rozmazání.</p>
+    </div><div className="cleanup-controls">{safeBlurRegions(regions).length<regions.length&&<p role="alert">Příliš velké masky jsou vypnuté. Odeber je a nech znovu najít pouze nápisy.</p>}<p role="status">{message}</p><p>Masky překrývají původní obraz. Vlastní nadpis, čísla a titulky zůstanou ostré. Odstranění doplní plochu z okolí; skrytý obraz se neobnoví. Hotový výsledek ověř v MP4, pracovní náhled ukazuje rozmazání.</p>
       <label>Snímek klipu<input aria-label="Snímek pro kontrolu rozmazání" type="range" min={clip.start} max={clip.start+clip.duration-.05} step="0.05" defaultValue={clip.start+.2} onChange={e=>{if(video.current)video.current.currentTime=Number(e.target.value);}}/></label>
-      <button disabled={busy} onClick={detectText}>{busy?'Hledám překryvy…':'Najít celé nápisy, emoji, loga a bloky'}</button>
-      <div className="cleanup-methods">{regions.map((r,i)=><label key={i}>Oblast {i+1}<select aria-label={`Úprava oblasti ${i+1}`} value={r.method??'blur'} disabled={busy} onChange={e=>setRegions(old=>old.map((box,n)=>n===i?{...box,method:e.target.value as 'blur'|'remove'}:box))}><option value="blur">Rozmazat</option><option value="remove">Odstranit · doplnit okolím</option></select><button type="button" aria-label={`Zvětšit oblast ${i+1}`} disabled={busy} onClick={()=>setRegions(old=>old.map((box,n)=>{if(n!==i)return box;const x=Math.max(0,box.x-.012),y=Math.max(0,box.y-.008);return {...box,x,y,w:Math.min(1,box.x+box.w+.012)-x,h:Math.min(1,box.y+box.h+.008)-y};}))}>Zvětšit okraje</button></label>)}</div>
+      <button disabled={busy} onClick={detectText}>{busy?'Hledám překryvy…':'Najít nápisy, emoji a malá loga'}</button>
+      <div className="cleanup-methods">{regions.map((r,i)=><div key={i}>Oblast {i+1}<select aria-label={`Úprava oblasti ${i+1}`} value={r.method??'blur'} disabled={busy} onChange={e=>setRegions(old=>old.map((box,n)=>n===i?{...box,method:e.target.value as 'blur'|'remove'}:box))}><option value="blur">Rozmazat</option><option value="remove">Odstranit · doplnit okolím</option></select><button type="button" aria-label={`Zvětšit oblast ${i+1}`} disabled={busy} onClick={()=>setRegions(old=>old.map((box,n)=>{if(n!==i)return box;const x=Math.max(0,box.x-.012),y=Math.max(0,box.y-.008);return {...box,x,y,w:Math.min(1,box.x+box.w+.012)-x,h:Math.min(1,box.y+box.h+.008)-y};}))}>Zvětšit okraje</button>{(r.origin??'manual')==='manual'&&<label><input type="checkbox" aria-label={`Povolit velkou ruční oblast ${i+1}`} checked={!!r.allow_large} onChange={e=>setRegions(old=>old.map((box,n)=>n===i?{...box,allow_large:e.target.checked}:box))}/>Výslovně povolit velkou ruční oblast</label>}</div>)}</div>
       <button disabled={busy||!regions.length} onClick={()=>setRegions([])}>Odebrat všechna rozmazání</button><small>{regions.length}/8 oblastí · kliknutím na oblast ji odebereš</small>
       <button className="primary-button" disabled={busy} onClick={()=>onApply(regions)}>Použít úpravy obrazu</button>
     </div></div>
