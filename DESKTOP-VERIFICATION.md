@@ -1,7 +1,35 @@
 # Ověření desktopové verze
 
-Záznam aktualizovaný 11. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
+Záznam aktualizovaný 12. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
+
+## Verze 2.0.7 — přesné masky a časované efekty, 12. 11. 2026
+
+[Pravidla a použití](desktop/PRECISE-EDITING.md). OCR odděluje základní linie
+slov, emoji má samostatné malé oblasti a slučování nesmí vytvářet vysoké pásy.
+Automatická maska má nejvýše 4 % plochy a 7,5 % výšky, celkem 8,5 % rámu.
+Stejný filtr vyřazuje velké staré masky v náhledu i exportu. Velká ruční oblast
+vyžaduje výslovné nastavení; staré zdrojové soubory ani masky se samy nemažou.
+
+Efekty mají nejvýše dva krátké zvuky na klip, přednostně u akce z obrazového
+posouzení s přepočtem původních časů. Samotný pohybový odhad dovolí jen jemný
+přechod. Výrazný původní zvuk a voiceover mají přednost. Ruční čas a vypnutí
+jsou uložené u klipu. Hotový náhled obsahuje skutečný přehled použitých časů.
+Při nejasném ději může zůstat jen původní zvuk; není slibována sledovanost.
+
+Lokálně prošla celá sada 373 kontrol, 14 následných cílených kontrol masek a
+efektů, frontend build, pět Node bezpečnostních testů a osm testů aktualizace.
+Skutečné MP4 ověřuje pozdní SFX, ticho před událostí, ztišení pod hlasem,
+zachování délky i vynechání širokých starých masek. Browser ověřil starý pruh,
+malé OCR masky, ruční čas, přehled efektů a skutečný audio export. Nativní
+aplikace ověřila OCR, MP4, archiv a uložený čas po restartu. Obrazová AI/TTS
+v odpovídajících scénářích jsou fixtures, nikoli měření kvality skutečného modelu.
+
+Windows běh [43286082948](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948)
+skončil úspěšně: kompletní regrese finálního zdroje, PyInstaller/NSIS, přibalené
+OCR a nativní aplikace, instalace, reinstalace a odinstalace se zachováním dat.
+[Instalační ZIP 2.0.7](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948/artifacts/13976256832) má 422 MB; GitHub vyžaduje přihlášení.
+SHA-256 ZIPu: `bb04746ccef4c4bb31d75d7c94b0a2605d46173aecd5a7e1e976cb60daffc39f`. Sestava zůstává nepodepsaná.
 
 ## Verze 2.0.6 — celé názvy a emoji, 11. 11. 2026
 
@@ -238,7 +266,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43039110590)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -252,13 +280,13 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 422 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`4d36763d399de406f1a769cf28522ef73edead35`. Úspěšná reinstalace stejné verze
+`f5879a27326b1766550895da256c9b17caf095b2`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43039110590/artifacts/13863974742)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43286082948/artifacts/13976256832)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`2e4825552f8e1d360437d17b029cff028922070e68e560bdccd34a87dc87b1de`.
+`bb04746ccef4c4bb31d75d7c94b0a2605d46173aecd5a7e1e976cb60daffc39f`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako
