@@ -3,6 +3,32 @@
 Záznam aktualizovaný 13. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
 
+## Verze 2.0.10 — levé záložky a méně textu, 13. 11. 2026
+
+[Rozložení studia](desktop/STUDIO-NAVIGATION.md). Šest přístupných záložek
+odděluje hledání, klipy, vzhled, zvuk, přenos projektu a AI. Neaktivní panely
+jsou skryté a zůstávají připojené; jejich místní stav ani běžící úlohy se
+přepnutím neruší. Náhled a export jsou společné. Podrobné volby, nápověda
+a hromadné operace mají rozbalovací sekce. Informace o účtovaném cloudu
+zůstává u hledání, pokud je vybraný. Horní modelová lišta a původní průvodce
+zůstaly zachované. Vyhledávací, střihová ani zvuková backend logika se neměnila.
+
+Lokálně prošel frontend build, pět Node bezpečnostních testů a osm kontrol
+aktualizace. Browser ověřil jednu viditelnou sekci, klávesnici, zachování
+rozepsaných hodnot i nastavení, MP4 export během přepínání a obnovení projektu.
+Všech šest sekcí prošlo bez vodorovného přetékání při šířkách 400, 600, 900,
+1100 a 1440 px. Další browser scénáře ověřily skutečné OCR, malé masky,
+ruční časování efektů, MP4 a přehled omezení jednotlivých sítí. Nativní
+Electron scénář prošel včetně původních AI kontrol, tvorby poznámek,
+barev, více efektů, archivů, chyby importu a obnovení po restartu.
+Modelové odpovědi jsou protokolové fixtures, nikoli měření kvality modelu.
+
+Windows běh [43438920960](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43438920960)
+skončil úspěšně: celá regresní sada, PyInstaller/NSIS, přibalené OCR,
+skutečná desktopová aplikace, instalace, reinstalace a odinstalace se zachováním dat.
+[Instalační ZIP 2.0.10](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43438920960/artifacts/14046027201) má 422 MB; GitHub vyžaduje přihlášení.
+SHA-256 ZIPu: `74b6828679cae0c809c551c5d0ec157b153a5c6f879c710173a7e0314f4684c2`. Sestava zůstává nepodepsaná.
+
 ## Verze 2.0.9 — širší TikTok a Instagram hledání, 13. 11. 2026
 
 [Postup a dostupnost](desktop/SOCIAL-SEARCH.md). Každá síť dostává souběžný
@@ -323,7 +349,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43438920960)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -337,13 +363,13 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 422 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`7ad91e1736e783275a5be6a9a0849414a229d370`. Úspěšná reinstalace stejné verze
+`7abddd563bd1e1e2565ff2ba84cd88852ed18088`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783/artifacts/14044007975)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43438920960/artifacts/14046027201)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`81648399569bb05625d99c911dab05762bc17d9fe13ff0943cfa9bc26ff69d11`.
+`74b6828679cae0c809c551c5d0ec157b153a5c6f879c710173a7e0314f4684c2`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako

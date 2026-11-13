@@ -1,5 +1,14 @@
 # Rank Studio pro Windows
 
+Verze **2.0.10** rozděluje studio do levých záložek **Hledání, Klipy,
+Vzhled, Zvuk, Projekt a AI**. Obsah je vidět po jedné sekci; náhled a export
+zůstávají vpravo. [Přehled nového rozložení](desktop/STUDIO-NAVIGATION.md).
+
+Hledání ukazuje téma a hlavní tlačítko. Podrobné volby jsou pod **Nastavení
+hledání**, delší vysvětlivky pod **Jak hledání funguje**. Hromadné operace
+jsou v Klipy → **Další úpravy klipů**. Přepnutí zachová rozepsané hodnoty
+i běžící úlohu. Modely zůstávají dostupné také v horní liště a Nastavení.
+
 Verze **2.0.9** rozšiřuje hledání na TikToku i Instagramu: souběžné dotazy,
 další stránky veřejných výsledků a více formátů odkazů na videa.
 Chyba jednoho dotazu nevyřadí druhou síť a neobsazené místo ve výběru může
@@ -33,10 +42,10 @@ Python ani Render. Technický návrh je v [DESKTOP.md](DESKTOP.md).
 
 ## Instalace a první nastavení
 
-Ověřená sestava **2.0.9**: [stáhnout Windows ZIP, 422 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783/artifacts/14044007975).
+Ověřená sestava **2.0.10**: [stáhnout Windows ZIP, 422 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43438920960/artifacts/14046027201).
 GitHub pro stažení artefaktu vyžaduje přihlášení. ZIP rozbal a spusť
-`Rank-Studio-2.0.9-Setup.exe`. Pokud se přímé stažení neotevře, na
-[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783#artifacts)
+`Rank-Studio-2.0.10-Setup.exe`. Pokud se přímé stažení neotevře, na
+[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43438920960#artifacts)
 dole vyber **Artifacts → Rank-Studio-Windows-x64**.
 
 Při přechodu ze starší verze aplikaci zavři a spusť nový instalátor přes stávající
@@ -45,7 +54,7 @@ datech; nemaž `%APPDATA%\Rank Studio`. Nová verze zachová původní limit
 uložených projektů. Automatický podepsaný aktualizační feed zatím není
 nakonfigurovaný; tento přechod se provádí novým instalátorem.
 
-Výstup Windows buildu je `Rank-Studio-2.0.9-Setup.exe`. Instalátor přidá aplikaci
+Výstup Windows buildu je `Rank-Studio-2.0.10-Setup.exe`. Instalátor přidá aplikaci
 do nabídky Start a odinstalaci do Windows. Produkční vydání má mít platný podpis
 vydavatele. Nepodepsaný CI build je vývojový artefakt, ne ověřené produkční vydání.
 Windows instalátor se sestavuje na Windows runneru. Dokončené kontroly a stav
