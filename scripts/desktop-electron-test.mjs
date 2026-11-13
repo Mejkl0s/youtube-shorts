@@ -45,13 +45,14 @@ let app;
 async function launch(directory=root){
   app=await electron.launch({executablePath,args:[resolve('desktop'),...(process.platform==='linux'?['--no-sandbox','--disable-gpu','--disable-dev-shm-usage']:[])],
     env:{...process.env,...(process.platform==='win32'&&process.env.RANK_DESKTOP_BACKEND?{TESSDATA_PREFIX:'rank-missing-fixture-language-directory'}:{}),RANK_DESKTOP_TEST_DATA:directory,XDG_CACHE_HOME:process.env.XDG_CACHE_HOME||resolve('.runtime/cache')},timeout:90000});
-  const page=await app.firstWindow();await page.waitForURL(url=>url.protocol==='http:'&&url.hostname==='127.0.0.1',{timeout:90000});await page.locator('#video-title').waitFor({timeout:90000});return page;
+  const page=await app.firstWindow();await page.waitForURL(url=>url.protocol==='http:'&&url.hostname==='127.0.0.1',{timeout:90000});await page.locator('#studio-tab-search').waitFor({timeout:90000});return page;
 }
 async function quit(page){
   const closed=app.waitForEvent('close',{timeout:30000});
   await page.evaluate(()=>{window.rankDesktop.quit();});await closed;app=null;
 }
 async function checkSavedSearch(page,model){
+  await page.getByRole('tab',{name:'Hledání',exact:true}).click();
   const health=await page.evaluate(async()=> (await fetch('/api/health')).json());
   const saved=await page.evaluate(async()=> (await fetch('/api/desktop/ai/config')).json());
   assert.equal(saved.active.model,model);assert.equal(saved.mode,'hybrid');assert.equal(saved.wizard_complete,true);
@@ -113,6 +114,7 @@ try{
   assert.equal(await page.getByLabel('top model AI',{exact:true}).inputValue(),'fixture-vision-b');
   await wizard.getByRole('button',{name:'Pokračovat',exact:true}).click();
   await wizard.getByRole('button',{name:'Dokončit',exact:true}).click();await wizard.waitFor({state:'hidden'});
+  await page.getByRole('tab',{name:'AI',exact:true}).click();
   const setup=page.getByRole('region',{name:'Výchozí nastavení AI'});
   await setup.getByText('Režim a model',{exact:true}).click();
   await setup.getByRole('button',{name:/Kombinovaný režim/}).click();
@@ -151,11 +153,13 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   assert.equal(await page.getByRole('dialog').count(),0);
   await page.getByLabel('top model AI',{exact:true}).selectOption('fixture-vision-b');
   await page.getByRole('button',{name:'Zavřít chybu',exact:true}).click();
+  await page.getByRole('tab',{name:'Klipy',exact:true}).click();
   const durationLimit=page.getByLabel('Maximální délka projektu',{exact:true});
   await durationLimit.fill('');await durationLimit.pressSequentially('40');await durationLimit.press('Tab');
   assert.equal(await durationLimit.inputValue(),'40');
   await durationLimit.fill('');await durationLimit.pressSequentially('25');await durationLimit.press('Tab');
   assert.equal(await durationLimit.inputValue(),'25');
+  await page.getByRole('tab',{name:'AI',exact:true}).click();
   await page.getByText(/AI pomocník pro text ·/).click();
   await page.getByLabel('Zadání textovému AI pomocníkovi',{exact:true}).fill('Write a short original title.');
   await page.getByRole('button',{name:'Odeslat vybranému modelu',exact:true}).click();
@@ -191,18 +195,23 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   await page.getByLabel('Zadání textovému AI pomocníkovi',{exact:true}).fill('Local work while remote connectivity is unavailable.');
   await page.getByRole('button',{name:'Odeslat vybranému modelu',exact:true}).click();
   await page.locator('.desktop-text-result').filter({hasText:'Fixture answer fixture-vision-a'}).waitFor({timeout:20000});
+  await page.getByRole('tab',{name:'Klipy',exact:true}).click();
   await page.getByRole('button',{name:/Vyzkoušet syntetickou ukázku/}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.clip-thumb img').length===5,{},{timeout:60000});
   assert.equal(await page.getByLabel('Poznámka u čísla 5',{exact:true}).inputValue(),'');
+  await page.locator('.clip-tools > summary').click();
   await page.getByRole('button',{name:'Poznámky podle klipů',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('input[aria-label="Poznámka u čísla 1"]')?.value==='Colors rotate again',{},{timeout:60000});
   for(let index=0;index<5;index++)assert.equal(await page.getByLabel(`Poznámka u čísla ${5-index}`,{exact:true}).inputValue(),noteTexts[index]);
   assert.equal(await page.locator('.phone-rank-note').count(),1);
   await page.getByLabel('Náhled pozice 4',{exact:true}).click();assert.equal(await page.locator('.phone-rank-note').count(),2);
+  await page.getByRole('tab',{name:'Vzhled',exact:true}).click();
   await page.getByLabel('Barevný režim čísel',{exact:true}).selectOption('individual');
   await page.getByLabel('Barva čísla 1',{exact:true}).evaluate(el=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'#11cc77');el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
   assert.equal(await page.locator('[data-rank="1"]').evaluate(el=>getComputedStyle(el).color),'rgb(17, 204, 119)');
-  await page.getByLabel('Voiceover',{exact:true}).uncheck();
+  await page.getByRole('tab',{name:'Zvuk',exact:true}).click();
+  await page.getByRole('switch',{name:'AI voiceover',exact:true}).click();
+  await page.getByRole('tab',{name:'Klipy',exact:true}).click();
   await page.getByLabel('Načasování efektů klipu 5',{exact:true}).selectOption('manual');
   await page.getByLabel('Moment efektu klipu 5',{exact:true}).fill('1.7');
   await page.locator('#resolution').selectOption('720');
@@ -223,9 +232,11 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   await page.getByRole('button',{name:'Upravit plán klipu #4',exact:true}).click();
   assert.equal(await page.getByLabel('Načasování efektů klipu 4',{exact:true}).inputValue(),'custom');
   await page.getByLabel('Typ efektu 1 klipu 4',{exact:true}).selectOption('rise');
+  await page.getByRole('tab',{name:'Vzhled',exact:true}).click();
   await page.locator('#video-title').fill('Desktop project restored');
   const projectFile=root+'/portable.rankstudio';
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},projectFile);
+  await page.getByRole('tab',{name:'Projekt',exact:true}).click();
   await page.getByRole('button',{name:'Export projektu',exact:true}).click();
   await page.getByText('Projekt exportován.',{exact:true}).waitFor({timeout:60000});
   assert.ok((await stat(projectFile)).size>1000);
@@ -234,12 +245,15 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   const python=resolve('.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python');
   const database=root+'/runtime/private/desktop/projects.sqlite3';
   function sql(statement){return execFileSync(python,['-X','utf8','-c','import sqlite3,sys;db=sqlite3.connect(sys.argv[1]);db.execute(sys.argv[2]);db.commit();db.close()',database,statement]);}
+  await page.getByRole('tab',{name:'Vzhled',exact:true}).click();
   await page.locator('#video-title').fill('Keep current project after failed import');
   await page.evaluate(()=>window.rankDesktop.saveState(Object.fromEntries(['rank-studio-project','rank-studio-chat','rank-studio-assets','rank-studio-sources','rank-studio-previous-clips','rank-studio-writing'].map(key=>[key,localStorage.getItem(key)]).filter(([,value])=>value!==null))));
   sql("CREATE TRIGGER reject_fixture_import BEFORE INSERT ON state WHEN NEW.key='rank-studio-project' AND instr(NEW.value,'Desktop project restored')>0 BEGIN SELECT RAISE(FAIL,'fixture storage failure'); END");
+  await page.getByRole('tab',{name:'Projekt',exact:true}).click();
   await page.getByRole('button',{name:'Import projektu',exact:true}).click();
   await page.locator('.project-import-progress').waitFor({state:'hidden',timeout:60000});
   assert.equal(await page.locator('#video-title').inputValue(),'Keep current project after failed import');
+  await page.getByRole('tab',{name:'Vzhled',exact:true}).click();
   await page.locator('#video-title').fill('Autosave still works after failed import');
   let retained='';
   for(let attempt=0;attempt<40;attempt++){
@@ -250,11 +264,13 @@ im.save(sys.argv[1])`,captionImage,resolve('backend/fonts/DejaVuSans-Bold.ttf')]
   assert.ok(retained.includes('Autosave still works after failed import'));
   sql('DROP TRIGGER reject_fixture_import');
   const imported=page.waitForEvent('domcontentloaded');
+  await page.getByRole('tab',{name:'Projekt',exact:true}).click();
   await page.getByRole('button',{name:'Import projektu',exact:true}).click();
   await imported;
   await page.waitForFunction(()=>document.querySelector('#video-title')?.value==='Desktop project restored',{},{timeout:60000});
   await page.screenshot({path:'.runtime/screenshots/desktop-editor.png',fullPage:false});
   // Quit immediately after editing: pending debounce must not lose the last edit.
+  await page.getByRole('tab',{name:'Vzhled',exact:true}).click();
   await page.locator('#video-title').fill('Desktop project immediate save');
   await quit(page);
   const config=await readFile(root+'/runtime/private/desktop/ai.json','utf8');assert.ok(!config.includes('fixture-must-not-be-plaintext'));

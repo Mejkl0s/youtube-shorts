@@ -30,8 +30,9 @@ try{
  for(let i=0;i<100;i++){try{if((await fetch(base+'/api/health')).ok)break;}catch{}await new Promise(done=>setTimeout(done,100));}
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(base);await page.locator('input[type=file][multiple]').setInputFiles(files);
+ await page.goto(base);await page.getByRole('tab',{name:'Klipy',exact:true}).click();await page.locator('input[type=file][multiple]').setInputFiles(files);
  await page.waitForFunction(()=>document.querySelectorAll('.clip-thumb img').length===5,{},{timeout:60000});
+ await page.getByRole('tab',{name:'Klipy',exact:true}).click();
  await page.locator('.clip-card').first().getByRole('button',{name:/^Rozmazání/}).click();
  const dialog=page.getByRole('dialog',{name:'Rozmazání klipu 5',exact:true});await dialog.waitFor();
  await dialog.getByRole('button',{name:'Najít nápisy, emoji a malá loga',exact:true}).click();
@@ -51,8 +52,10 @@ try{
  assert.equal(await page.locator('.phone .source-cleanup-masks span').count(),regions.length);
  await page.getByRole('button',{name:'Odebrat přerostlé masky',exact:true}).click();
  assert.ok(await page.locator('.phone .source-cleanup-masks span').first().evaluate(el=>getComputedStyle(el).backdropFilter.includes('blur(')));
- for(const [role,name] of [['switch','AI voiceover'],['switch','Poznámky u čísel']]){const toggle=page.getByRole(role,{name,exact:true});if(await toggle.getAttribute('aria-checked')==='true')await toggle.click();}
+ for(const [role,name] of [['switch','AI voiceover'],['switch','Poznámky u čísel']]){await page.getByRole('tab',{name:name==='AI voiceover'?'Zvuk':'Vzhled',exact:true}).click();const toggle=page.getByRole(role,{name,exact:true});if(await toggle.getAttribute('aria-checked')==='true')await toggle.click();}
+ await page.getByRole('tab',{name:'Klipy',exact:true}).click();
  for(let rank=1;rank<=5;rank++){await page.getByLabel(`Načasování efektů klipu ${rank}`,{exact:true}).selectOption('manual');await page.getByLabel(`Moment efektu klipu ${rank}`,{exact:true}).fill('0.65');}
+ await page.getByRole('tab',{name:'Zvuk',exact:true}).click();
  const fx=page.getByRole('switch',{name:'Zvukové efekty',exact:true});if(await fx.getAttribute('aria-checked')!=='true')await fx.click();
  await page.locator('#resolution').selectOption('720');await page.getByRole('button',{name:'Vytvořit náhled se zvukem',exact:true}).click();
  const finished=page.getByRole('region',{name:'Hotové video',exact:true});await finished.waitFor({timeout:90000});
@@ -65,6 +68,7 @@ try{
  await finished.getByText('Časování efektů',{exact:true}).click();assert.ok((await finished.innerText()).includes('0.65 s'));
  assert.deepEqual(errors,[]);
  await mkdir('.runtime/screenshots',{recursive:true});
+ await page.getByRole('tab',{name:'Klipy',exact:true}).click();
  await page.locator('.clip-card').first().getByRole('button',{name:/^Rozmazání/}).click();
  await page.getByRole('dialog',{name:'Rozmazání klipu 5',exact:true}).screenshot({path:'.runtime/screenshots/complete-title-and-emoji-blur.png'});
  console.log('Precise blur and SFX passed: legacy bands disabled, effects at selected moment, actual title/emoji OCR, editable wider masks, preview blur, saved regions and real MP4 export; no AI provider used.');
