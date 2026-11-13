@@ -213,24 +213,26 @@ def test_query_phase_gives_each_source_a_turn_before_extra_variants(monkeypatch)
     from types import SimpleNamespace
     clock=[0];calls=[]
     monkeypatch.setattr(f,'time',SimpleNamespace(monotonic=lambda:clock[0]))
-    def search(query,engine):
+    def search(query,engine,**kwargs):
         calls.append(query);clock[0]+=8
         return []
     monkeypatch.setattr(f,'engine_results',search)
     entries,_=f.public_search('winter fails',True,40)
-    assert not entries and len(calls)<=5
+    assert not entries and len(calls)<=6
     assert all(any(domain in query for query in calls) for domain in ('site:tiktok.com','site:instagram.com','site:youtube.com'))
 
 
 def test_unavailable_public_engines_are_not_retried_by_fallback(monkeypatch):
     calls=[]
-    def blocked(query,engine):
+    def blocked(query,engine,**kwargs):
         calls.append(engine)
         raise RuntimeError('HTTP 403')
     monkeypatch.setattr(f,'engine_results',blocked)
     token=w._active.set(w.Budget(20))
     try:
         f.public_search('winter fails',True,40)
+        before=len(calls)
         f.public_search('winter fails',True,40,only_youtube=True)
     finally:w._active.reset(token)
-    assert sorted(calls)==['bing','duckduckgo']
+    assert len(calls)==before and set(calls)=={'bing','duckduckgo'}
+    assert all(calls.count(engine)<=3 for engine in set(calls))

@@ -165,7 +165,7 @@ def test_cleanup_endpoint_validates_asset_and_bounds_and_manual_works_without_oc
 
 def test_full_heading_search_keeps_topic_and_accepts_watch_compilations(monkeypatch):
     queries=[]
-    def engine(query,provider):
+    def engine(query,provider,**kwargs):
         queries.append(query)
         return [{'url':'https://www.youtube.com/watch?v=WINTER00001','title':'Funny winter fails compilation'},
                 {'url':'https://www.youtube.com/watch?v=VIVALDI0001','title':'Antonio Vivaldi Winter'}]

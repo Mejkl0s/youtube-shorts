@@ -8,6 +8,13 @@ The installed Electron edition reuses this editor with a bundled Python backend,
 
 See [Windows desktop setup, build and verification](DESKTOP-WINDOWS.md), [test results and remaining limitations](DESKTOP-VERIFICATION.md), and [architecture](DESKTOP.md). The included CI workflow prepares an NSIS build on Windows; a Linux sidecar build is not a Windows installer. Signed automatic updates stay disabled until an actual release feed and signing publisher are configured.
 
+## Broader TikTok and Instagram discovery (2.0.9)
+
+[Social search](desktop/SOCIAL-SEARCH.md) gives both networks concurrent query
+rounds, paginated public results and alternate video URL paths. Query failures
+stay isolated from other sources; rate limits stop the affected engine.
+Source cards expose missing index results, login requirements and blocked downloads.
+
 ## Context-aware sound direction (2.0.8)
 
 [Sound director](desktop/SOUND-DIRECTOR.md) uses the selected visual model to

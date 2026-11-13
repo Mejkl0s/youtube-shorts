@@ -608,6 +608,8 @@ def canonical_url(url: str):
     parsed = urlparse(url)
     host = (parsed.hostname or '').removeprefix('www.')
     from urllib.parse import parse_qs
+    if host == 'instagram.com' and (match:=re.fullmatch(r'/(?:reel|reels|p)/([\w-]+)/?',parsed.path)):
+        return host,'/reel/'+match[1],''
     if host in ('youtube.com', 'youtu.be'):
         if host == 'youtu.be':
             video_id = parsed.path.strip('/')

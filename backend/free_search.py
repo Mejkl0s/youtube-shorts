@@ -1,11 +1,12 @@
 """Public search and deterministic scene selection. No paid provider calls."""
 from __future__ import annotations
 
-import math
 import re
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlparse
 from xml.etree import ElementTree
@@ -50,12 +51,16 @@ class DuckResults(HTMLParser):
         self.active = None
         self.snippet_tag = None
         self.snippet_parts = []
+        self.snippet_depth = 0
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if self.snippet_tag==tag:
+            self.snippet_depth+=1
         if self.results and 'result__snippet' in attrs.get('class', '').split():
             self.snippet_tag = tag
             self.snippet_parts = []
+            self.snippet_depth = 1
         if tag == 'a' and 'result__a' in attrs.get('class', '').split():
             href = attrs.get('href', '')
             # Decode the engine's destination parameter, never download its redirect URL.
@@ -74,35 +79,43 @@ class DuckResults(HTMLParser):
 
     def handle_endtag(self, tag):
         if tag == self.snippet_tag:
-            self.results[-1]['description'] = plain(' '.join(self.snippet_parts))
-            self.snippet_tag = None
+            self.snippet_depth-=1
+            if not self.snippet_depth:
+                self.results[-1]['description'] = plain(' '.join(self.snippet_parts))
+                self.snippet_tag = None
         if tag == 'a' and self.active is not None:
             self.results.append({'url': self.active['url'], 'title': plain(' '.join(self.active['parts'])), 'description': ''})
             self.active = None
 
 
-def engine_results(query: str, engine: str):
+def engine_results(query: str, engine: str, *, page=0, seconds=8):
     endpoint = 'https://www.bing.com/search' if engine == 'bing' else 'https://html.duckduckgo.com/html/'
-    params = {'q': query, 'format': 'rss', 'count': '20'} if engine == 'bing' else {'q': query}
+    params = ({'q': query, 'format': 'rss', 'count': '20', 'first': str(1+20*page)}
+              if engine == 'bing' else {'q': query, 's': str(30*page)})
     # Read a bounded public response. Captchas/login/rate limits are reported, never bypassed.
     work.checkpoint()
-    with httpx.Client(timeout=work.timeout(8), follow_redirects=False, headers={'User-Agent': 'Mozilla/5.0 (compatible; RankStudio/1.0)'}) as client:
+    deadline=time.monotonic()+seconds
+    with httpx.Client(timeout=work.timeout(seconds), follow_redirects=False, headers={'User-Agent': 'Mozilla/5.0 (compatible; RankStudio/1.0)'}) as client:
         with client.stream('GET', endpoint, params=params) as response:
             if response.status_code != 200:
                 raise ValueError(f'Veřejný vyhledávač {engine} není dostupný (HTTP {response.status_code}).')
             content = bytearray()
             for chunk in response.iter_bytes():
                 work.checkpoint()
+                if time.monotonic()>=deadline:
+                    raise TimeoutError('Vypršel čas veřejného dotazu.')
                 content.extend(chunk)
                 if len(content) > 2 * 1024 * 1024:
                     raise ValueError('Vyhledávací odpověď je příliš velká.')
     text = content.decode('utf-8', errors='replace')
+    if any(marker in text.lower() for marker in ('challenge-form', 'anomaly.js', 'id="captcha"', 'g-recaptcha', 'unfortunately, bots')):
+        raise ValueError('HTTP 403: vyhledávač vyžaduje kontrolu v prohlížeči.')
     if engine == 'bing':
         return rss_results(text)
     parser = DuckResults()
     parser.feed(text)
-    if not parser.results:
-        raise ValueError('Veřejné výsledky nejsou dostupné; může jít o omezení vyhledávače.')
+    if not parser.results and 'result' not in text.lower():
+        raise ValueError('Veřejný vyhledávač nevrátil rozpoznatelnou stránku výsledků.')
     return parser.results[:30]
 
 
@@ -127,9 +140,11 @@ def tokens(value):
 WINTER_WORDS = frozenset({'winter', 'snow', 'snowy', 'ice', 'icy', 'ski', 'skiing', 'skier',
                           'sled', 'sledding', 'snowboard', 'snowboarding', 'snowboarder'})
 FAIL_WORDS = frozenset({'fail', 'failed', 'failing', 'failure', 'blooper', 'wipeout', 'slip',
-                       'slipped', 'slipping', 'fell', 'falling', 'crash', 'crashed', 'crashing'})
+                       'slipped', 'slipping', 'fell', 'falling', 'crash', 'crashed', 'crashing', 'tumble', 'mishap'})
+KID_WORDS = frozenset({'kid', 'child', 'children', 'toddler', 'baby', 'babies'})
 # A bare "fall" is ambiguous (also autumn, including Vivaldi's seasons).
 COMPOUND_FAILS = frozenset(word + ending for word in WINTER_WORDS for ending in ('fail', 'fails'))
+KID_FAILS = frozenset(word+ending for word in (*KID_WORDS,'kids') for ending in ('fail','fails'))
 
 
 def relevance(topic, title, description=''):
@@ -143,8 +158,11 @@ def relevance(topic, title, description=''):
         return 0.0
     if found & COMPOUND_FAILS:
         found.update({'winter', 'fail'})
+    if found & KID_FAILS:
+        found.update({'kid','fail'})
     for word in wanted:
-        aliases = WINTER_WORDS if word == 'winter' else FAIL_WORDS if word in FAIL_WORDS else {word}
+        aliases = (WINTER_WORDS if word == 'winter' else FAIL_WORDS if word in FAIL_WORDS
+                   else KID_WORDS if word in KID_WORDS else {word})
         if not found & aliases:
             return 0.0
     # Every essential concept must be present. Partial overlap must never
@@ -167,6 +185,8 @@ def query_variants(topic):
     wanted = tokens(topic)
     if 'winter' in wanted and wanted & FAIL_WORDS:
         queries += ['snow fails', 'slipping on ice fails', 'skiing crashes', 'sledding fails']
+    elif wanted & KID_WORDS and wanted & FAIL_WORDS:
+        queries += ['kids fails', 'children bloopers', 'toddler fails', 'baby funny mishaps']
     else:
         queries += [base + ' moments', base + ' shorts']
     return list(dict.fromkeys(queries))
@@ -181,29 +201,54 @@ def search_warning(engine, source, error):
 
 def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: bool = False, exclude_urls=(), *, balanced=False, seconds=35):
     from .main import canonical_url, social_url
-    sources = [('TikTok', 'site:tiktok.com inurl:video'), ('Instagram', 'site:instagram.com/reel/')]
+    sources = [('TikTok', ('site:tiktok.com inurl:video', 'site:tiktok.com/@')),
+               ('Instagram', ('site:instagram.com/reel/', 'site:instagram.com/reels/', 'site:instagram.com/p/'))]
     if allow_youtube:
-        sources.append(('YouTube', 'site:youtube.com'))
+        sources.append(('YouTube', ('site:youtube.com',)))
     if only_youtube:
         sources = [source for source in sources if source[0] == 'YouTube']
     phase_end=time.monotonic()+seconds
-    source_limit=math.ceil(limit/max(1,len(sources))) if balanced else limit
+    # A missing network must not leave another network artificially capped at
+    # one third of the requested pool. Interleave only after collecting URLs.
+    source_limit=limit
     seen, warnings = {canonical_url(url) for url in exclude_urls}, []
     unavailable=work.current().unavailable_engines if work.current() else set()
     pools = [[] for _ in sources]
-    # Give every source a turn before trying another engine or topic variant.
-    for variant in query_variants(topic):
-        for engine in ('bing', 'duckduckgo'):
-            for source_index, (source, restriction) in enumerate(sources):
-                work.checkpoint()
-                if engine in unavailable:
-                    break
-                entries = pools[source_index]
-                if len(entries)>=source_limit or time.monotonic()>=phase_end:
-                    continue
-                query = variant + ' ' + restriction
+    source_errors={};page_urls={};finished_pages=set()
+    queries={source:[variant+' '+restriction for variant in query_variants(topic) for restriction in restrictions]
+             for source,restrictions in sources}
+    query_count=max((len(rows) for rows in queries.values()),default=0)
+    # Alternate another query/path with deeper pages of earlier queries. Do not
+    # spend the complete phase paging one restrictive first query.
+    rounds=[(wave-page,page) for wave in range(query_count+2) for page in range(3)
+            if 0<=wave-page<query_count]
+    # Search a source round concurrently: a slow TikTok request cannot consume
+    # Instagram's first turn. Context includes job cancellation and its deadline.
+    with ThreadPoolExecutor(max_workers=max(1,len(sources)),thread_name_prefix='social-index') as pool:
+        for query_index,page in rounds:
+          for engine in ('bing', 'duckduckgo'):
+            work.checkpoint()
+            if engine in unavailable or time.monotonic()>=phase_end:continue
+            pending=[]
+            for source_index,(source,_) in enumerate(sources):
+                if query_index>=len(queries[source]):continue
+                query=queries[source][query_index]
+                key=(source,engine,query)
+                if (len(pools[source_index])>=source_limit or source_errors.get((source,engine),0)>=2
+                        or key in finished_pages):continue
+                future=pool.submit(copy_context().run,engine_results,query,engine,page=page,
+                                   seconds=max(.05,min(8,phase_end-time.monotonic())))
+                pending.append((source_index,source,key,future))
+            for source_index,source,key,future in pending:
+                entries=pools[source_index]
                 try:
-                    results = engine_results(query, engine)
+                    results=future.result()
+                    source_errors[source,engine]=0
+                    # Stop paging an empty or repeated page. Try a different
+                    # query/path next; an empty TikTok query is no engine ban.
+                    identities={canonical_url(row.get('url','')) for row in results}
+                    if not identities-page_urls.get(key,set()):finished_pages.add(key)
+                    page_urls.setdefault(key,set()).update(identities)
                     for position, result in enumerate(results):
                         url = result['url']
                         if not social_url(url, allow_youtube) or len(url) > 500:
@@ -228,7 +273,11 @@ def public_search(topic: str, allow_youtube: bool, limit: int, only_youtube: boo
                     raise
                 except Exception as error:
                     warnings.append(search_warning(engine, source, error))
-                    unavailable.add(engine)
+                    source_errors[source,engine]=source_errors.get((source,engine),0)+1
+                    finished_pages.add(key)
+                    # Only an actual refusal/rate limit stops the whole engine.
+                    # Parsing/empty-query errors remain scoped to this source.
+                    if re.search(r'\b(202|403|407|429)\b',str(error)):unavailable.add(engine)
     for (source, _), entries in zip(sources, pools):
         if not entries:
             warnings.append(f'{source}: vyhledávače nevrátily žádný odpovídající odkaz na video.')

@@ -55,13 +55,13 @@ def test_search_filters_unrelated_profiles_foreign_hosts_and_duplicates(monkeypa
         {'url': 'https://www.youtube.com/shorts/IujvEGCadfU', 'title': 'Funny cats', 'description': ''},
         {'url': 'https://www.instagram.com/reel/cats123/', 'title': 'Funny cats jump', 'description': ''},
     ]
-    monkeypatch.setattr(f, 'engine_results', lambda *args: samples)
+    monkeypatch.setattr(f, 'engine_results', lambda *args, **kwargs: samples)
     entries, _ = f.public_search('funny cats', False, 8)
     assert {entry['url'] for entry in entries} == {results(1)[0]['url'], 'https://www.instagram.com/reel/cats123/'}
 
 
 def test_search_fallback_and_youtube_option(monkeypatch):
-    def search(query, engine):
+    def search(query, engine, **kwargs):
         if engine == 'bing':
             raise ValueError('limited')
         return [{'url': 'https://www.youtube.com/shorts/IujvEGCadfU', 'title': 'Funny cats', 'description': ''}]
@@ -73,7 +73,7 @@ def test_search_fallback_and_youtube_option(monkeypatch):
 
 def test_tiktok_cannot_starve_other_sources_and_video_queries_avoid_profiles(monkeypatch):
     calls = []
-    def search(query, engine):
+    def search(query, engine, **kwargs):
         calls.append(query)
         if 'site:tiktok.com' in query:
             assert 'inurl:video' in query
@@ -99,7 +99,7 @@ def test_topical_instagram_snippet_survives_generic_title_and_nested_markup(monk
                 '<div class="result__snippet">Delicious <span>pasta</span> recipes.</div>')
     assert parser.results[0]['description'] == 'The funniest winter fails in the snow.'
     assert parser.results[1]['description'] == 'Delicious pasta recipes.'
-    monkeypatch.setattr(f, 'engine_results', lambda *args: parser.results)
+    monkeypatch.setattr(f, 'engine_results', lambda *args, **kwargs: parser.results)
     entries, _ = f.public_search('winter fails', False, 8)
     assert [row['url'] for row in entries] == ['https://www.instagram.com/reel/snow123/']
 
@@ -132,7 +132,7 @@ def test_both_search_paths_reject_vivaldi_and_keep_winter_fails(monkeypatch):
     rows = [{'id': 'WINTER00001', 'title': 'Vivaldi - Winter', 'duration': 30},
             {'id': 'WINTER00002', 'title': 'Snow wipeouts', 'duration': 30}]
     monkeypatch.setattr(m, 'run', lambda *args: json.dumps({'entries': rows}).encode())
-    monkeypatch.setattr(f, 'engine_results', lambda *args: [
+    monkeypatch.setattr(f, 'engine_results', lambda *args, **kwargs: [
         {'url': 'https://www.youtube.com/shorts/' + row['id'], 'title': row['title']}
         for row in rows])
     web, _ = f.public_search('winter fails', True, 8)
@@ -228,7 +228,7 @@ def test_free_search_to_real_scene_selection_and_export_never_calls_paid_api(iso
              '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]', '-c:v', 'libx264', str(source))
     monkeypatch.setenv('OPENAI_API_KEY', 'test-placeholder-never-used')
     monkeypatch.setattr(m, 'ai_request', lambda *args, **kw: pytest.fail('Free flow called a paid AI API'))
-    monkeypatch.setattr(f, 'engine_results', lambda *args: results())
+    monkeypatch.setattr(f, 'engine_results', lambda *args, **kwargs: results())
     original = m.run
     downloads = []
     def download(args, timeout=180, **options):
@@ -427,7 +427,7 @@ def test_partial_ai_discovery_keeps_scenes_and_stops_later_assistant_actions(iso
 
 def test_expanded_winter_search_finds_new_sources_without_music_or_repeats(monkeypatch):
     calls=[]
-    def search(query,engine):
+    def search(query,engine, **kwargs):
         calls.append(query)
         if 'site:tiktok.com' not in query:
             return []
@@ -446,12 +446,13 @@ def test_expanded_winter_search_finds_new_sources_without_music_or_repeats(monke
 
 def test_unavailable_engines_are_not_hammered_with_more_queries(monkeypatch):
     calls=[]
-    def unavailable(query,engine):
+    def unavailable(query,engine, **kwargs):
         calls.append(engine)
         raise RuntimeError('HTTP 429 opaque-session-secret')
     monkeypatch.setattr(f,'engine_results',unavailable)
     entries,warnings=f.public_search('winter fails',True,40)
-    assert not entries and sorted(calls)==['bing','duckduckgo']
+    assert not entries and set(calls)=={'bing','duckduckgo'}
+    assert all(calls.count(engine)<=3 for engine in set(calls))
     assert any('429' in warning for warning in warnings)
     assert 'opaque-session-secret' not in str(warnings)
 
@@ -515,7 +516,7 @@ def test_youtube_fallback_excludes_url_strings_after_repeated_search(monkeypatch
     monkeypatch.setattr(m,'run',direct)
     # Exercise the REAL public_search and canonical_url fallback. A mock of
     # public_search would miss tuple identities accidentally passed as URLs.
-    monkeypatch.setattr(f,'engine_results',lambda *args:[
+    monkeypatch.setattr(f,'engine_results',lambda *args, **kwargs:[
         {'url':old,'title':'Winter fails'},
         {'url':first,'title':'Snow fails'},
         {'url':extra,'title':'Skiing crashes'}])
@@ -528,7 +529,7 @@ def test_youtube_fallback_excludes_url_strings_after_repeated_search(monkeypatch
 def test_blocked_repeated_discovery_finishes_with_source_failure_not_tuple_crash(isolated,monkeypatch):
     monkeypatch.setattr(m,'public_search',lambda *args:(results(3),[]))
     monkeypatch.setattr(m,'youtube_search',f.youtube_search)
-    monkeypatch.setattr(f,'engine_results',lambda *args:[])
+    monkeypatch.setattr(f,'engine_results',lambda *args, **kwargs:[])
     def blocked(*args,**kwargs):raise RuntimeError('HTTP 403')
     monkeypatch.setattr(m,'run',blocked)
     monkeypatch.setattr(m,'download_candidate',blocked)
