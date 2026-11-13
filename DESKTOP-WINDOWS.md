@@ -1,6 +1,16 @@
 # Rank Studio pro Windows
 
-Verze **2.0.8** vybírá typy efektů podle konkrétních obrazových událostí.
+Verze **2.0.9** rozšiřuje hledání na TikToku i Instagramu: souběžné dotazy,
+další stránky veřejných výsledků a více formátů odkazů na videa.
+Chyba jednoho dotazu nevyřadí druhou síť a neobsazené místo ve výběru může
+doplnit větší sada z dostupné sítě. [Postup a omezení](desktop/SOCIAL-SEARCH.md).
+
+V **Výsledcích jednotlivých zdrojů** jsou přímo vidět chybějící odkazy,
+požadavky na přihlášení i omezení přístupu k videím. Tlačítko **Přihlášení
+ke zdrojům** otevře existující import vlastní relace. Vyhledání odkazu
+nezaručuje stažení: dostupnost nadále řídí sociální síť.
+
+Plánování efektů z verze **2.0.8** vybírá typy efektů podle konkrétních obrazových událostí.
 Vizuální model navrhne dějové body a ověří je na detailnějších snímcích.
 Počet zvuků se řídí dějem a délkou klipu; pevný limit dvou efektů je odstraněný.
 [Postup výběru a úpravy efektů](desktop/SOUND-DIRECTOR.md).
@@ -23,10 +33,10 @@ Python ani Render. Technický návrh je v [DESKTOP.md](DESKTOP.md).
 
 ## Instalace a první nastavení
 
-Ověřená sestava **2.0.8**: [stáhnout Windows ZIP, 422 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588/artifacts/13983342487).
+Ověřená sestava **2.0.9**: [stáhnout Windows ZIP, 422 MB](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783/artifacts/14044007975).
 GitHub pro stažení artefaktu vyžaduje přihlášení. ZIP rozbal a spusť
-`Rank-Studio-2.0.8-Setup.exe`. Pokud se přímé stažení neotevře, na
-[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588#artifacts)
+`Rank-Studio-2.0.9-Setup.exe`. Pokud se přímé stažení neotevře, na
+[stránce úspěšného běhu](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783#artifacts)
 dole vyber **Artifacts → Rank-Studio-Windows-x64**.
 
 Při přechodu ze starší verze aplikaci zavři a spusť nový instalátor přes stávající
@@ -35,7 +45,7 @@ datech; nemaž `%APPDATA%\Rank Studio`. Nová verze zachová původní limit
 uložených projektů. Automatický podepsaný aktualizační feed zatím není
 nakonfigurovaný; tento přechod se provádí novým instalátorem.
 
-Výstup Windows buildu je `Rank-Studio-2.0.8-Setup.exe`. Instalátor přidá aplikaci
+Výstup Windows buildu je `Rank-Studio-2.0.9-Setup.exe`. Instalátor přidá aplikaci
 do nabídky Start a odinstalaci do Windows. Produkční vydání má mít platný podpis
 vydavatele. Nepodepsaný CI build je vývojový artefakt, ne ověřené produkční vydání.
 Windows instalátor se sestavuje na Windows runneru. Dokončené kontroly a stav

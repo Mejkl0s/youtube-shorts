@@ -1,7 +1,35 @@
 # Ověření desktopové verze
 
-Záznam aktualizovaný 12. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
+Záznam aktualizovaný 13. 11. 2026; první ověření proběhlo 2. 11. 2026. Architektura je v [DESKTOP.md](DESKTOP.md), použití,
 Windows build a podpisy v [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md).
+
+## Verze 2.0.9 — širší TikTok a Instagram hledání, 13. 11. 2026
+
+[Postup a dostupnost](desktop/SOCIAL-SEARCH.md). Každá síť dostává souběžný
+dotaz se zachováním kontextu úlohy, zrušení a časového limitu. Dva veřejné
+vyhledávače střídají další dotazy, video cesty a až tři stránky. Opakovaná
+nebo prázdná stránka se dále nestránkuje. Chyba konkrétního dotazu zůstává
+omezená na zdroj; skutečné blokování/rate limit zastavuje daný vyhledávač.
+Instagram `/reel/`, `/reels/` a `/p/` se slučují podle ID. Prázdná síť
+neomezuje dostupnou síť na jednu třetinu výběru. Dětské téma má příbuzné
+výrazy při zachování kontroly tématu i akce. Dosavadní vizuální kontroly,
+časové limity střihů, efekty a malé blur masky zůstávají zachované.
+
+Lokálně prošlo 389 regresních testů, frontend build, pět Node kontrol
+a browser scénář s viditelným výsledkem prázdného instagramového indexu,
+požadavkem TikToku na relaci a otevřením správy relací. Osm nových kontrol
+ověřuje skutečné RSS/HTML parsování přes HTTP transport fixtures, parametry
+stránkování, souběh, kontext úlohy, historii a alternativní cesty.
+Veřejné vyhledávače z tohoto vývojového prostředí vrací přes proxy HTTP 403;
+živá úspěšnost TikTok/Instagram vyhledávání a stahování zde nebyla ověřena.
+Nejde o záruku pěti dostupných videí ani obcházení přihlášení či CAPTCHA.
+
+Windows běh [43434796783](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783)
+skončil úspěšně: kompletní regrese finálního zdroje, PyInstaller/NSIS,
+přibalené OCR, skutečná desktopová aplikace, instalace, reinstalace a
+odinstalace se zachováním dat. Modelové odpovědi v nativním scénáři jsou fixtures.
+[Instalační ZIP 2.0.9](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783/artifacts/14044007975) má 422 MB; GitHub vyžaduje přihlášení.
+SHA-256 ZIPu: `81648399569bb05625d99c911dab05762bc17d9fe13ff0943cfa9bc26ff69d11`. Sestava zůstává nepodepsaná.
 
 ## Verze 2.0.8 — efekty podle konkrétního děje, 12. 11. 2026
 
@@ -295,7 +323,7 @@ v rendereru vypnutý; Windows test tento příznak nepřidává.
 
 ## Windows CI
 
-[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588)
+[Běh Windows desktop](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783)
 používá Windows Server 2022 x64, Python 3.12 a Node.js 24.19.0. Přístup k REST API
 je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 
@@ -309,13 +337,13 @@ je zde blokovaný, stav kroků je dostupný přes veřejnou stránku běhu.
 | Zveřejnění instalačního artefaktu | Úspěšně nahrán `Rank-Studio-Windows-x64`, 422 MB. |
 
 Celý běh skončil úspěšně pro zdrojový commit
-`6cbcdd35e49465cd5c27daea2e72da6e9319f326`. Úspěšná reinstalace stejné verze
+`7ad91e1736e783275a5be6a9a0849414a229d370`. Úspěšná reinstalace stejné verze
 není vydávána za test aktualizace ze skutečného podepsaného feedu.
 
-[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43303319588/artifacts/13983342487)
+[Instalační ZIP](https://github.com/Mejkl0s/youtube-shorts/actions/runs/43434796783/artifacts/14044007975)
 vyžaduje přihlášení ke GitHubu. Uvnitř jsou instalátor a `SHA256SUMS.json`.
 GitHubem zveřejněný SHA-256 **ZIP artefaktu**, nikoli samotného `.exe`, je
-`cc0d27e381e9e4da03de117be57953c1237747d72bedb5bd14a145edf5535551`.
+`81648399569bb05625d99c911dab05762bc17d9fe13ff0943cfa9bc26ff69d11`.
 
 Windows testy ověřují skutečné DPAPI se zkušebním klíčem. Lokální export prochází
 i cestami s diakritikou. Testovací Python prostředí je `.venv`, stejně jako
